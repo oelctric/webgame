@@ -92,6 +92,8 @@
     .country.locked { fill: #3b4e74; cursor: not-allowed; }
     .city { fill: var(--city); stroke: #433616; stroke-width: 0.45; pointer-events: none; }
     .base { stroke: #111; stroke-width: 0.5; }
+    .base.building { opacity: 0.55; stroke: #ffdd57; stroke-width: 1.1; }
+    .base.active { opacity: 1; stroke: #101015; stroke-width: 0.6; }
 
     .tooltip {
       position: absolute;
