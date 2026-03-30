@@ -265,6 +265,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
   <script>
     const svg = d3.select('#map');
@@ -495,7 +496,8 @@
       const height = mapWrap.clientHeight;
       svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-      const projection = d3.geoRobinson().fitExtent([[15, 15], [width - 15, height - 15]], { type: 'Sphere' });
+      const projectionFactory = d3.geoRobinson ? d3.geoRobinson : d3.geoNaturalEarth1;
+      const projection = projectionFactory().fitExtent([[15, 15], [width - 15, height - 15]], { type: 'Sphere' });
       const path = d3.geoPath(projection);
 
       const root = svg.append('g');
@@ -601,6 +603,10 @@
         console.error(err);
         setStatus('Map data failed to load. Check internet access and refresh.', true);
       });
+
+      if (!d3.geoRobinson) {
+        setStatus('Robinson projection plugin unavailable; using Natural Earth fallback.', true);
+      }
     }
 
     applySettingsUI();
