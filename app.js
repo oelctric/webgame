@@ -8,6 +8,22 @@ const BASE_BUILD_DURATIONS_MS = {
   antiAir: 2 * DAY_MS
 };
 
+const UNIT_DEFINITIONS = {
+  infantry: { label: 'Infantry', domain: 'ground', durationMs: 2 * DAY_MS, health: 100, strength: 20 },
+  armor: { label: 'Armor', domain: 'ground', durationMs: 5 * DAY_MS, health: 150, strength: 50 },
+  fighter: { label: 'Fighter', domain: 'air', durationMs: 4 * DAY_MS, health: 90, strength: 45 },
+  bomber: { label: 'Bomber', domain: 'air', durationMs: 6 * DAY_MS, health: 120, strength: 60 },
+  patrolBoat: { label: 'Patrol Boat', domain: 'naval', durationMs: 5 * DAY_MS, health: 130, strength: 40 },
+  destroyer: { label: 'Destroyer', domain: 'naval', durationMs: 10 * DAY_MS, health: 220, strength: 85 }
+};
+
+const BASE_TO_DOMAIN = {
+  ground: 'ground',
+  air: 'air',
+  naval: 'naval',
+  antiAir: null
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -90,6 +106,90 @@ class TaskScheduler {
   }
 }
 
+class ProductionSystem {
+  constructor(gameState, scheduler) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+  }
+
+  getAllowedUnitsForBase(base) {
+    const domain = BASE_TO_DOMAIN[base.type];
+    if (!domain) return [];
+    return Object.entries(UNIT_DEFINITIONS)
+      .filter(([, def]) => def.domain === domain)
+      .map(([key, def]) => ({ key, ...def }));
+  }
+
+  queueUnit(baseId, unitType) {
+    const base = this.gameState.bases.find((entry) => entry.id === baseId);
+    const unitDef = UNIT_DEFINITIONS[unitType];
+    if (!base || !unitDef) return { ok: false, message: 'Invalid base or unit type.' };
+    if (base.status !== 'active') return { ok: false, message: 'Base must be active before production can begin.' };
+
+    const baseDomain = BASE_TO_DOMAIN[base.type];
+    if (!baseDomain) return { ok: false, message: 'Anti-air bases cannot produce units.' };
+    if (unitDef.domain !== baseDomain) return { ok: false, message: `${base.type} base cannot produce ${unitDef.label}.` };
+
+    const unit = {
+      id: this.gameState.nextUnitId++,
+      ownerCountry: base.ownerCountry,
+      type: unitType,
+      domain: unitDef.domain,
+      status: 'queued',
+      createdAt: this.gameState.currentTimeMs,
+      producedAt: null,
+      sourceBaseId: base.id,
+      lonLat: [...base.lonLat],
+      health: unitDef.health,
+      strength: unitDef.strength
+    };
+
+    this.gameState.units.push(unit);
+    base.production.queue.push(unit.id);
+    this.tryStartNext(base.id);
+    return { ok: true, unit };
+  }
+
+  tryStartNext(baseId) {
+    const base = this.gameState.bases.find((entry) => entry.id === baseId);
+    if (!base || base.status !== 'active') return;
+    if (base.production.currentUnitId) return;
+    if (!base.production.queue.length) return;
+
+    const unitId = base.production.queue.shift();
+    const unit = this.gameState.units.find((entry) => entry.id === unitId);
+    if (!unit) return;
+
+    const unitDef = UNIT_DEFINITIONS[unit.type];
+    base.production.currentUnitId = unit.id;
+    base.production.currentCompleteAt = this.gameState.currentTimeMs + unitDef.durationMs;
+
+    this.scheduler.schedule({
+      executeAt: base.production.currentCompleteAt,
+      type: 'UNIT_PRODUCTION_COMPLETE',
+      payload: { baseId: base.id, unitId: unit.id },
+      handler: ({ baseId: doneBaseId, unitId: doneUnitId }) => this.completeProduction(doneBaseId, doneUnitId)
+    });
+  }
+
+  completeProduction(baseId, unitId) {
+    const base = this.gameState.bases.find((entry) => entry.id === baseId);
+    const unit = this.gameState.units.find((entry) => entry.id === unitId);
+    if (!base || !unit) return;
+
+    unit.status = 'active';
+    unit.producedAt = this.gameState.currentTimeMs;
+    unit.lonLat = [base.lonLat[0] + (unit.id % 4) * 0.35, base.lonLat[1] + ((unit.id % 3) - 1) * 0.25];
+
+    base.production.currentUnitId = null;
+    base.production.currentCompleteAt = null;
+    this.tryStartNext(baseId);
+    setStatus(`${UNIT_DEFINITIONS[unit.type].label} completed at base #${base.id}.`);
+    renderProductionPanel();
+    renderUnits();
+  }
+}
+
 const gameState = {
   selectedPlayerCountry: null,
   currentTimeMs: Date.parse(GAME_START_ISO),
@@ -99,7 +199,9 @@ const gameState = {
   units: [],
   pendingTasks: [],
   treasury: 0,
-  nextBaseId: 1
+  nextBaseId: 1,
+  nextUnitId: 1,
+  selectedBaseId: null
 };
 
 const gameClock = new GameClock({
@@ -108,6 +210,7 @@ const gameClock = new GameClock({
 });
 
 const scheduler = new TaskScheduler(gameState);
+const productionSystem = new ProductionSystem(gameState, scheduler);
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -119,6 +222,12 @@ const baseButtons = document.getElementById('baseButtons');
 const playerProfile = document.getElementById('playerProfile');
 const gameDateTime = document.getElementById('gameDateTime');
 const simSpeedLabel = document.getElementById('simSpeedLabel');
+const prodBaseLabel = document.getElementById('prodBaseLabel');
+const prodUnitButtons = document.getElementById('prodUnitButtons');
+const prodCurrent = document.getElementById('prodCurrent');
+const prodQueue = document.getElementById('prodQueue');
+const unitCount = document.getElementById('unitCount');
+const unitList = document.getElementById('unitList');
 
 const overlays = {
   mainMenu: document.getElementById('mainMenu'),
@@ -168,6 +277,7 @@ let selectedCountryFeature = null;
 let countries = [];
 let countriesLayer;
 let basesLayer;
+let unitsLayer;
 let projection;
 let playStep = 1;
 let lastFrameTime = performance.now();
@@ -237,9 +347,11 @@ function updateCountryStyles() {
 function setPlayerCountry(countryFeature) {
   gameState.selectedPlayerCountry = countryFeature;
   selectedCountryFeature = countryFeature;
+  gameState.selectedBaseId = null;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
+  renderProductionPanel();
 }
 
 function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -337,7 +449,12 @@ function createBase({ type, lonLat }) {
     status: 'building',
     createdAt: now,
     buildStartedAt: now,
-    buildCompleteAt: now + buildDurationMs
+    buildCompleteAt: now + buildDurationMs,
+    production: {
+      currentUnitId: null,
+      currentCompleteAt: null,
+      queue: []
+    }
   };
 
   gameState.bases.push(base);
@@ -352,6 +469,7 @@ function createBase({ type, lonLat }) {
       targetBase.status = 'active';
       setStatus(`${targetBase.type} base is now ACTIVE in ${targetBase.ownerCountry}.`);
       renderBases();
+      renderProductionPanel();
     }
   });
 
@@ -381,14 +499,113 @@ function renderBases() {
       const [x, y] = projection(d.lonLat);
       return `translate(${x}, ${y})`;
     })
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      gameState.selectedBaseId = d.id;
+      renderBases();
+      renderProductionPanel();
+    })
     .select('rect')
     .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color)
-    .attr('class', (d) => `base ${d.status}`);
+    .attr('class', (d) => `base ${d.status} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
 
   points
     .merge(enter)
     .select('title')
     .text((d) => `${d.type} base (${d.status}) - ${d.ownerCountry}`);
+}
+
+function renderUnits() {
+  const activeUnits = gameState.units.filter((unit) => unit.status === 'active');
+  unitCount.textContent = `Total active units: ${activeUnits.length}`;
+  unitList.innerHTML = '';
+
+  if (!activeUnits.length) {
+    const li = document.createElement('li');
+    li.textContent = 'No active units yet.';
+    unitList.appendChild(li);
+  } else {
+    activeUnits.slice(-8).forEach((unit) => {
+      const li = document.createElement('li');
+      li.textContent = `${UNIT_DEFINITIONS[unit.type].label} (${unit.ownerCountry})`;
+      unitList.appendChild(li);
+    });
+  }
+
+  if (!unitsLayer || !projection) return;
+  const markers = unitsLayer.selectAll('circle.unit-point').data(activeUnits, (d) => d.id);
+  const enter = markers.enter().append('circle').attr('class', 'unit-marker unit-point').attr('r', 2.3);
+  enter.append('title');
+  markers
+    .merge(enter)
+    .attr('cx', (d) => projection(d.lonLat)[0])
+    .attr('cy', (d) => projection(d.lonLat)[1])
+    .select('title')
+    .text((d) => `${UNIT_DEFINITIONS[d.type].label} (${d.domain})`);
+  markers.exit().remove();
+}
+
+function renderProductionPanel() {
+  const base = gameState.bases.find((entry) => entry.id === gameState.selectedBaseId);
+  prodUnitButtons.innerHTML = '';
+  prodQueue.innerHTML = '';
+
+  if (!base) {
+    prodBaseLabel.textContent = 'Select a base to manage production.';
+    prodCurrent.textContent = 'Current: --';
+    return;
+  }
+
+  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status}`;
+  const currentUnit = base.production.currentUnitId
+    ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
+    : null;
+
+  if (currentUnit) {
+    const remainingMs = Math.max(0, base.production.currentCompleteAt - gameState.currentTimeMs);
+    const remainingDays = (remainingMs / DAY_MS).toFixed(2);
+    prodCurrent.textContent = `Current: ${UNIT_DEFINITIONS[currentUnit.type].label} (${remainingDays} days left)`;
+  } else {
+    prodCurrent.textContent = 'Current: Idle';
+  }
+
+  base.production.queue.forEach((unitId) => {
+    const unit = gameState.units.find((entry) => entry.id === unitId);
+    if (!unit) return;
+    const li = document.createElement('li');
+    li.textContent = UNIT_DEFINITIONS[unit.type].label;
+    prodQueue.appendChild(li);
+  });
+
+  if (!base.production.queue.length) {
+    const li = document.createElement('li');
+    li.textContent = 'Queue empty';
+    prodQueue.appendChild(li);
+  }
+
+  const allowedUnits = productionSystem.getAllowedUnitsForBase(base);
+  if (!allowedUnits.length) {
+    const info = document.createElement('p');
+    info.textContent = 'This base cannot produce units.';
+    prodUnitButtons.appendChild(info);
+    return;
+  }
+
+  allowedUnits.forEach((unit) => {
+    const btn = document.createElement('button');
+    btn.textContent = `Queue ${unit.label}`;
+    btn.addEventListener('click', () => {
+      const result = productionSystem.queueUnit(base.id, unit.key);
+      if (!result.ok) {
+        setStatus(result.message, true);
+      } else {
+        setStatus(`${unit.label} queued at base #${base.id}.`);
+      }
+      renderProductionPanel();
+      renderUnits();
+    });
+    prodUnitButtons.appendChild(btn);
+  });
 }
 
 function attachMenuHandlers() {
@@ -508,6 +725,7 @@ function startSimulationLoop() {
 
     scheduler.processDue(gameState.currentTimeMs);
     refreshTimeHud();
+    renderProductionPanel();
 
     requestAnimationFrame(tick);
   };
@@ -528,6 +746,7 @@ async function setupMap() {
   countriesLayer = root.append('g').attr('id', 'countriesLayer');
   const citiesLayer = root.append('g').attr('id', 'citiesLayer');
   basesLayer = root.append('g').attr('id', 'basesLayer');
+  unitsLayer = root.append('g').attr('id', 'unitsLayer');
 
   countries = await loadCountriesData();
 
@@ -592,7 +811,9 @@ async function setupMap() {
     }
 
     const base = createBase({ type: selectedBaseType, lonLat });
+    gameState.selectedBaseId = base.id;
     renderBases();
+    renderProductionPanel();
 
     const completeText = formatDateTime(base.buildCompleteAt);
     setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
@@ -601,6 +822,8 @@ async function setupMap() {
   renderCityList();
   createBaseButtons();
   populateCountrySelect();
+  renderProductionPanel();
+  renderUnits();
   setOverlay('mainMenu');
 
   if (!d3.geoRobinson) {

@@ -94,6 +94,9 @@
     .base { stroke: #111; stroke-width: 0.5; }
     .base.building { opacity: 0.55; stroke: #ffdd57; stroke-width: 1.1; }
     .base.active { opacity: 1; stroke: #101015; stroke-width: 0.6; }
+    .base.selected-base { stroke: #ffffff; stroke-width: 1.6; }
+    .unit-marker { fill: #ffffff; stroke: #111; stroke-width: 0.4; }
+    #prodQueue, #unitList { margin: 0.4rem 0 0; padding-left: 1rem; }
 
     .tooltip {
       position: absolute;
