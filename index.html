@@ -20,11 +20,10 @@
       --base-air: #7fd6ff;
       --base-naval: #a8b0ff;
       --base-aa: #ff8db3;
+      --overlay: rgba(3, 6, 14, 0.86);
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -52,52 +51,32 @@
       padding: 0.9rem;
     }
 
-    h1 {
-      margin: 0;
-      font-size: 1.25rem;
-    }
+    h1 { margin: 0; font-size: 1.25rem; }
+    h2 { margin: 0 0 0.5rem; font-size: 1rem; color: #c9d8f8; }
 
-    h2 {
-      margin: 0 0 0.5rem;
-      font-size: 1rem;
-      color: #c9d8f8;
-    }
-
-    p,
-    li,
-    label {
+    p, li, label {
       color: var(--muted);
       line-height: 1.45;
       font-size: 0.92rem;
     }
 
-    .row {
-      display: flex;
-      gap: 0.55rem;
-      flex-wrap: wrap;
-      margin-top: 0.5rem;
-    }
+    .row { display: flex; gap: 0.55rem; flex-wrap: wrap; margin-top: 0.5rem; }
 
     button {
       border: 1px solid var(--border);
       background: var(--panel-2);
       color: var(--text);
       border-radius: 8px;
-      padding: 0.45rem 0.65rem;
+      padding: 0.5rem 0.75rem;
       cursor: pointer;
-      font-size: 0.87rem;
+      font-size: 0.9rem;
     }
 
-    button.active,
-    button:hover {
-      border-color: var(--accent);
-      color: #fff;
-    }
+    button.active, button:hover { border-color: var(--accent); color: #fff; }
 
-    #mapWrap {
-      position: relative;
-      overflow: hidden;
-    }
+    button.primary { background: linear-gradient(180deg, #2a67cb, #194993); border-color: #4d87e6; }
+
+    #mapWrap { position: relative; overflow: hidden; }
 
     #map {
       width: 100%;
@@ -114,26 +93,12 @@
       transition: fill 120ms ease;
     }
 
-    .country:hover {
-      fill: var(--country-hover);
-    }
+    .country:hover { fill: var(--country-hover); }
 
-    .country.selected {
-      fill: #5f90ef;
-      stroke-width: 0.72;
-    }
-
-    .city {
-      fill: var(--city);
-      stroke: #433616;
-      stroke-width: 0.45;
-      pointer-events: none;
-    }
-
-    .base {
-      stroke: #111;
-      stroke-width: 0.5;
-    }
+    .country.selected { fill: #5f90ef; stroke-width: 0.72; }
+    .country.locked { fill: #3b4e74; cursor: not-allowed; }
+    .city { fill: var(--city); stroke: #433616; stroke-width: 0.45; pointer-events: none; }
+    .base { stroke: #111; stroke-width: 0.5; }
 
     .tooltip {
       position: absolute;
@@ -148,37 +113,62 @@
       opacity: 0;
       transition: opacity 100ms linear;
       white-space: nowrap;
+      z-index: 5;
     }
 
-    .legend-item {
+    .legend-item { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; font-size: 0.86rem; color: var(--muted); }
+    .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid #111; }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--overlay);
+      backdrop-filter: blur(4px);
+      z-index: 12;
       display: flex;
       align-items: center;
-      gap: 0.45rem;
-      margin-bottom: 0.35rem;
-      font-size: 0.86rem;
-      color: var(--muted);
+      justify-content: center;
+      padding: 1rem;
     }
 
-    .swatch {
-      width: 12px;
-      height: 12px;
-      border-radius: 3px;
-      border: 1px solid #111;
+    .overlay.hidden { display: none; }
+
+    .menu-panel {
+      width: min(540px, 96%);
+      background: #0d1525;
+      border: 1px solid #294067;
+      border-radius: 14px;
+      padding: 1rem;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
     }
+
+    .menu-panel h2 { margin-top: 0; }
+    .menu-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.9rem; }
+
+    .field { margin: 0.7rem 0; }
+    .field label { display: block; margin-bottom: 0.28rem; }
+
+    .field input,
+    .field select {
+      width: 100%;
+      border: 1px solid #314b77;
+      border-radius: 8px;
+      background: #121f35;
+      color: #e9f1ff;
+      padding: 0.52rem 0.58rem;
+      font-size: 0.92rem;
+    }
+
+    .volume-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0; }
+    .volume-row input[type="range"] { width: 100%; }
+    .muted-note { color: #a6b7dc; font-size: 0.84rem; }
+
+    #countryWarning { color: #ff9aa9; min-height: 1.1rem; }
 
     @media (max-width: 980px) {
-      body {
-        grid-template-columns: 1fr;
-      }
-
-      .sidebar {
-        border-right: 0;
-        border-bottom: 1px solid var(--border);
-      }
-
-      #map {
-        height: 70vh;
-      }
+      body { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+      #map { height: 70vh; }
     }
   </style>
 </head>
@@ -186,17 +176,15 @@
   <aside class="sidebar">
     <div class="card">
       <h1>Geo Command</h1>
-      <p>
-        Robinson projection world map with real country borders. Click a country to select it,
-        then click inside that country to place bases.
-      </p>
+      <p>Robinson projection world map with real country borders.</p>
+      <p id="playerProfile">Player not created yet. Open Play from main menu.</p>
     </div>
 
     <div class="card">
       <h2>Build Mode</h2>
       <p><strong id="selectedCountry">No country selected</strong></p>
       <div class="row" id="baseButtons"></div>
-      <p id="status">Choose a base type and click within any country's border to place it.</p>
+      <p id="status">Open Play from the main menu, pick your country and leader, then place bases.</p>
     </div>
 
     <div class="card">
@@ -217,6 +205,63 @@
   <main id="mapWrap">
     <svg id="map" aria-label="World map with Robinson projection"></svg>
     <div class="tooltip" id="tooltip"></div>
+
+    <section class="overlay" id="mainMenu" aria-label="Main menu">
+      <div class="menu-panel">
+        <h2>Main Menu</h2>
+        <p>Welcome commander. Start a game or adjust audio settings.</p>
+        <div class="menu-actions">
+          <button class="primary" id="playBtn">Play</button>
+          <button id="settingsBtn">Settings</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="playFlow" aria-label="Play flow">
+      <div class="menu-panel">
+        <h2 id="playTitle">Choose Your Country</h2>
+        <div id="playStepCountry">
+          <div class="field">
+            <label for="countrySelect">Country</label>
+            <select id="countrySelect"></select>
+          </div>
+          <p class="muted-note">You can only place bases inside your chosen country's borders.</p>
+          <p id="countryWarning"></p>
+        </div>
+
+        <div id="playStepLeader" class="hidden">
+          <div class="field">
+            <label for="leaderName">Leader Name</label>
+            <input id="leaderName" maxlength="36" placeholder="Enter leader name" />
+          </div>
+        </div>
+
+        <div class="menu-actions">
+          <button id="playBackBtn">Back</button>
+          <button class="primary" id="playNextBtn">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="settingsPanel" aria-label="Settings">
+      <div class="menu-panel">
+        <h2>Settings</h2>
+        <div class="volume-row">
+          <label for="musicVolume">Music Volume</label>
+          <input type="range" id="musicVolume" min="0" max="100" value="40" />
+          <span id="musicValue">40</span>
+        </div>
+        <div class="volume-row">
+          <label for="sfxVolume">Sound Effects</label>
+          <input type="range" id="sfxVolume" min="0" max="100" value="60" />
+          <span id="sfxValue">60</span>
+        </div>
+        <p class="muted-note">Volumes are stored in your browser for this game.</p>
+        <div class="menu-actions">
+          <button id="settingsBackBtn">Back</button>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
@@ -229,6 +274,20 @@
     const cityList = document.getElementById('cityList');
     const statusLabel = document.getElementById('status');
     const baseButtons = document.getElementById('baseButtons');
+    const playerProfile = document.getElementById('playerProfile');
+
+    const overlays = {
+      mainMenu: document.getElementById('mainMenu'),
+      playFlow: document.getElementById('playFlow'),
+      settingsPanel: document.getElementById('settingsPanel')
+    };
+
+    const playTitle = document.getElementById('playTitle');
+    const playStepCountry = document.getElementById('playStepCountry');
+    const playStepLeader = document.getElementById('playStepLeader');
+    const countrySelect = document.getElementById('countrySelect');
+    const countryWarning = document.getElementById('countryWarning');
+    const leaderNameInput = document.getElementById('leaderName');
 
     const baseTypes = [
       { key: 'ground', label: 'Ground', color: 'var(--base-ground)' },
@@ -258,26 +317,39 @@
 
     let selectedBaseType = 'ground';
     let selectedCountryFeature = null;
+    let playerCountryFeature = null;
+    let countries = [];
+    let countriesLayer;
     const bases = [];
+    let playStep = 1;
+
+    const settingsState = {
+      music: Number(localStorage.getItem('musicVolume') ?? 40),
+      sfx: Number(localStorage.getItem('sfxVolume') ?? 60)
+    };
 
     function setStatus(message, isError = false) {
       statusLabel.textContent = message;
       statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
     }
 
+    function setOverlay(name) {
+      Object.entries(overlays).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
+    }
+
+    function hideOverlays() {
+      Object.values(overlays).forEach((el) => el.classList.add('hidden'));
+    }
+
     function renderCityList(countryName) {
       cityList.innerHTML = '';
-      const visibleCities = countryName
-        ? majorCities.filter((city) => city.country === countryName)
-        : majorCities;
-
+      const visibleCities = countryName ? majorCities.filter((city) => city.country === countryName) : majorCities;
       if (!visibleCities.length) {
         const li = document.createElement('li');
         li.textContent = 'No major cities configured for this country yet.';
         cityList.appendChild(li);
         return;
       }
-
       visibleCities.forEach((city) => {
         const li = document.createElement('li');
         li.textContent = `${city.name} (${city.country})`;
@@ -291,14 +363,31 @@
         const btn = document.createElement('button');
         btn.textContent = type.label;
         btn.dataset.type = type.key;
-        if (type.key === selectedBaseType) btn.classList.add('active');
+        btn.classList.toggle('active', type.key === selectedBaseType);
         btn.addEventListener('click', () => {
           selectedBaseType = type.key;
           baseButtons.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-          setStatus(`Build mode: ${type.label}. Click inside a country's border to place.`);
+          if (playerCountryFeature) {
+            setStatus(`Build mode: ${type.label}. Click inside ${playerCountryFeature.properties.name}.`);
+          }
         });
         baseButtons.appendChild(btn);
       });
+    }
+
+    function updateCountryStyles() {
+      if (!countriesLayer) return;
+      countriesLayer.selectAll('path')
+        .classed('selected', (d) => selectedCountryFeature && d.id === selectedCountryFeature.id)
+        .classed('locked', (d) => playerCountryFeature && d.id !== playerCountryFeature.id);
+    }
+
+    function setPlayerCountry(countryFeature) {
+      playerCountryFeature = countryFeature;
+      selectedCountryFeature = countryFeature;
+      selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
+      renderCityList(countryFeature.properties.name);
+      updateCountryStyles();
     }
 
     function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -306,20 +395,111 @@
       return d3.geoContains(countryFeature, lonLatPoint);
     }
 
+    function populateCountrySelect() {
+      countrySelect.innerHTML = '<option value="">Choose a country</option>';
+      countries
+        .map((c) => c.properties.name)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach((name) => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          countrySelect.appendChild(option);
+        });
+    }
+
+    function applySettingsUI() {
+      const musicSlider = document.getElementById('musicVolume');
+      const sfxSlider = document.getElementById('sfxVolume');
+      const musicValue = document.getElementById('musicValue');
+      const sfxValue = document.getElementById('sfxValue');
+      musicSlider.value = settingsState.music;
+      sfxSlider.value = settingsState.sfx;
+      musicValue.textContent = settingsState.music;
+      sfxValue.textContent = settingsState.sfx;
+
+      musicSlider.addEventListener('input', (e) => {
+        settingsState.music = Number(e.target.value);
+        musicValue.textContent = settingsState.music;
+        localStorage.setItem('musicVolume', String(settingsState.music));
+      });
+
+      sfxSlider.addEventListener('input', (e) => {
+        settingsState.sfx = Number(e.target.value);
+        sfxValue.textContent = settingsState.sfx;
+        localStorage.setItem('sfxVolume', String(settingsState.sfx));
+      });
+    }
+
+    function attachMenuHandlers() {
+      document.getElementById('playBtn').addEventListener('click', () => {
+        playStep = 1;
+        playTitle.textContent = 'Choose Your Country';
+        playStepCountry.classList.remove('hidden');
+        playStepLeader.classList.add('hidden');
+        countryWarning.textContent = '';
+        leaderNameInput.value = '';
+        setOverlay('playFlow');
+      });
+
+      document.getElementById('settingsBtn').addEventListener('click', () => setOverlay('settingsPanel'));
+      document.getElementById('settingsBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
+
+      document.getElementById('playBackBtn').addEventListener('click', () => {
+        if (playStep === 1) {
+          setOverlay('mainMenu');
+          return;
+        }
+        playStep = 1;
+        playTitle.textContent = 'Choose Your Country';
+        playStepCountry.classList.remove('hidden');
+        playStepLeader.classList.add('hidden');
+      });
+
+      document.getElementById('playNextBtn').addEventListener('click', () => {
+        if (playStep === 1) {
+          const chosen = countrySelect.value;
+          if (!chosen) {
+            countryWarning.textContent = 'Please choose a country to continue.';
+            return;
+          }
+          const chosenFeature = countries.find((c) => c.properties.name === chosen);
+          if (!chosenFeature) {
+            countryWarning.textContent = 'Country data unavailable. Choose another country.';
+            return;
+          }
+          countryWarning.textContent = '';
+          setPlayerCountry(chosenFeature);
+          playStep = 2;
+          playTitle.textContent = `Create Leader for ${chosen}`;
+          playStepCountry.classList.add('hidden');
+          playStepLeader.classList.remove('hidden');
+          return;
+        }
+
+        const leaderName = leaderNameInput.value.trim();
+        if (!leaderName) {
+          countryWarning.textContent = '';
+          alert('Please enter a leader name.');
+          return;
+        }
+
+        playerProfile.textContent = `Leader ${leaderName} of ${playerCountryFeature.properties.name}`;
+        setStatus(`Commander ${leaderName}, deploy ${selectedBaseType} bases within ${playerCountryFeature.properties.name}.`);
+        hideOverlays();
+      });
+    }
+
     function setup() {
       const width = mapWrap.clientWidth;
       const height = mapWrap.clientHeight;
-
       svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-      const projection = d3.geoRobinson().fitExtent(
-        [[15, 15], [width - 15, height - 15]],
-        { type: 'Sphere' }
-      );
+      const projection = d3.geoRobinson().fitExtent([[15, 15], [width - 15, height - 15]], { type: 'Sphere' });
       const path = d3.geoPath(projection);
 
       const root = svg.append('g');
-      const countriesLayer = root.append('g').attr('id', 'countriesLayer');
+      countriesLayer = root.append('g').attr('id', 'countriesLayer');
       const citiesLayer = root.append('g').attr('id', 'citiesLayer');
       const basesLayer = root.append('g').attr('id', 'basesLayer');
 
@@ -328,10 +508,8 @@
         d3.tsv('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.tsv')
       ]).then(([worldData, namesData]) => {
         const nameById = new Map(namesData.map((row) => [row.id, row.name]));
-        const countries = topojson.feature(worldData, worldData.objects.countries).features;
-        countries.forEach((c) => {
-          c.properties.name = nameById.get(c.id) || `Country ${c.id}`;
-        });
+        countries = topojson.feature(worldData, worldData.objects.countries).features;
+        countries.forEach((c) => { c.properties.name = nameById.get(c.id) || `Country ${c.id}`; });
 
         countriesLayer
           .selectAll('path')
@@ -346,17 +524,21 @@
             tooltip.style.top = `${event.clientY - mapWrap.getBoundingClientRect().top}px`;
             tooltip.textContent = d.properties.name;
           })
-          .on('mouseleave', () => {
-            tooltip.style.opacity = 0;
-          })
+          .on('mouseleave', () => { tooltip.style.opacity = 0; })
           .on('click', function (event, d) {
             event.stopPropagation();
+            if (!playerCountryFeature) {
+              setStatus('Use Play in the main menu to choose your country first.', true);
+              return;
+            }
+            if (d.id !== playerCountryFeature.id) {
+              setStatus(`You are locked to ${playerCountryFeature.properties.name}.`, true);
+              return;
+            }
             selectedCountryFeature = d;
             selectedCountryLabel.textContent = `Selected: ${d.properties.name}`;
             renderCityList(d.properties.name);
-            setStatus(`Selected ${d.properties.name}. Click inside its border to place a ${selectedBaseType} base.`);
-            countriesLayer.selectAll('path').classed('selected', false);
-            d3.select(this).classed('selected', true);
+            updateCountryStyles();
           });
 
         citiesLayer
@@ -374,7 +556,6 @@
         function renderBases() {
           const points = basesLayer.selectAll('g.base-point').data(bases, (_, i) => i);
           const enter = points.enter().append('g').attr('class', 'base-point');
-
           enter
             .append('rect')
             .attr('class', 'base')
@@ -384,17 +565,11 @@
             .attr('y', -4)
             .attr('rx', 1.5)
             .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color);
-
-          enter
-            .append('title')
-            .text((d) => `${d.type} base in ${d.country}`);
-
-          points
-            .merge(enter)
-            .attr('transform', (d) => {
-              const [x, y] = projection(d.lonLat);
-              return `translate(${x}, ${y})`;
-            });
+          enter.append('title').text((d) => `${d.type} base in ${d.country}`);
+          points.merge(enter).attr('transform', (d) => {
+            const [x, y] = projection(d.lonLat);
+            return `translate(${x}, ${y})`;
+          });
         }
 
         svg.on('click', function (event) {
@@ -402,40 +577,34 @@
           const lonLat = projection.invert([x, y]);
           if (!lonLat) return;
 
-          if (!selectedCountryFeature) {
-            setStatus('Pick a country first, then place a base within its border.', true);
+          if (!playerCountryFeature) {
+            setStatus('Start from Play in the main menu before placing bases.', true);
             return;
           }
 
           const clickedCountry = countries.find((country) => pointInsideCountry(country, lonLat));
-          if (!clickedCountry) {
-            setStatus('Click was outside any country border.', true);
+          if (!clickedCountry || clickedCountry.id !== playerCountryFeature.id) {
+            setStatus(`Place bases only inside ${playerCountryFeature.properties.name}.`, true);
             return;
           }
 
-          if (clickedCountry.id !== selectedCountryFeature.id) {
-            setStatus(`You can only place inside ${selectedCountryFeature.properties.name} while it is selected.`, true);
-            return;
-          }
-
-          bases.push({
-            type: selectedBaseType,
-            country: selectedCountryFeature.properties.name,
-            lonLat
-          });
-
+          bases.push({ type: selectedBaseType, country: playerCountryFeature.properties.name, lonLat });
           renderBases();
-          setStatus(`${selectedBaseType} base placed in ${selectedCountryFeature.properties.name}.`);
+          setStatus(`${selectedBaseType} base placed in ${playerCountryFeature.properties.name}.`);
         });
 
         renderCityList();
         createBaseButtons();
+        populateCountrySelect();
+        setOverlay('mainMenu');
       }).catch((err) => {
         console.error(err);
         setStatus('Map data failed to load. Check internet access and refresh.', true);
       });
     }
 
+    applySettingsUI();
+    attachMenuHandlers();
     setup();
   </script>
 </body>
