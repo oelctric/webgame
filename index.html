@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a2e;
+            font-family: Arial, sans-serif;
+        }
+        #game {
+            width: 400px;
+            height: 400px;
+            background: #16213e;
+            position: relative;
+            border: 2px solid #0f3460;
+        }
+        #player {
+            width: 30px;
+            height: 30px;
+            background: #e94560;
+            position: absolute;
+            top: 185px;
+            left: 185px;
+            border-radius: 5px;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <div id="score">Score: 0</div>
+        <div id="player"></div>
+    </div>
+    <script>
+        const player = document.getElementById('player');
+        const scoreEl = document.getElementById('score');
+        const game = document.getElementById('game');
+        
+        let x = 185, y = 185, score = 0;
+        const speed = 20;
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': y = Math.max(0, y - speed); break;
+                case 'ArrowDown': y = Math.min(370, y + speed); break;
+                case 'ArrowLeft': x = Math.max(0, x - speed); break;
+                case 'ArrowRight': x = Math.min(370, x + speed); break;
+            }
+            player.style.left = x + 'px';
+            player.style.top = y + 'px';
+            score++;
+            scoreEl.textContent = 'Score: ' + score;
+        });
+    </script>
+</body>
+</html>
