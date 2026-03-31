@@ -25,6 +25,15 @@ const BASE_TO_DOMAIN = {
   antiAir: null
 };
 
+const UNIT_SPEED_KM_PER_DAY = {
+  infantry: 220,
+  armor: 420,
+  fighter: 2400,
+  bomber: 1800,
+  patrolBoat: 480,
+  destroyer: 520
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -188,6 +197,67 @@ class ProductionSystem {
     setStatus(`${UNIT_DEFINITIONS[unit.type].label} completed at base #${base.id}.`);
     renderProductionPanel();
     renderUnits();
+    renderSelectedUnitPanel();
+  }
+}
+
+class MovementSystem {
+  constructor(gameState, scheduler) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+  }
+
+  issueMoveOrder(unitId, targetLonLat) {
+    const unit = this.gameState.units.find((entry) => entry.id === unitId);
+    if (!unit) return { ok: false, message: 'Select a valid unit first.' };
+    if (unit.status !== 'active') return { ok: false, message: 'Only active units can receive new move orders.' };
+
+    const startLonLat = this.getDisplayLonLat(unit);
+    const distanceKm = d3.geoDistance(startLonLat, targetLonLat) * 6371;
+    const speed = UNIT_SPEED_KM_PER_DAY[unit.type] || 300;
+    const durationMs = Math.max(1, (distanceKm / speed) * DAY_MS);
+
+    unit.status = 'moving';
+    unit.movement = {
+      startLonLat,
+      targetLonLat: [...targetLonLat],
+      startedAt: this.gameState.currentTimeMs,
+      arrivalAt: this.gameState.currentTimeMs + durationMs,
+      speedKmPerDay: speed,
+      taskId: null
+    };
+
+    const taskId = this.scheduler.schedule({
+      executeAt: unit.movement.arrivalAt,
+      type: 'UNIT_MOVE_COMPLETE',
+      payload: { unitId: unit.id },
+      handler: ({ unitId: doneUnitId }) => this.completeMove(doneUnitId)
+    });
+
+    unit.movement.taskId = taskId;
+    return { ok: true, unit };
+  }
+
+  completeMove(unitId) {
+    const unit = this.gameState.units.find((entry) => entry.id === unitId);
+    if (!unit || !unit.movement) return;
+    unit.lonLat = [...unit.movement.targetLonLat];
+    unit.movement = null;
+    unit.status = 'active';
+    setStatus(`${UNIT_DEFINITIONS[unit.type].label} arrived at destination.`);
+    renderUnits();
+    renderSelectedUnitPanel();
+  }
+
+  getDisplayLonLat(unit) {
+    if (!unit.movement || unit.status !== 'moving') return unit.lonLat;
+    const { startLonLat, targetLonLat, startedAt, arrivalAt } = unit.movement;
+    const total = Math.max(1, arrivalAt - startedAt);
+    const progress = Math.min(1, Math.max(0, (this.gameState.currentTimeMs - startedAt) / total));
+    return [
+      startLonLat[0] + (targetLonLat[0] - startLonLat[0]) * progress,
+      startLonLat[1] + (targetLonLat[1] - startLonLat[1]) * progress
+    ];
   }
 }
 
@@ -202,7 +272,9 @@ const gameState = {
   treasury: 0,
   nextBaseId: 1,
   nextUnitId: 1,
-  selectedBaseId: null
+  selectedBaseId: null,
+  selectedUnitId: null,
+  moveMode: false
 };
 
 const gameClock = new GameClock({
@@ -212,6 +284,7 @@ const gameClock = new GameClock({
 
 const scheduler = new TaskScheduler(gameState);
 const productionSystem = new ProductionSystem(gameState, scheduler);
+const movementSystem = new MovementSystem(gameState, scheduler);
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -229,6 +302,11 @@ const prodCurrent = document.getElementById('prodCurrent');
 const prodQueue = document.getElementById('prodQueue');
 const unitCount = document.getElementById('unitCount');
 const unitList = document.getElementById('unitList');
+const selectedUnitLabel = document.getElementById('selectedUnitLabel');
+const selectedUnitMeta = document.getElementById('selectedUnitMeta');
+const moveUnitBtn = document.getElementById('moveUnitBtn');
+const clearUnitSelectionBtn = document.getElementById('clearUnitSelectionBtn');
+const moveModeStatus = document.getElementById('moveModeStatus');
 
 const overlays = {
   mainMenu: document.getElementById('mainMenu'),
@@ -354,10 +432,13 @@ function setPlayerCountry(countryFeature) {
   gameState.selectedPlayerCountry = countryFeature;
   selectedCountryFeature = countryFeature;
   gameState.selectedBaseId = null;
+  gameState.selectedUnitId = null;
+  gameState.moveMode = false;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
   renderProductionPanel();
+  renderSelectedUnitPanel();
 }
 
 function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -525,33 +606,57 @@ function renderBases() {
 }
 
 function renderUnits() {
-  const activeUnits = gameState.units.filter((unit) => unit.status === 'active');
-  unitCount.textContent = `Total active units: ${activeUnits.length}`;
+  const visibleUnits = gameState.units.filter((unit) => unit.status === 'active' || unit.status === 'moving');
+  unitCount.textContent = `Total units: ${visibleUnits.length}`;
   unitList.innerHTML = '';
 
-  if (!activeUnits.length) {
+  if (!visibleUnits.length) {
     const li = document.createElement('li');
-    li.textContent = 'No active units yet.';
+    li.textContent = 'No units yet.';
     unitList.appendChild(li);
   } else {
-    activeUnits.slice(-8).forEach((unit) => {
+    visibleUnits.slice(-8).forEach((unit) => {
       const li = document.createElement('li');
-      li.textContent = `${UNIT_DEFINITIONS[unit.type].label} (${unit.ownerCountry})`;
+      li.textContent = `${UNIT_DEFINITIONS[unit.type].label} (${unit.status})`;
       unitList.appendChild(li);
     });
   }
 
   if (!unitsLayer || !projection) return;
-  const markers = unitsLayer.selectAll('circle.unit-point').data(activeUnits, (d) => d.id);
+  const markers = unitsLayer.selectAll('circle.unit-point').data(visibleUnits, (d) => d.id);
   const enter = markers.enter().append('circle').attr('class', 'unit-marker unit-point').attr('r', 2.3);
   enter.append('title');
   markers
     .merge(enter)
-    .attr('cx', (d) => projection(d.lonLat)[0])
-    .attr('cy', (d) => projection(d.lonLat)[1])
+    .attr('class', (d) => `unit-marker unit-point ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
+    .attr('cx', (d) => projection(movementSystem.getDisplayLonLat(d))[0])
+    .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      gameState.selectedUnitId = d.id;
+      gameState.moveMode = false;
+      renderSelectedUnitPanel();
+      renderUnits();
+    })
     .select('title')
-    .text((d) => `${UNIT_DEFINITIONS[d.type].label} (${d.domain})`);
+    .text((d) => `${UNIT_DEFINITIONS[d.type].label} (${d.domain}) - ${d.status}`);
   markers.exit().remove();
+}
+
+function renderSelectedUnitPanel() {
+  const unit = gameState.units.find((entry) => entry.id === gameState.selectedUnitId);
+  if (!unit) {
+    selectedUnitLabel.textContent = 'No unit selected.';
+    selectedUnitMeta.textContent = 'Status: --';
+  } else {
+    selectedUnitLabel.textContent = `Unit #${unit.id}: ${UNIT_DEFINITIONS[unit.type].label} (${unit.ownerCountry})`;
+    if (unit.status === 'moving' && unit.movement) {
+      selectedUnitMeta.textContent = `Status: moving • ETA ${formatDateTime(unit.movement.arrivalAt)} • Target ${unit.movement.targetLonLat.map((n) => n.toFixed(1)).join(', ')}`;
+    } else {
+      selectedUnitMeta.textContent = `Status: active • Position ${unit.lonLat.map((n) => n.toFixed(1)).join(', ')}`;
+    }
+  }
+  moveModeStatus.textContent = `Move mode: ${gameState.moveMode ? 'On (click map destination)' : 'Off'}`;
 }
 
 function renderProductionPanel() {
@@ -677,6 +782,25 @@ function attachMenuHandlers() {
   });
 }
 
+function attachUnitControls() {
+  moveUnitBtn.addEventListener('click', () => {
+    if (!gameState.selectedUnitId) {
+      setStatus('Select a unit first, then enable move mode.', true);
+      return;
+    }
+    gameState.moveMode = true;
+    renderSelectedUnitPanel();
+    setStatus('Move mode enabled. Click destination on the map.');
+  });
+
+  clearUnitSelectionBtn.addEventListener('click', () => {
+    gameState.selectedUnitId = null;
+    gameState.moveMode = false;
+    renderSelectedUnitPanel();
+    renderUnits();
+  });
+}
+
 async function loadCountriesData() {
   const geoJsonSources = [
     'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
@@ -735,6 +859,8 @@ function startSimulationLoop() {
     scheduler.processDue(gameState.currentTimeMs);
     refreshTimeHud();
     renderProductionPanel();
+    renderSelectedUnitPanel();
+    renderUnits();
 
     requestAnimationFrame(tick);
   };
@@ -763,6 +889,20 @@ async function setupMap() {
     const [x, y] = d3.pointer(event, svg.node());
     const lonLat = projection.invert([x, y]);
     if (!lonLat) return;
+
+    if (gameState.moveMode && gameState.selectedUnitId) {
+      const result = movementSystem.issueMoveOrder(gameState.selectedUnitId, lonLat);
+      if (!result.ok) {
+        setStatus(result.message, true);
+      } else {
+        const unitDef = UNIT_DEFINITIONS[result.unit.type];
+        setStatus(`${unitDef.label} moving. ETA: ${formatDateTime(result.unit.movement.arrivalAt)}.`);
+      }
+      gameState.moveMode = false;
+      renderSelectedUnitPanel();
+      renderUnits();
+      return;
+    }
 
     if (!gameState.selectedPlayerCountry) {
       setStatus('Start from Play in the main menu before placing bases.', true);
@@ -840,6 +980,7 @@ async function setupMap() {
   populateCountrySelect();
   renderProductionPanel();
   renderUnits();
+  renderSelectedUnitPanel();
   setOverlay('mainMenu');
 
   if (!d3.geoRobinson) {
@@ -851,7 +992,9 @@ async function init() {
   applySettingsUI();
   attachMenuHandlers();
   attachTimeControls();
+  attachUnitControls();
   refreshTimeHud();
+  renderSelectedUnitPanel();
 
   try {
     await setupMap();
