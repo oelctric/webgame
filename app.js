@@ -34,6 +34,12 @@ const UNIT_SPEED_KM_PER_DAY = {
   destroyer: 520
 };
 
+const CAPTURE_CONFIG = {
+  cityDurationMs: 2 * DAY_MS,
+  baseDurationMs: 3 * DAY_MS,
+  captureRangeKm: 320
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -163,7 +169,8 @@ class ProductionSystem {
       currentTargetId: null,
       targetType: null,
       strength: unitDef.attack,
-      movement: null
+      movement: null,
+      captureTarget: null
     };
 
     this.gameState.units.push(unit);
@@ -226,6 +233,7 @@ class MovementSystem {
     if (unit.combatStatus === 'attacking' || unit.combatStatus === 'defending') {
       return { ok: false, message: 'Cannot move while unit is in combat.' };
     }
+    if (unit.captureTarget) return { ok: false, message: 'Cannot move while capturing.' };
 
     const startLonLat = this.getDisplayLonLat(unit);
     const distanceKm = d3.geoDistance(startLonLat, targetLonLat) * 6371;
@@ -287,6 +295,7 @@ class CombatSystem {
     const attacker = this.gameState.units.find((u) => u.id === attackerId);
     if (!attacker || attacker.status === 'destroyed') return { ok: false, message: 'Attacker is not available.' };
     if (attacker.status === 'moving') return { ok: false, message: 'Cannot attack while unit is moving.' };
+    if (attacker.captureTarget) return { ok: false, message: 'Cannot attack while capturing.' };
 
     const target = targetType === 'unit'
       ? this.gameState.units.find((u) => u.id === targetId)
@@ -359,6 +368,8 @@ class CombatSystem {
         target.currentTargetId = null;
         target.targetType = null;
         target.movement = null;
+        target.captureTarget = null;
+        captureSystem.cancelCapturesByUnit(target.id);
       } else {
         target.combatStatus = 'destroyed';
         target.status = 'destroyed';
@@ -385,6 +396,100 @@ class CombatSystem {
   }
 }
 
+class CaptureSystem {
+  constructor(gameState, scheduler, movementSystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.movementSystem = movementSystem;
+  }
+
+  startCapture(unitId, targetType, targetId) {
+    const unit = this.gameState.units.find((u) => u.id === unitId);
+    if (!unit || unit.status === 'destroyed') return { ok: false, message: 'Capturing unit is not available.' };
+    if (unit.domain !== 'ground') return { ok: false, message: 'Only ground units can capture.' };
+    if (unit.status !== 'active') return { ok: false, message: 'Unit must be active to capture.' };
+    if (unit.movement) return { ok: false, message: 'Unit cannot capture while moving.' };
+    if (unit.combatStatus === 'attacking' || unit.combatStatus === 'defending') {
+      return { ok: false, message: 'Unit cannot capture while in combat.' };
+    }
+
+    const target = targetType === 'base'
+      ? this.gameState.bases.find((b) => b.id === targetId)
+      : this.gameState.cities.find((c) => c.id === targetId);
+    if (!target) return { ok: false, message: 'Target not found.' };
+    if (target.combatStatus === 'destroyed' || target.status === 'destroyed') return { ok: false, message: 'Target is destroyed.' };
+    if (target.ownerCountry === unit.ownerCountry) return { ok: false, message: 'Cannot capture friendly assets.' };
+    if (target.captureState) return { ok: false, message: 'Target is already being captured.' };
+
+    const unitPos = this.movementSystem.getDisplayLonLat(unit);
+    const targetPos = target.lonLat;
+    const distanceKm = d3.geoDistance(unitPos, targetPos) * 6371;
+    if (distanceKm > CAPTURE_CONFIG.captureRangeKm) return { ok: false, message: 'Target is out of capture range.' };
+
+    const durationMs = targetType === 'base' ? CAPTURE_CONFIG.baseDurationMs : CAPTURE_CONFIG.cityDurationMs;
+    target.controlStatus = 'being_captured';
+    target.captureState = {
+      captorUnitId: unit.id,
+      startedAt: this.gameState.currentTimeMs,
+      completeAt: this.gameState.currentTimeMs + durationMs,
+      taskId: null
+    };
+    unit.captureTarget = { targetType, targetId };
+
+    const taskId = this.scheduler.schedule({
+      executeAt: target.captureState.completeAt,
+      type: 'CAPTURE_COMPLETE',
+      payload: { targetType, targetId, captorUnitId: unit.id },
+      handler: (payload) => this.resolveCapture(payload)
+    });
+    target.captureState.taskId = taskId;
+
+    return { ok: true, target };
+  }
+
+  resolveCapture({ targetType, targetId, captorUnitId }) {
+    const unit = this.gameState.units.find((u) => u.id === captorUnitId);
+    const target = targetType === 'base'
+      ? this.gameState.bases.find((b) => b.id === targetId)
+      : this.gameState.cities.find((c) => c.id === targetId);
+    if (!target || !target.captureState) return;
+
+    if (!unit || unit.status === 'destroyed') {
+      target.captureState = null;
+      target.controlStatus = 'normal';
+      setStatus('Capture failed: captor unit was destroyed.');
+      return;
+    }
+    if (target.status === 'destroyed' || target.combatStatus === 'destroyed') {
+      target.captureState = null;
+      target.controlStatus = 'normal';
+      setStatus('Capture failed: target was destroyed.');
+      if (unit) unit.captureTarget = null;
+      return;
+    }
+
+    target.ownerCountry = unit.ownerCountry;
+    target.captureState = null;
+    target.controlStatus = 'normal';
+    unit.captureTarget = null;
+    setStatus(`${targetType} captured by ${unit.ownerCountry}.`);
+    renderBases();
+    renderCities();
+    renderProductionPanel();
+    renderSelectedUnitPanel();
+  }
+
+  cancelCapturesByUnit(unitId) {
+    const assets = [...this.gameState.bases, ...this.gameState.cities];
+    assets.forEach((asset) => {
+      if (asset.captureState && asset.captureState.captorUnitId === unitId) {
+        asset.captureState = null;
+        asset.controlStatus = 'normal';
+      }
+    });
+  }
+}
+
 const gameState = {
   selectedPlayerCountry: null,
   currentTimeMs: Date.parse(GAME_START_ISO),
@@ -400,6 +505,8 @@ const gameState = {
   selectedUnitId: null,
   moveMode: false,
   attackMode: false,
+  captureMode: false,
+  selectedAsset: null,
   enemySpawned: false
 };
 
@@ -412,6 +519,7 @@ const scheduler = new TaskScheduler(gameState);
 const productionSystem = new ProductionSystem(gameState, scheduler);
 const movementSystem = new MovementSystem(gameState, scheduler);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem);
+const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem);
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -433,9 +541,12 @@ const selectedUnitLabel = document.getElementById('selectedUnitLabel');
 const selectedUnitMeta = document.getElementById('selectedUnitMeta');
 const moveUnitBtn = document.getElementById('moveUnitBtn');
 const attackUnitBtn = document.getElementById('attackUnitBtn');
+const captureUnitBtn = document.getElementById('captureUnitBtn');
 const clearUnitSelectionBtn = document.getElementById('clearUnitSelectionBtn');
 const moveModeStatus = document.getElementById('moveModeStatus');
 const attackModeStatus = document.getElementById('attackModeStatus');
+const captureModeStatus = document.getElementById('captureModeStatus');
+const selectedAssetStatus = document.getElementById('selectedAssetStatus');
 
 const overlays = {
   mainMenu: document.getElementById('mainMenu'),
@@ -485,6 +596,7 @@ let selectedCountryFeature = null;
 let countries = [];
 let countriesLayer;
 let basesLayer;
+let citiesLayer;
 let unitsLayer;
 let projection;
 let playStep = 1;
@@ -534,7 +646,10 @@ function hideOverlays() {
 
 function renderCityList(countryName) {
   cityList.innerHTML = '';
-  const visibleCities = countryName ? majorCities.filter((city) => city.country === countryName) : majorCities;
+  const sourceCities = gameState.cities.length ? gameState.cities : majorCities.map((c) => ({ name: c.name, ownerCountry: c.country }));
+  const visibleCities = countryName
+    ? sourceCities.filter((city) => (city.ownerCountry || city.country) === countryName)
+    : sourceCities;
   if (!visibleCities.length) {
     const li = document.createElement('li');
     li.textContent = 'No major cities configured for this country yet.';
@@ -544,9 +659,22 @@ function renderCityList(countryName) {
 
   visibleCities.forEach((city) => {
     const li = document.createElement('li');
-    li.textContent = `${city.name} (${city.country})`;
+    li.textContent = `${city.name} (${city.ownerCountry || city.country})`;
     cityList.appendChild(li);
   });
+}
+
+function initializeCityState() {
+  if (gameState.cities.length) return;
+  gameState.cities = majorCities.map((city, idx) => ({
+    id: idx + 1,
+    name: city.name,
+    ownerCountry: city.country,
+    lonLat: [city.lon, city.lat],
+    controlStatus: 'normal',
+    captureState: null,
+    status: 'active'
+  }));
 }
 
 function updateCountryStyles() {
@@ -564,6 +692,8 @@ function setPlayerCountry(countryFeature) {
   gameState.selectedUnitId = null;
   gameState.moveMode = false;
   gameState.attackMode = false;
+  gameState.captureMode = false;
+  gameState.selectedAsset = null;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
@@ -585,6 +715,8 @@ function spawnEnemyForces() {
     lonLat: [lon, lat],
     status: 'active',
     combatStatus: 'idle',
+    controlStatus: 'normal',
+    captureState: null,
     createdAt: gameState.currentTimeMs,
     buildStartedAt: gameState.currentTimeMs,
     buildCompleteAt: gameState.currentTimeMs,
@@ -616,7 +748,8 @@ function spawnEnemyForces() {
     currentTargetId: null,
     targetType: null,
     strength: def.attack,
-    movement: null
+    movement: null,
+    captureTarget: null
   });
 
   gameState.enemySpawned = true;
@@ -731,6 +864,8 @@ function createBase({ type, lonLat }) {
     lonLat,
     status: 'building',
     combatStatus: 'idle',
+    controlStatus: 'normal',
+    captureState: null,
     createdAt: now,
     buildStartedAt: now,
     buildCompleteAt: now + buildDurationMs,
@@ -801,7 +936,21 @@ function renderBases() {
         renderUnits();
         return;
       }
+      if (gameState.captureMode && gameState.selectedUnitId) {
+        const result = captureSystem.startCapture(gameState.selectedUnitId, 'base', d.id);
+        if (!result.ok) {
+          setStatus(result.message, true);
+        } else {
+          setStatus(`Capture started on base #${d.id}.`);
+        }
+        gameState.captureMode = false;
+        renderSelectedUnitPanel();
+        renderBases();
+        return;
+      }
       gameState.selectedBaseId = d.id;
+      gameState.selectedAsset = { type: 'base', id: d.id };
+      selectedAssetStatus.textContent = `Selected asset: Base #${d.id} • Owner ${d.ownerCountry} • ${d.controlStatus || 'normal'}`;
       renderBases();
       renderProductionPanel();
     })
@@ -813,6 +962,40 @@ function renderBases() {
     .merge(enter)
     .select('title')
     .text((d) => `${d.type} base (${d.status}) HP ${d.health}/${d.maxHealth} - ${d.ownerCountry}`);
+
+  points.exit().remove();
+}
+
+function renderCities() {
+  if (!citiesLayer || !projection) return;
+  const visibleCities = gameState.cities.filter((city) => city.status !== 'destroyed');
+  const points = citiesLayer.selectAll('circle.city-point').data(visibleCities, (d) => d.id);
+  const enter = points.enter().append('circle').attr('class', 'city city-point').attr('r', 3);
+  enter.append('title');
+
+  points
+    .merge(enter)
+    .attr('class', (d) => `city city-point ${d.controlStatus}`)
+    .attr('cx', (d) => projection(d.lonLat)[0])
+    .attr('cy', (d) => projection(d.lonLat)[1])
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      gameState.selectedAsset = { type: 'city', id: d.id };
+      selectedAssetStatus.textContent = `Selected asset: City ${d.name} • Owner ${d.ownerCountry} • ${d.controlStatus}`;
+      if (gameState.captureMode && gameState.selectedUnitId) {
+        const result = captureSystem.startCapture(gameState.selectedUnitId, 'city', d.id);
+        if (!result.ok) {
+          setStatus(result.message, true);
+        } else {
+          setStatus(`Capture started on city ${d.name}.`);
+        }
+        gameState.captureMode = false;
+        renderSelectedUnitPanel();
+        renderCities();
+      }
+    })
+    .select('title')
+    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus}`);
 
   points.exit().remove();
 }
@@ -860,6 +1043,7 @@ function renderUnits() {
       gameState.selectedUnitId = d.id;
       gameState.moveMode = false;
       gameState.attackMode = false;
+      gameState.captureMode = false;
       renderSelectedUnitPanel();
       renderUnits();
     })
@@ -880,11 +1064,14 @@ function renderSelectedUnitPanel() {
     } else if (unit.status === 'destroyed') {
       selectedUnitMeta.textContent = 'Status: destroyed';
     } else {
-      selectedUnitMeta.textContent = `Status: ${unit.status} • HP ${unit.health}/${unit.maxHealth} • ATK ${unit.attack} DEF ${unit.defense} RNG ${unit.rangeKm}km`;
+      const canCapture = unit.domain === 'ground' && unit.status === 'active' && unit.combatStatus === 'idle';
+      selectedUnitMeta.textContent = `Status: ${unit.status} • HP ${unit.health}/${unit.maxHealth} • ATK ${unit.attack} DEF ${unit.defense} RNG ${unit.rangeKm}km • Capture ${canCapture ? 'Yes' : 'No'}`;
     }
   }
   moveModeStatus.textContent = `Move mode: ${gameState.moveMode ? 'On (click map destination)' : 'Off'}`;
   attackModeStatus.textContent = `Attack mode: ${gameState.attackMode ? 'On (click enemy unit/base)' : 'Off'}`;
+  captureModeStatus.textContent = `Capture mode: ${gameState.captureMode ? 'On (click enemy city/base)' : 'Off'}`;
+  if (!gameState.selectedAsset) selectedAssetStatus.textContent = 'Selected asset: none';
 }
 
 function renderProductionPanel() {
@@ -1037,6 +1224,7 @@ function attachUnitControls() {
     }
     gameState.moveMode = true;
     gameState.attackMode = false;
+    gameState.captureMode = false;
     renderSelectedUnitPanel();
     setStatus('Move mode enabled. Click destination on the map.');
   });
@@ -1048,14 +1236,28 @@ function attachUnitControls() {
     }
     gameState.attackMode = true;
     gameState.moveMode = false;
+    gameState.captureMode = false;
     renderSelectedUnitPanel();
     setStatus('Attack mode enabled. Click an enemy unit or enemy base in range.');
+  });
+
+  captureUnitBtn.addEventListener('click', () => {
+    if (!gameState.selectedUnitId) {
+      setStatus('Select a unit first, then enable capture mode.', true);
+      return;
+    }
+    gameState.captureMode = true;
+    gameState.attackMode = false;
+    gameState.moveMode = false;
+    renderSelectedUnitPanel();
+    setStatus('Capture mode enabled. Click enemy city/base in capture range.');
   });
 
   clearUnitSelectionBtn.addEventListener('click', () => {
     gameState.selectedUnitId = null;
     gameState.moveMode = false;
     gameState.attackMode = false;
+    gameState.captureMode = false;
     renderSelectedUnitPanel();
     renderUnits();
   });
@@ -1139,11 +1341,12 @@ async function setupMap() {
 
   const root = svg.append('g');
   countriesLayer = root.append('g').attr('id', 'countriesLayer');
-  const citiesLayer = root.append('g').attr('id', 'citiesLayer');
+  citiesLayer = root.append('g').attr('id', 'citiesLayer');
   basesLayer = root.append('g').attr('id', 'basesLayer');
   unitsLayer = root.append('g').attr('id', 'unitsLayer');
 
   countries = await loadCountriesData();
+  initializeCityState();
 
   function placeBaseFromEvent(event) {
     const [x, y] = d3.pointer(event, svg.node());
@@ -1166,6 +1369,11 @@ async function setupMap() {
 
     if (gameState.attackMode && gameState.selectedUnitId) {
       setStatus('Click an enemy unit or enemy base marker to attack.', true);
+      return;
+    }
+
+    if (gameState.captureMode && gameState.selectedUnitId) {
+      setStatus('Click an enemy city or enemy base marker to capture.', true);
       return;
     }
 
@@ -1229,17 +1437,7 @@ async function setupMap() {
       placeBaseFromEvent(event);
     });
 
-  citiesLayer
-    .selectAll('circle')
-    .data(majorCities)
-    .enter()
-    .append('circle')
-    .attr('class', 'city')
-    .attr('r', 3)
-    .attr('cx', (d) => projection([d.lon, d.lat])[0])
-    .attr('cy', (d) => projection([d.lon, d.lat])[1])
-    .append('title')
-    .text((d) => `${d.name}, ${d.country}`);
+  renderCities();
 
   svg.on('click', function (event) {
     placeBaseFromEvent(event);
