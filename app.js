@@ -351,7 +351,7 @@ const majorCities = [
   { name: 'Istanbul', country: 'Turkey', lat: 41.0082, lon: 28.9784 }
 ];
 
-let selectedBaseType = 'ground';
+let selectedBaseType = null;
 let selectedCountryFeature = null;
 let countries = [];
 let countriesLayer;
@@ -448,6 +448,16 @@ function pointInsideCountry(countryFeature, lonLatPoint) {
 
 function createBaseButtons() {
   baseButtons.innerHTML = '';
+  const noneBtn = document.createElement('button');
+  noneBtn.textContent = 'No Build';
+  noneBtn.classList.toggle('active', selectedBaseType === null);
+  noneBtn.addEventListener('click', () => {
+    selectedBaseType = null;
+    baseButtons.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === noneBtn));
+    setStatus('Build mode off. You can inspect/select without placing bases.');
+  });
+  baseButtons.appendChild(noneBtn);
+
   baseTypes.forEach((type) => {
     const btn = document.createElement('button');
     btn.textContent = type.label;
@@ -906,6 +916,11 @@ async function setupMap() {
 
     if (!gameState.selectedPlayerCountry) {
       setStatus('Start from Play in the main menu before placing bases.', true);
+      return;
+    }
+
+    if (!selectedBaseType) {
+      setStatus('Build mode is off. Choose a base type to place a base.');
       return;
     }
 
