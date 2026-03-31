@@ -795,6 +795,10 @@ class DiplomacySystem {
         status: 'neutral',
         tradeAllowed: true,
         sanctions: false,
+        sanctionsLevel: 'none',
+        sanctionsSourceCountry: null,
+        sanctionsStartedAt: null,
+        sanctionsBySource: {},
         lastChangedAt: this.gameState.currentTimeMs,
         lastConflictAt: null
       };
@@ -838,6 +842,17 @@ class DiplomacySystem {
     if (!relation) return null;
     relation.relationScore = this.clampScore(Math.min(relation.relationScore, -70));
     relation.tradeAllowed = false;
+    relation.sanctionsBySource = relation.sanctionsBySource || {};
+    relation.sanctionsBySource[countryA] = {
+      sanctionsLevel: relation.sanctionsBySource[countryA]?.sanctionsLevel || 'none',
+      tradeAllowed: false,
+      startedAt: relation.sanctionsBySource[countryA]?.startedAt || null
+    };
+    relation.sanctionsBySource[countryB] = {
+      sanctionsLevel: relation.sanctionsBySource[countryB]?.sanctionsLevel || 'none',
+      tradeAllowed: false,
+      startedAt: relation.sanctionsBySource[countryB]?.startedAt || null
+    };
     return relation;
   }
 
@@ -876,6 +891,107 @@ class DiplomacySystem {
         counterpart: relation.countryA === countryName ? relation.countryB : relation.countryA
       }))
       .sort((a, b) => a.counterpart.localeCompare(b.counterpart));
+  }
+
+  getDirectionalPressure(sourceCountry, targetCountry) {
+    const relation = this.ensureRelation(sourceCountry, targetCountry);
+    if (!relation) return { sanctionsLevel: 'none', tradeAllowed: true, startedAt: null };
+    relation.sanctionsBySource = relation.sanctionsBySource || {};
+    const sourceState = relation.sanctionsBySource[sourceCountry];
+    return sourceState || { sanctionsLevel: 'none', tradeAllowed: true, startedAt: null };
+  }
+
+  imposeSanctions(sourceCountry, targetCountry, level = 'light') {
+    const relation = this.ensureRelation(sourceCountry, targetCountry);
+    if (!relation || !['light', 'heavy'].includes(level)) return null;
+    relation.sanctionsBySource = relation.sanctionsBySource || {};
+    relation.sanctionsBySource[sourceCountry] = {
+      sanctionsLevel: level,
+      tradeAllowed: relation.sanctionsBySource[sourceCountry]?.tradeAllowed ?? true,
+      startedAt: this.gameState.currentTimeMs
+    };
+    relation.sanctions = true;
+    relation.sanctionsLevel = level;
+    relation.sanctionsSourceCountry = sourceCountry;
+    relation.sanctionsStartedAt = this.gameState.currentTimeMs;
+    relation.lastChangedAt = this.gameState.currentTimeMs;
+    this.gameState.diplomacy.lastSummary = `${sourceCountry} imposed ${level} sanctions on ${targetCountry}.`;
+    return relation;
+  }
+
+  liftSanctions(sourceCountry, targetCountry) {
+    const relation = this.ensureRelation(sourceCountry, targetCountry);
+    if (!relation) return null;
+    relation.sanctionsBySource = relation.sanctionsBySource || {};
+    relation.sanctionsBySource[sourceCountry] = {
+      sanctionsLevel: 'none',
+      tradeAllowed: relation.sanctionsBySource[sourceCountry]?.tradeAllowed ?? true,
+      startedAt: null
+    };
+    const activeLevels = Object.values(relation.sanctionsBySource)
+      .map((state) => state.sanctionsLevel)
+      .filter((level) => level && level !== 'none');
+    const stillSanctioned = activeLevels.length > 0;
+    relation.sanctions = stillSanctioned;
+    relation.sanctionsLevel = activeLevels.includes('heavy') ? 'heavy' : (activeLevels.includes('light') ? 'light' : 'none');
+    if (!stillSanctioned) relation.sanctionsSourceCountry = null;
+    relation.lastChangedAt = this.gameState.currentTimeMs;
+    this.gameState.diplomacy.lastSummary = `${sourceCountry} lifted sanctions on ${targetCountry}.`;
+    return relation;
+  }
+
+  setTradeAllowed(sourceCountry, targetCountry, allowed) {
+    const relation = this.ensureRelation(sourceCountry, targetCountry);
+    if (!relation) return null;
+    relation.sanctionsBySource = relation.sanctionsBySource || {};
+    const existing = relation.sanctionsBySource[sourceCountry] || { sanctionsLevel: 'none', tradeAllowed: true, startedAt: null };
+    relation.sanctionsBySource[sourceCountry] = { ...existing, tradeAllowed: Boolean(allowed) };
+    relation.lastChangedAt = this.gameState.currentTimeMs;
+    this.gameState.diplomacy.lastSummary = `${sourceCountry} ${allowed ? 'allowed' : 'blocked'} trade with ${targetCountry}.`;
+    return relation;
+  }
+
+  getEconomicPressureOnCountry(targetCountry) {
+    const incoming = this.getRelationsForCountry(targetCountry)
+      .map((relation) => {
+        const source = relation.counterpart;
+        return { source, state: this.getDirectionalPressure(source, targetCountry) };
+      })
+      .filter(({ state }) => (state.sanctionsLevel && state.sanctionsLevel !== 'none') || state.tradeAllowed === false);
+
+    let incomeMultiplier = 1;
+    let industryMultiplier = 1;
+    let stressDrift = 0;
+    let stabilityDrift = 0;
+    let blockedTradeCount = 0;
+
+    incoming.forEach(({ state }) => {
+      if (state.sanctionsLevel === 'light') {
+        incomeMultiplier *= 0.9;
+        industryMultiplier *= 0.92;
+        stressDrift += 0.12;
+      } else if (state.sanctionsLevel === 'heavy') {
+        incomeMultiplier *= 0.75;
+        industryMultiplier *= 0.8;
+        stressDrift += 0.3;
+        stabilityDrift += 0.04;
+      }
+      if (state.tradeAllowed === false) {
+        incomeMultiplier *= 0.95;
+        industryMultiplier *= 0.96;
+        stressDrift += 0.06;
+        blockedTradeCount += 1;
+      }
+    });
+
+    return {
+      incomingCount: incoming.length,
+      blockedTradeCount,
+      incomeMultiplier: Math.max(0.45, incomeMultiplier),
+      industryMultiplier: Math.max(0.5, industryMultiplier),
+      stressDrift,
+      stabilityDrift
+    };
   }
 
   tick() {
@@ -964,6 +1080,7 @@ class PolicySystem {
     const industryEffect = POLICY_CONFIG.dailyEffects.industryInvestmentLevel[policy.industryInvestmentLevel];
     const securityEffect = POLICY_CONFIG.dailyEffects.internalSecurityLevel[policy.internalSecurityLevel];
     const dailyCost = this.updateCountryPolicyCost(countryName);
+    const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
 
     country.treasury -= dailyCost;
     country.treasury += (industryEffect.treasuryBonus || 0);
@@ -973,7 +1090,7 @@ class PolicySystem {
     const debtPenalty = country.treasury < 0 ? 0.2 : 0;
 
     const unrestPenaltyFactor = Math.max(0.45, 1 - (country.unrest || 0) / 170);
-    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor;
+    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier;
     country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220);
     country.policyModifiers.stability += militaryEffect.stability + securityEffect.stability - warStabilityPenalty - debtPenalty;
     country.policyModifiers.readiness += militaryEffect.readiness + securityEffect.readiness;
@@ -1037,12 +1154,14 @@ class DomesticStateSystem {
     const internalSecurity = policy.internalSecurityLevel || 'normal';
     const militarySpending = policy.militarySpendingLevel || 'normal';
     const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
+    const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
 
     country.warWeariness = this.clamp(country.warWeariness + (activeWars > 0 ? 0.4 + activeWars * 0.2 : -0.3) + (militarySpending === 'high' ? 0.08 : 0));
     country.economicStress = this.clamp(country.economicStress
       + (country.treasury < 0 ? 0.6 + Math.min(0.35, Math.abs(country.treasury) / 10000) : -0.22)
       + (country.netPerTick < 0 ? 0.25 : -0.1)
-      + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0));
+      + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0)
+      + pressure.stressDrift);
 
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
@@ -1055,7 +1174,8 @@ class DomesticStateSystem {
       - country.unrest * 0.01
       - country.warWeariness * 0.008
       - country.economicStress * 0.009
-      - activeWars * 0.06;
+      - activeWars * 0.06
+      - pressure.stabilityDrift;
     country.stability = this.clamp(country.stability + stabilityDelta);
     country.domesticOutputModifier = Math.max(
       0.65,
@@ -1099,10 +1219,11 @@ class DomesticStateSystem {
 }
 
 class EconomySystem {
-  constructor(gameState, scheduler, countrySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
+    this.diplomacySystem = diplomacySystem;
   }
 
   ensureCountry(countryName) {
@@ -1155,7 +1276,8 @@ class EconomySystem {
       if (city.status === 'destroyed') return;
       this.ensureCountry(city.ownerCountry);
       const country = this.countrySystem.ensureCountry(city.ownerCountry);
-      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1);
+      const pressure = this.diplomacySystem.getEconomicPressureOnCountry(city.ownerCountry);
+      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * pressure.incomeMultiplier;
       incomeByCountry[city.ownerCountry] = (incomeByCountry[city.ownerCountry] || 0) + adjustedIncome;
     });
 
@@ -1356,7 +1478,7 @@ const productionSystem = new ProductionSystem(gameState, scheduler);
 const movementSystem = new MovementSystem(gameState, scheduler);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem);
 const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem, diplomacySystem);
-const economySystem = new EconomySystem(gameState, scheduler, countrySystem);
+const economySystem = new EconomySystem(gameState, scheduler, countrySystem, diplomacySystem);
 const aiSystem = new AISystem(gameState, scheduler, {
   productionSystem,
   movementSystem,
@@ -1394,6 +1516,12 @@ const makePeaceBtn = document.getElementById('makePeaceBtn');
 const improveRelationsBtn = document.getElementById('improveRelationsBtn');
 const worsenRelationsBtn = document.getElementById('worsenRelationsBtn');
 const relationsList = document.getElementById('relationsList');
+const sanctionsStateLabel = document.getElementById('sanctionsStateLabel');
+const tradeStateLabel = document.getElementById('tradeStateLabel');
+const sanctionLightBtn = document.getElementById('sanctionLightBtn');
+const sanctionHeavyBtn = document.getElementById('sanctionHeavyBtn');
+const liftSanctionsBtn = document.getElementById('liftSanctionsBtn');
+const toggleTradeBtn = document.getElementById('toggleTradeBtn');
 const policyFocusCountry = document.getElementById('policyFocusCountry');
 const policySummary = document.getElementById('policySummary');
 const militaryPolicySelect = document.getElementById('militaryPolicySelect');
@@ -1558,7 +1686,10 @@ function refreshDiplomacyHud() {
     diplomacySummary.textContent = 'Diplomacy: --';
     relationsList.innerHTML = '<li>No country selected.</li>';
     diplomacyTargetCountry.innerHTML = '';
-    [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn].forEach((btn) => { btn.disabled = true; });
+    sanctionsStateLabel.textContent = 'Sanctions: --';
+    tradeStateLabel.textContent = 'Trade: --';
+    [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn, sanctionLightBtn, sanctionHeavyBtn, liftSanctionsBtn, toggleTradeBtn]
+      .forEach((btn) => { btn.disabled = true; });
     return;
   }
 
@@ -1577,7 +1708,8 @@ function refreshDiplomacyHud() {
   } else {
     relations.forEach((relation) => {
       const li = document.createElement('li');
-      li.textContent = `${relation.counterpart}: ${relation.status.toUpperCase()} (${relation.relationScore})`;
+      const directional = diplomacySystem.getDirectionalPressure(focusCountry, relation.counterpart);
+      li.textContent = `${relation.counterpart}: ${relation.status.toUpperCase()} (${relation.relationScore}) • Sanctions ${directional.sanctionsLevel} • Trade ${directional.tradeAllowed ? 'on' : 'blocked'}`;
       relationsList.appendChild(li);
     });
   }
@@ -1595,7 +1727,19 @@ function refreshDiplomacyHud() {
   }
 
   const hasTarget = Boolean(diplomacyTargetCountry.value);
-  [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn].forEach((btn) => { btn.disabled = !hasTarget; });
+  [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn, sanctionLightBtn, sanctionHeavyBtn, liftSanctionsBtn, toggleTradeBtn]
+    .forEach((btn) => { btn.disabled = !hasTarget; });
+
+  if (hasTarget) {
+    const directional = diplomacySystem.getDirectionalPressure(focusCountry, diplomacyTargetCountry.value);
+    sanctionsStateLabel.textContent = `Sanctions: ${directional.sanctionsLevel.toUpperCase()} (${focusCountry} → ${diplomacyTargetCountry.value})`;
+    tradeStateLabel.textContent = `Trade: ${directional.tradeAllowed ? 'Allowed' : 'Blocked'} (${focusCountry} → ${diplomacyTargetCountry.value})`;
+    toggleTradeBtn.textContent = directional.tradeAllowed ? 'Block Trade' : 'Allow Trade';
+  } else {
+    sanctionsStateLabel.textContent = 'Sanctions: --';
+    tradeStateLabel.textContent = 'Trade: --';
+    toggleTradeBtn.textContent = 'Toggle Trade';
+  }
 }
 
 function refreshPolicyHud() {
@@ -1640,7 +1784,8 @@ function refreshDomesticHud() {
   domesticWarWeariness.textContent = `War weariness: ${country.warWeariness.toFixed(1)} / 100`;
   domesticEconomicStress.textContent = `Economic stress: ${country.economicStress.toFixed(1)} / 100`;
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
-  domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)}`;
+  const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
+  domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount}`;
 }
 
 function setStatus(message, isError = false) {
@@ -2350,6 +2495,32 @@ function attachDiplomacyControls() {
     if (runAction((focus, target) => diplomacySystem.adjustRelationScore(focus, target, -10, `${focus} worsened relations with ${target}.`, true))) {
       setStatus('Relations worsened.');
     }
+  });
+  sanctionLightBtn.addEventListener('click', () => {
+    if (runAction((focus, target) => diplomacySystem.imposeSanctions(focus, target, 'light'))) {
+      setStatus('Light sanctions imposed.');
+    }
+  });
+  sanctionHeavyBtn.addEventListener('click', () => {
+    if (runAction((focus, target) => diplomacySystem.imposeSanctions(focus, target, 'heavy'))) {
+      setStatus('Heavy sanctions imposed.');
+    }
+  });
+  liftSanctionsBtn.addEventListener('click', () => {
+    if (runAction((focus, target) => diplomacySystem.liftSanctions(focus, target))) {
+      setStatus('Sanctions lifted.');
+    }
+  });
+  toggleTradeBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    const targetCountry = diplomacyTargetCountry.value;
+    if (!focusCountry || !targetCountry) {
+      setStatus('Select a diplomacy target first.', true);
+      return;
+    }
+    const currentState = diplomacySystem.getDirectionalPressure(focusCountry, targetCountry);
+    runAction((focus, target) => diplomacySystem.setTradeAllowed(focus, target, !currentState.tradeAllowed));
+    setStatus(currentState.tradeAllowed ? 'Trade blocked.' : 'Trade restored.');
   });
   diplomacyTargetCountry.addEventListener('change', () => refreshDiplomacyHud());
 }
