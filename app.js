@@ -80,6 +80,33 @@ const DIPLOMACY_CONFIG = {
   }
 };
 
+const POLICY_CONFIG = {
+  tickMs: DAY_MS,
+  levels: ['low', 'normal', 'high'],
+  dailyCosts: {
+    militarySpendingLevel: { low: 5, normal: 20, high: 45 },
+    industryInvestmentLevel: { low: 8, normal: 25, high: 60 },
+    internalSecurityLevel: { low: 4, normal: 18, high: 42 }
+  },
+  dailyEffects: {
+    militarySpendingLevel: {
+      low: { manpower: -20, stability: 0.08, readiness: -0.4 },
+      normal: { manpower: 0, stability: 0, readiness: 0.2 },
+      high: { manpower: 35, stability: -0.08, readiness: 0.8 }
+    },
+    industryInvestmentLevel: {
+      low: { industrialCapacity: 0.05, treasuryBonus: 5 },
+      normal: { industrialCapacity: 0.16, treasuryBonus: 0 },
+      high: { industrialCapacity: 0.32, treasuryBonus: -6 }
+    },
+    internalSecurityLevel: {
+      low: { stability: -0.12, readiness: -0.1 },
+      normal: { stability: 0.05, readiness: 0.05 },
+      high: { stability: 0.22, readiness: 0.12 }
+    }
+  }
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -596,8 +623,22 @@ class CountrySystem {
         stability: 70,
         industrialCapacity: 20,
         manpower: COUNTRY_CONFIG.baseManpower,
+        militaryReadiness: 50,
         energy: 100,
         relations: {},
+        policy: {
+          militarySpendingLevel: 'normal',
+          industryInvestmentLevel: 'normal',
+          internalSecurityLevel: 'normal'
+        },
+        policyModifiers: {
+          stability: 0,
+          industrialCapacity: 0,
+          manpower: 0,
+          readiness: 0
+        },
+        policyDailyCost: 0,
+        policyLastTickAt: null,
         controlledCityIds: [],
         controlledBaseIds: [],
         controlledUnitIds: [],
@@ -608,7 +649,22 @@ class CountrySystem {
     } else if (aiControlled) {
       this.gameState.countries[name].aiControlled = true;
     }
-    return this.gameState.countries[name];
+    const country = this.gameState.countries[name];
+    country.policy = country.policy || {
+      militarySpendingLevel: 'normal',
+      industryInvestmentLevel: 'normal',
+      internalSecurityLevel: 'normal'
+    };
+    country.policyModifiers = country.policyModifiers || {
+      stability: 0,
+      industrialCapacity: 0,
+      manpower: 0,
+      readiness: 0
+    };
+    if (typeof country.policyDailyCost !== 'number') country.policyDailyCost = 0;
+    if (country.policyLastTickAt == null) country.policyLastTickAt = null;
+    if (typeof country.militaryReadiness !== 'number') country.militaryReadiness = 50;
+    return country;
   }
 
   getCountry(name) {
@@ -648,10 +704,16 @@ class CountrySystem {
 
     Object.values(this.gameState.countries).forEach((country) => {
       country.netPerTick = country.incomePerTick - country.upkeepPerTick;
-      country.population = COUNTRY_CONFIG.basePopulation + country.controlledCityIds.length * COUNTRY_CONFIG.cityPopulation;
-      country.industrialCapacity = 20 + country.controlledCityIds.length * COUNTRY_CONFIG.cityIndustry + country.controlledBaseIds.length * COUNTRY_CONFIG.baseIndustry;
-      country.manpower = COUNTRY_CONFIG.baseManpower + country.controlledCityIds.length * COUNTRY_CONFIG.cityManpower;
-      country.stability = Math.max(0, Math.min(100, 70 + Math.min(10, country.netPerTick / 100)));
+      const basePopulation = COUNTRY_CONFIG.basePopulation + country.controlledCityIds.length * COUNTRY_CONFIG.cityPopulation;
+      const baseIndustry = 20 + country.controlledCityIds.length * COUNTRY_CONFIG.cityIndustry + country.controlledBaseIds.length * COUNTRY_CONFIG.baseIndustry;
+      const baseManpower = COUNTRY_CONFIG.baseManpower + country.controlledCityIds.length * COUNTRY_CONFIG.cityManpower;
+      const baseStability = 70 + Math.min(10, country.netPerTick / 100);
+      const baseReadiness = 45 + country.controlledBaseIds.length * 2 + country.controlledUnitIds.length * 0.6;
+      country.population = basePopulation;
+      country.industrialCapacity = Math.max(1, baseIndustry + (country.policyModifiers?.industrialCapacity || 0));
+      country.manpower = Math.max(0, baseManpower + (country.policyModifiers?.manpower || 0));
+      country.stability = Math.max(0, Math.min(100, baseStability + (country.policyModifiers?.stability || 0)));
+      country.militaryReadiness = Math.max(0, Math.min(100, baseReadiness + (country.policyModifiers?.readiness || 0)));
     });
   }
 
@@ -814,6 +876,108 @@ class DiplomacySystem {
       type: 'DIPLOMACY_TICK',
       payload: {},
       handler: () => this.tick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
+  }
+}
+
+class PolicySystem {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.countrySystem = countrySystem;
+    this.diplomacySystem = diplomacySystem;
+    this.started = false;
+  }
+
+  getPolicyLevel(countryName, policyKey) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    return country.policy[policyKey] || 'normal';
+  }
+
+  setPolicyLevel(countryName, policyKey, level) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country || !POLICY_CONFIG.levels.includes(level)) return null;
+    country.policy[policyKey] = level;
+    this.updateCountryPolicyCost(countryName);
+    this.gameState.policy.lastSummary = `${countryName} set ${policyKey} to ${level}.`;
+    return country.policy;
+  }
+
+  setPolicyBundle(countryName, nextPolicies) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return null;
+    ['militarySpendingLevel', 'industryInvestmentLevel', 'internalSecurityLevel'].forEach((policyKey) => {
+      const next = nextPolicies[policyKey];
+      if (next && POLICY_CONFIG.levels.includes(next)) country.policy[policyKey] = next;
+    });
+    this.updateCountryPolicyCost(countryName);
+    this.gameState.policy.lastSummary = `${countryName} policy bundle updated.`;
+    return country.policy;
+  }
+
+  getDailyPolicyCost(policyState) {
+    return POLICY_CONFIG.dailyCosts.militarySpendingLevel[policyState.militarySpendingLevel]
+      + POLICY_CONFIG.dailyCosts.industryInvestmentLevel[policyState.industryInvestmentLevel]
+      + POLICY_CONFIG.dailyCosts.internalSecurityLevel[policyState.internalSecurityLevel];
+  }
+
+  updateCountryPolicyCost(countryName) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return 0;
+    country.policyDailyCost = this.getDailyPolicyCost(country.policy);
+    return country.policyDailyCost;
+  }
+
+  applyCountryPolicyTick(countryName) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return;
+
+    const policy = country.policy;
+    const militaryEffect = POLICY_CONFIG.dailyEffects.militarySpendingLevel[policy.militarySpendingLevel];
+    const industryEffect = POLICY_CONFIG.dailyEffects.industryInvestmentLevel[policy.industryInvestmentLevel];
+    const securityEffect = POLICY_CONFIG.dailyEffects.internalSecurityLevel[policy.internalSecurityLevel];
+    const dailyCost = this.updateCountryPolicyCost(countryName);
+
+    country.treasury -= dailyCost;
+    country.treasury += (industryEffect.treasuryBonus || 0);
+
+    const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
+    const warStabilityPenalty = activeWars * 0.07;
+    const debtPenalty = country.treasury < 0 ? 0.2 : 0;
+
+    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity;
+    country.policyModifiers.manpower += militaryEffect.manpower;
+    country.policyModifiers.stability += militaryEffect.stability + securityEffect.stability - warStabilityPenalty - debtPenalty;
+    country.policyModifiers.readiness += militaryEffect.readiness + securityEffect.readiness;
+    country.policyModifiers.stability = Math.max(-40, Math.min(40, country.policyModifiers.stability));
+    country.policyModifiers.industrialCapacity = Math.max(-20, Math.min(180, country.policyModifiers.industrialCapacity));
+    country.policyModifiers.manpower = Math.max(-5000, Math.min(40_000, country.policyModifiers.manpower));
+    country.policyModifiers.readiness = Math.max(-40, Math.min(40, country.policyModifiers.readiness));
+    country.policyLastTickAt = this.gameState.currentTimeMs;
+  }
+
+  processTick() {
+    Object.keys(this.gameState.countries).forEach((countryName) => this.applyCountryPolicyTick(countryName));
+    this.countrySystem.syncOwnership();
+    this.gameState.policy.lastTickAt = this.gameState.currentTimeMs;
+    refreshCountryHud();
+    refreshPolicyHud();
+    refreshEconomyHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + POLICY_CONFIG.tickMs,
+      type: 'POLICY_TICK',
+      payload: {},
+      handler: () => this.processTick()
     });
   }
 
@@ -1050,6 +1214,10 @@ const gameState = {
     relationsByPair: {},
     lastSummary: 'No diplomacy events yet.'
   },
+  policy: {
+    lastTickAt: null,
+    lastSummary: 'No policy changes yet.'
+  },
   economy: {
     treasuryByCountry: {},
     lastTickAt: null,
@@ -1066,6 +1234,7 @@ const gameClock = new GameClock({
 const scheduler = new TaskScheduler(gameState);
 const countrySystem = new CountrySystem(gameState, scheduler);
 const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem);
+const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem);
 const productionSystem = new ProductionSystem(gameState, scheduler);
 const movementSystem = new MovementSystem(gameState, scheduler);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem);
@@ -1108,6 +1277,13 @@ const makePeaceBtn = document.getElementById('makePeaceBtn');
 const improveRelationsBtn = document.getElementById('improveRelationsBtn');
 const worsenRelationsBtn = document.getElementById('worsenRelationsBtn');
 const relationsList = document.getElementById('relationsList');
+const policyFocusCountry = document.getElementById('policyFocusCountry');
+const policySummary = document.getElementById('policySummary');
+const militaryPolicySelect = document.getElementById('militaryPolicySelect');
+const industryPolicySelect = document.getElementById('industryPolicySelect');
+const securityPolicySelect = document.getElementById('securityPolicySelect');
+const applyPolicyBtn = document.getElementById('applyPolicyBtn');
+const policyCostLabel = document.getElementById('policyCostLabel');
 const prodBaseLabel = document.getElementById('prodBaseLabel');
 const prodUnitButtons = document.getElementById('prodUnitButtons');
 const prodCurrent = document.getElementById('prodCurrent');
@@ -1299,6 +1475,30 @@ function refreshDiplomacyHud() {
   [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn].forEach((btn) => { btn.disabled = !hasTarget; });
 }
 
+function refreshPolicyHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  if (!focusCountry) {
+    policyFocusCountry.textContent = 'Policy for: --';
+    policySummary.textContent = 'Policy: --';
+    policyCostLabel.textContent = 'Daily policy cost: --';
+    [militaryPolicySelect, industryPolicySelect, securityPolicySelect, applyPolicyBtn].forEach((el) => { el.disabled = true; });
+    return;
+  }
+
+  const country = countrySystem.ensureCountry(focusCountry);
+  policySystem.updateCountryPolicyCost(focusCountry);
+  policyFocusCountry.textContent = `Policy for: ${focusCountry}`;
+  policySummary.textContent = `Policy: ${gameState.policy.lastSummary}`;
+  policyCostLabel.textContent = `Daily policy cost: ${Math.round(country.policyDailyCost)}`;
+  militaryPolicySelect.value = country.policy.militarySpendingLevel;
+  industryPolicySelect.value = country.policy.industryInvestmentLevel;
+  securityPolicySelect.value = country.policy.internalSecurityLevel;
+
+  const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+  const editable = playerCountry && focusCountry === playerCountry;
+  [militaryPolicySelect, industryPolicySelect, securityPolicySelect, applyPolicyBtn].forEach((el) => { el.disabled = !editable; });
+}
+
 function setStatus(message, isError = false) {
   statusLabel.textContent = message;
   statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
@@ -1372,12 +1572,14 @@ function setPlayerCountry(countryFeature) {
   economySystem.startEconomyLoop();
   countrySystem.start();
   diplomacySystem.start();
+  policySystem.start();
   countrySystem.syncOwnership();
   renderProductionPanel();
   renderSelectedUnitPanel();
   refreshEconomyHud();
   refreshCountryHud();
   refreshDiplomacyHud();
+  refreshPolicyHud();
 }
 
 function spawnEnemyForces() {
@@ -1440,6 +1642,7 @@ function spawnEnemyForces() {
   renderBases();
   renderUnits();
   refreshDiplomacyHud();
+  refreshPolicyHud();
 }
 
 function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -2004,6 +2207,25 @@ function attachDiplomacyControls() {
   diplomacyTargetCountry.addEventListener('change', () => refreshDiplomacyHud());
 }
 
+function attachPolicyControls() {
+  applyPolicyBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+    if (!focusCountry || !playerCountry || focusCountry !== playerCountry) {
+      setStatus('Policies can only be changed for your selected country.', true);
+      return;
+    }
+    policySystem.setPolicyBundle(focusCountry, {
+      militarySpendingLevel: militaryPolicySelect.value,
+      industryInvestmentLevel: industryPolicySelect.value,
+      internalSecurityLevel: securityPolicySelect.value
+    });
+    setStatus(`Policy updated for ${focusCountry}.`);
+    refreshPolicyHud();
+    refreshCountryHud();
+  });
+}
+
 async function loadCountriesData() {
   const geoJsonSources = [
     'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
@@ -2065,6 +2287,7 @@ function startSimulationLoop() {
     refreshEconomyHud();
     refreshCountryHud();
     refreshDiplomacyHud();
+    refreshPolicyHud();
     refreshProductionTicker();
     renderSelectedUnitPanel();
     renderUnits();
@@ -2216,10 +2439,12 @@ async function init() {
   attachTimeControls();
   attachUnitControls();
   attachDiplomacyControls();
+  attachPolicyControls();
   refreshTimeHud();
   refreshEconomyHud();
   refreshCountryHud();
   refreshDiplomacyHud();
+  refreshPolicyHud();
   renderSelectedUnitPanel();
 
   try {
