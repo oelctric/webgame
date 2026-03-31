@@ -162,6 +162,15 @@ class ProductionSystem {
     }
     const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
     if (!economySystem.spend(actingCountry, unitCost, `queue ${unitType}`)) {
+  queueUnit(baseId, unitType) {
+    const base = this.gameState.bases.find((entry) => entry.id === baseId);
+    const unitDef = UNIT_DEFINITIONS[unitType];
+    if (!base || !unitDef) return { ok: false, message: 'Invalid base or unit type.' };
+    if (!this.gameState.selectedPlayerCountry || base.ownerCountry !== this.gameState.selectedPlayerCountry.properties.name) {
+      return { ok: false, message: 'You can only queue production at your own bases.' };
+    }
+    const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
+    if (!economySystem.spend(base.ownerCountry, unitCost, `queue ${unitType}`)) {
       refreshEconomyHud();
       return { ok: false, message: `Insufficient funds to queue ${unitDef.label} (${unitCost}).` };
     }
@@ -249,6 +258,7 @@ class MovementSystem {
   }
 
   issueMoveOrder(unitId, targetLonLat, silent = false) {
+  issueMoveOrder(unitId, targetLonLat) {
     const unit = this.gameState.units.find((entry) => entry.id === unitId);
     if (!unit) return { ok: false, message: 'Select a valid unit first.' };
     if (unit.status !== 'active') return { ok: false, message: 'Only active units can receive new move orders.' };
@@ -281,6 +291,7 @@ class MovementSystem {
 
     unit.movement.taskId = taskId;
     return { ok: true, unit, silent };
+    return { ok: true, unit };
   }
 
   completeMove(unitId) {
@@ -314,6 +325,7 @@ class CombatSystem {
   }
 
   startAttack(attackerId, targetType, targetId, isCounter = false, silent = false) {
+  startAttack(attackerId, targetType, targetId, isCounter = false) {
     const attacker = this.gameState.units.find((u) => u.id === attackerId);
     if (!attacker || attacker.status === 'destroyed') return { ok: false, message: 'Attacker is not available.' };
     if (attacker.status === 'moving') return { ok: false, message: 'Cannot attack while unit is moving.' };
@@ -377,6 +389,7 @@ class CombatSystem {
     const distanceKm = d3.geoDistance(attackerPos, targetPos) * 6371;
     if (distanceKm > attacker.rangeKm) {
       if (!attacker.silentCombat) setStatus(`${UNIT_DEFINITIONS[attacker.type].label} target moved out of range.`);
+      setStatus(`${UNIT_DEFINITIONS[attacker.type].label} target moved out of range.`);
       return this.clearUnitCombat(attacker);
     }
 
@@ -400,6 +413,7 @@ class CombatSystem {
         target.production.queue = [];
       }
       if (!attacker.silentCombat) setStatus(`${UNIT_DEFINITIONS[attacker.type].label} destroyed ${attacker.targetType} #${attacker.currentTargetId}.`);
+      setStatus(`${UNIT_DEFINITIONS[attacker.type].label} destroyed ${attacker.targetType} #${attacker.currentTargetId}.`);
       this.clearUnitCombat(attacker);
       renderBases();
       renderUnits();
@@ -428,6 +442,7 @@ class CaptureSystem {
   }
 
   startCapture(unitId, targetType, targetId, silent = false) {
+  startCapture(unitId, targetType, targetId) {
     const unit = this.gameState.units.find((u) => u.id === unitId);
     if (!unit || unit.status === 'destroyed') return { ok: false, message: 'Capturing unit is not available.' };
     if (unit.domain !== 'ground') return { ok: false, message: 'Only ground units can capture.' };
@@ -469,6 +484,7 @@ class CaptureSystem {
     target.captureState.taskId = taskId;
 
     return { ok: true, target, silent };
+    return { ok: true, target };
   }
 
   resolveCapture({ targetType, targetId, captorUnitId }) {
@@ -503,6 +519,8 @@ class CaptureSystem {
     renderProductionPanel();
     renderSelectedUnitPanel();
     refreshEconomyHud();
+    renderProductionPanel();
+    renderSelectedUnitPanel();
   }
 
   cancelCapturesByUnit(unitId) {
@@ -736,6 +754,7 @@ const gameState = {
     lastSummary: 'No economy tick yet.',
     started: false
   }
+  enemySpawned: false
 };
 
 const gameClock = new GameClock({
@@ -956,6 +975,11 @@ function setPlayerCountry(countryFeature) {
   renderProductionPanel();
   renderSelectedUnitPanel();
   refreshEconomyHud();
+  renderCityList(countryFeature.properties.name);
+  updateCountryStyles();
+  spawnEnemyForces();
+  renderProductionPanel();
+  renderSelectedUnitPanel();
 }
 
 function spawnEnemyForces() {
@@ -1119,11 +1143,13 @@ function createBase(baseInput, lonLatArg = null, ownerCountryArg = null) {
   const type = typeof baseInput === 'string' ? baseInput : baseInput.type;
   const lonLat = Array.isArray(lonLatArg) ? lonLatArg : baseInput.lonLat;
   const ownerCountry = ownerCountryArg || (gameState.selectedPlayerCountry && gameState.selectedPlayerCountry.properties.name);
+function createBase({ type, lonLat }) {
   const now = gameState.currentTimeMs;
   const buildDurationMs = BASE_BUILD_DURATIONS_MS[type] ?? 3 * DAY_MS;
   const base = {
     id: gameState.nextBaseId++,
     ownerCountry,
+    ownerCountry: gameState.selectedPlayerCountry.properties.name,
     type,
     lonLat,
     status: 'building',
@@ -1221,6 +1247,7 @@ function renderBases() {
     .select('rect')
     .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color)
     .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
+    .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
 
   points
     .merge(enter)
@@ -1260,6 +1287,7 @@ function renderCities() {
     })
     .select('title')
     .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${ECONOMY_CONFIG.cityIncomePerDay}/day`);
+    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus}`);
 
   points.exit().remove();
 }
@@ -1288,6 +1316,7 @@ function renderUnits() {
   markers
     .merge(enter)
     .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
+    .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
     .attr('cx', (d) => projection(movementSystem.getDisplayLonLat(d))[0])
     .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
     .on('click', (event, d) => {
@@ -1351,6 +1380,7 @@ function renderProductionPanel() {
 
   const upkeep = ECONOMY_CONFIG.baseUpkeepPerDay[base.type] || 0;
   prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth} - Upkeep ${upkeep}/day`;
+  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth}`;
   const currentUnit = base.production.currentUnitId
     ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
     : null;
