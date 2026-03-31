@@ -138,7 +138,7 @@ class ProductionSystem {
       domain: unitDef.domain,
       status: 'queued',
       createdAt: this.gameState.currentTimeMs,
-      producedAt: null,
+      activatedAt: null,
       sourceBaseId: base.id,
       lonLat: [...base.lonLat],
       health: unitDef.health,
@@ -179,7 +179,7 @@ class ProductionSystem {
     if (!base || !unit) return;
 
     unit.status = 'active';
-    unit.producedAt = this.gameState.currentTimeMs;
+    unit.activatedAt = this.gameState.currentTimeMs;
     unit.lonLat = [base.lonLat[0] + (unit.id % 4) * 0.35, base.lonLat[1] + ((unit.id % 3) - 1) * 0.25];
 
     base.production.currentUnitId = null;
