@@ -494,6 +494,8 @@ class CaptureSystem {
     renderProductionPanel();
     renderSelectedUnitPanel();
     refreshEconomyHud();
+    renderProductionPanel();
+    renderSelectedUnitPanel();
   }
 
   cancelCapturesByUnit(unitId) {
@@ -617,6 +619,7 @@ const gameState = {
     lastSummary: 'No economy tick yet.',
     started: false
   }
+  enemySpawned: false
 };
 
 const gameClock = new GameClock({
@@ -827,6 +830,11 @@ function setPlayerCountry(countryFeature) {
   renderProductionPanel();
   renderSelectedUnitPanel();
   refreshEconomyHud();
+  renderCityList(countryFeature.properties.name);
+  updateCountryStyles();
+  spawnEnemyForces();
+  renderProductionPanel();
+  renderSelectedUnitPanel();
 }
 
 function spawnEnemyForces() {
@@ -1124,6 +1132,7 @@ function renderCities() {
     })
     .select('title')
     .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${ECONOMY_CONFIG.cityIncomePerDay}/day`);
+    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus}`);
 
   points.exit().remove();
 }
@@ -1215,6 +1224,7 @@ function renderProductionPanel() {
 
   const upkeep = ECONOMY_CONFIG.baseUpkeepPerDay[base.type] || 0;
   prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth} - Upkeep ${upkeep}/day`;
+  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth}`;
   const currentUnit = base.production.currentUnitId
     ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
     : null;
