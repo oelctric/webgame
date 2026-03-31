@@ -40,6 +40,16 @@ const CAPTURE_CONFIG = {
   captureRangeKm: 320
 };
 
+const ECONOMY_CONFIG = {
+  tickMs: DAY_MS,
+  cityIncomePerDay: 100,
+  baseUpkeepPerDay: { ground: 20, air: 35, naval: 50, antiAir: 15 },
+  unitUpkeepPerDay: { infantry: 5, armor: 12, fighter: 15, bomber: 20, patrolBoat: 18, destroyer: 30 },
+  baseBuildCost: { ground: 500, air: 900, naval: 1200, antiAir: 350 },
+  unitBuildCost: { infantry: 120, armor: 280, fighter: 420, bomber: 560, patrolBoat: 450, destroyer: 900 },
+  defaultTreasury: 4000
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -142,6 +152,11 @@ class ProductionSystem {
     if (!base || !unitDef) return { ok: false, message: 'Invalid base or unit type.' };
     if (!this.gameState.selectedPlayerCountry || base.ownerCountry !== this.gameState.selectedPlayerCountry.properties.name) {
       return { ok: false, message: 'You can only queue production at your own bases.' };
+    }
+    const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
+    if (!economySystem.spend(base.ownerCountry, unitCost, `queue ${unitType}`)) {
+      refreshEconomyHud();
+      return { ok: false, message: `Insufficient funds to queue ${unitDef.label} (${unitCost}).` };
     }
     if (base.status !== 'active') return { ok: false, message: 'Base must be active before production can begin.' };
 
@@ -475,6 +490,10 @@ class CaptureSystem {
     setStatus(`${targetType} captured by ${unit.ownerCountry}.`);
     renderBases();
     renderCities();
+    renderCityList(gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : undefined);
+    renderProductionPanel();
+    renderSelectedUnitPanel();
+    refreshEconomyHud();
     renderProductionPanel();
     renderSelectedUnitPanel();
   }
@@ -487,6 +506,92 @@ class CaptureSystem {
         asset.controlStatus = 'normal';
       }
     });
+  }
+}
+
+class EconomySystem {
+  constructor(gameState, scheduler) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+  }
+
+  ensureCountry(countryName) {
+    if (!countryName) return;
+    if (!(countryName in this.gameState.economy.treasuryByCountry)) {
+      this.gameState.economy.treasuryByCountry[countryName] = ECONOMY_CONFIG.defaultTreasury;
+    }
+  }
+
+  getTreasury(countryName) {
+    this.ensureCountry(countryName);
+    return this.gameState.economy.treasuryByCountry[countryName] || 0;
+  }
+
+  canAfford(countryName, cost) {
+    return this.getTreasury(countryName) >= cost;
+  }
+
+  spend(countryName, amount, reason) {
+    this.ensureCountry(countryName);
+    if (!this.canAfford(countryName, amount)) return false;
+    this.gameState.economy.treasuryByCountry[countryName] -= amount;
+    this.gameState.economy.lastSummary = `${countryName} spent ${amount} (${reason})`;
+    return true;
+  }
+
+  startEconomyLoop() {
+    if (this.gameState.economy.started) return;
+    this.gameState.economy.started = true;
+    this.scheduleNextTick();
+  }
+
+  scheduleNextTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + ECONOMY_CONFIG.tickMs,
+      type: 'ECONOMY_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  processTick() {
+    const incomeByCountry = {};
+    const upkeepByCountry = {};
+
+    this.gameState.cities.forEach((city) => {
+      if (city.status === 'destroyed') return;
+      this.ensureCountry(city.ownerCountry);
+      incomeByCountry[city.ownerCountry] = (incomeByCountry[city.ownerCountry] || 0) + ECONOMY_CONFIG.cityIncomePerDay;
+    });
+
+    this.gameState.bases.forEach((base) => {
+      if (base.status === 'destroyed' || base.combatStatus === 'destroyed') return;
+      this.ensureCountry(base.ownerCountry);
+      upkeepByCountry[base.ownerCountry] = (upkeepByCountry[base.ownerCountry] || 0) + (ECONOMY_CONFIG.baseUpkeepPerDay[base.type] || 0);
+    });
+
+    this.gameState.units.forEach((unit) => {
+      if (unit.status === 'destroyed') return;
+      this.ensureCountry(unit.ownerCountry);
+      upkeepByCountry[unit.ownerCountry] = (upkeepByCountry[unit.ownerCountry] || 0) + (ECONOMY_CONFIG.unitUpkeepPerDay[unit.type] || 0);
+    });
+
+    const countries = new Set([...Object.keys(incomeByCountry), ...Object.keys(upkeepByCountry)]);
+    countries.forEach((country) => {
+      this.ensureCountry(country);
+      const income = incomeByCountry[country] || 0;
+      const upkeep = upkeepByCountry[country] || 0;
+      const net = income - upkeep;
+      this.gameState.economy.treasuryByCountry[country] += net;
+      this.gameState.economy.lastTickAt = this.gameState.currentTimeMs;
+      const isPlayer = this.gameState.selectedPlayerCountry && country === this.gameState.selectedPlayerCountry.properties.name;
+      if (isPlayer) {
+        this.gameState.economy.lastSummary = `Daily tick: +${income} income, -${upkeep} upkeep, net ${net >= 0 ? '+' : ''}${net}`;
+      }
+    });
+
+    this.scheduleNextTick();
+    refreshEconomyHud();
   }
 }
 
@@ -507,6 +612,13 @@ const gameState = {
   attackMode: false,
   captureMode: false,
   selectedAsset: null,
+  enemySpawned: false,
+  economy: {
+    treasuryByCountry: {},
+    lastTickAt: null,
+    lastSummary: 'No economy tick yet.',
+    started: false
+  }
   enemySpawned: false
 };
 
@@ -520,6 +632,7 @@ const productionSystem = new ProductionSystem(gameState, scheduler);
 const movementSystem = new MovementSystem(gameState, scheduler);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem);
 const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem);
+const economySystem = new EconomySystem(gameState, scheduler);
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -531,6 +644,8 @@ const baseButtons = document.getElementById('baseButtons');
 const playerProfile = document.getElementById('playerProfile');
 const gameDateTime = document.getElementById('gameDateTime');
 const simSpeedLabel = document.getElementById('simSpeedLabel');
+const treasuryLabel = document.getElementById('treasuryLabel');
+const economySummary = document.getElementById('economySummary');
 const prodBaseLabel = document.getElementById('prodBaseLabel');
 const prodUnitButtons = document.getElementById('prodUnitButtons');
 const prodCurrent = document.getElementById('prodCurrent');
@@ -631,6 +746,18 @@ function refreshTimeHud() {
   });
 }
 
+function refreshEconomyHud() {
+  if (!gameState.selectedPlayerCountry) {
+    treasuryLabel.textContent = 'Treasury: --';
+    economySummary.textContent = 'Economy: --';
+    return;
+  }
+  const country = gameState.selectedPlayerCountry.properties.name;
+  const treasury = economySystem.getTreasury(country);
+  treasuryLabel.textContent = `Treasury: ${treasury.toLocaleString()}`;
+  economySummary.textContent = `Economy: ${gameState.economy.lastSummary}`;
+}
+
 function setStatus(message, isError = false) {
   statusLabel.textContent = message;
   statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
@@ -695,6 +822,14 @@ function setPlayerCountry(countryFeature) {
   gameState.captureMode = false;
   gameState.selectedAsset = null;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
+  economySystem.ensureCountry(countryFeature.properties.name);
+  renderCityList(countryFeature.properties.name);
+  updateCountryStyles();
+  spawnEnemyForces();
+  economySystem.startEconomyLoop();
+  renderProductionPanel();
+  renderSelectedUnitPanel();
+  refreshEconomyHud();
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
   spawnEnemyForces();
@@ -726,6 +861,7 @@ function spawnEnemyForces() {
     production: { currentUnitId: null, currentCompleteAt: null, queue: [] }
   };
   gameState.bases.push(enemyBase);
+  economySystem.ensureCountry(enemyBase.ownerCountry);
 
   const def = UNIT_DEFINITIONS.infantry;
   gameState.units.push({
@@ -995,6 +1131,7 @@ function renderCities() {
       }
     })
     .select('title')
+    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${ECONOMY_CONFIG.cityIncomePerDay}/day`);
     .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus}`);
 
   points.exit().remove();
@@ -1085,6 +1222,8 @@ function renderProductionPanel() {
     return;
   }
 
+  const upkeep = ECONOMY_CONFIG.baseUpkeepPerDay[base.type] || 0;
+  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth} - Upkeep ${upkeep}/day`;
   prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth}`;
   const currentUnit = base.production.currentUnitId
     ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
@@ -1139,6 +1278,7 @@ function renderProductionPanel() {
       }
       renderProductionPanel();
       renderUnits();
+      refreshEconomyHud();
     });
     prodUnitButtons.appendChild(btn);
   });
@@ -1320,6 +1460,7 @@ function startSimulationLoop() {
 
     scheduler.processDue(gameState.currentTimeMs);
     refreshTimeHud();
+    refreshEconomyHud();
     refreshProductionTicker();
     renderSelectedUnitPanel();
     renderUnits();
@@ -1393,6 +1534,14 @@ async function setupMap() {
       return;
     }
 
+    const playerCountry = gameState.selectedPlayerCountry.properties.name;
+    const baseCost = ECONOMY_CONFIG.baseBuildCost[selectedBaseType] || 0;
+    if (!economySystem.spend(playerCountry, baseCost, `build ${selectedBaseType} base`)) {
+      setStatus(`Insufficient funds for ${selectedBaseType} base (${baseCost}).`, true);
+      refreshEconomyHud();
+      return;
+    }
+
     const base = createBase({ type: selectedBaseType, lonLat });
     gameState.selectedBaseId = base.id;
     renderBases();
@@ -1400,6 +1549,7 @@ async function setupMap() {
 
     const completeText = formatDateTime(base.buildCompleteAt);
     setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
+    refreshEconomyHud();
   }
 
   countriesLayer
@@ -1462,6 +1612,7 @@ async function init() {
   attachTimeControls();
   attachUnitControls();
   refreshTimeHud();
+  refreshEconomyHud();
   renderSelectedUnitPanel();
 
   try {
