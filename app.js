@@ -115,6 +115,27 @@ const DOMESTIC_CONFIG = {
   stabilitySecurityBonus: { low: -0.08, normal: 0.04, high: 0.12 }
 };
 
+const RESOURCE_CONFIG = {
+  tickMs: DAY_MS,
+  defaultOil: 220,
+  defaultMaxOil: 1200,
+  defaultManpowerPool: 8000,
+  manpowerPoolMax: 150000,
+  oilShortageThreshold: 40,
+  productionCosts: {
+    infantry: { manpower: 140, oil: 0 },
+    armor: { manpower: 260, oil: 16 },
+    fighter: { manpower: 180, oil: 36 },
+    bomber: { manpower: 220, oil: 44 },
+    patrolBoat: { manpower: 200, oil: 42 },
+    destroyer: { manpower: 320, oil: 68 }
+  },
+  operationsOilCost: {
+    move: { air: 8, naval: 6 },
+    combatTick: { air: 5, naval: 4 }
+  }
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -198,9 +219,10 @@ class TaskScheduler {
 }
 
 class ProductionSystem {
-  constructor(gameState, scheduler) {
+  constructor(gameState, scheduler, resourceSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
+    this.resourceSystem = resourceSystem;
   }
 
   getAllowedUnitsForBase(base) {
@@ -219,16 +241,20 @@ class ProductionSystem {
     if (!actingCountry || base.ownerCountry !== actingCountry) {
       return { ok: false, message: 'You can only queue production at your own bases.' };
     }
-    const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
-    if (!economySystem.spend(actingCountry, unitCost, `queue ${unitType}`)) {
-      refreshEconomyHud();
-      return { ok: false, message: `Insufficient funds to queue ${unitDef.label} (${unitCost}).` };
-    }
     if (base.status !== 'active') return { ok: false, message: 'Base must be active before production can begin.' };
 
     const baseDomain = BASE_TO_DOMAIN[base.type];
     if (!baseDomain) return { ok: false, message: 'Anti-air bases cannot produce units.' };
     if (unitDef.domain !== baseDomain) return { ok: false, message: `${base.type} base cannot produce ${unitDef.label}.` };
+    const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
+    const resourceCost = this.resourceSystem.getUnitResourceCost(unitType);
+    const resourceCheck = this.resourceSystem.canSpend(actingCountry, resourceCost);
+    if (!resourceCheck.ok) return { ok: false, message: resourceCheck.message };
+    if (!economySystem.spend(actingCountry, unitCost, `queue ${unitType}`)) {
+      refreshEconomyHud();
+      return { ok: false, message: `Insufficient funds to queue ${unitDef.label} (${unitCost}).` };
+    }
+    this.resourceSystem.spend(actingCountry, resourceCost);
 
     const unit = {
       id: this.gameState.nextUnitId++,
@@ -272,7 +298,7 @@ class ProductionSystem {
 
     const unitDef = UNIT_DEFINITIONS[unit.type];
     base.production.currentUnitId = unit.id;
-    base.production.currentCompleteAt = this.gameState.currentTimeMs + unitDef.durationMs;
+    base.production.currentCompleteAt = this.gameState.currentTimeMs + Math.round(unitDef.durationMs * this.resourceSystem.getIndustryBuildFactor(base.ownerCountry));
 
     this.scheduler.schedule({
       executeAt: base.production.currentCompleteAt,
@@ -302,9 +328,10 @@ class ProductionSystem {
 }
 
 class MovementSystem {
-  constructor(gameState, scheduler) {
+  constructor(gameState, scheduler, resourceSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
+    this.resourceSystem = resourceSystem;
   }
 
   issueMoveOrder(unitId, targetLonLat, silent = false) {
@@ -315,6 +342,12 @@ class MovementSystem {
       return { ok: false, message: 'Cannot move while unit is in combat.' };
     }
     if (unit.captureTarget) return { ok: false, message: 'Cannot move while capturing.' };
+    if ((unit.domain === 'air' || unit.domain === 'naval')) {
+      const oilCost = RESOURCE_CONFIG.operationsOilCost.move[unit.domain] || 0;
+      if (!this.resourceSystem.consumeOperationalOil(unit.ownerCountry, oilCost)) {
+        return { ok: false, message: `Not enough oil for ${unit.domain} movement.` };
+      }
+    }
 
     const startLonLat = this.getDisplayLonLat(unit);
     const distanceKm = d3.geoDistance(startLonLat, targetLonLat) * 6371;
@@ -366,11 +399,12 @@ class MovementSystem {
 }
 
 class CombatSystem {
-  constructor(gameState, scheduler, movementSystem, diplomacySystem) {
+  constructor(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.movementSystem = movementSystem;
     this.diplomacySystem = diplomacySystem;
+    this.resourceSystem = resourceSystem;
   }
 
   startAttack(attackerId, targetType, targetId, isCounter = false, silent = false) {
@@ -452,7 +486,15 @@ class CombatSystem {
     }
 
     const defense = attacker.targetType === 'unit' ? target.defense : target.defense;
-    const damage = Math.max(1, attacker.attack - defense);
+    let damage = Math.max(1, attacker.attack - defense);
+    if (attacker.domain === 'air' || attacker.domain === 'naval') {
+      const oilCost = RESOURCE_CONFIG.operationsOilCost.combatTick[attacker.domain] || 0;
+      const hasOil = this.resourceSystem.consumeOperationalOil(attacker.ownerCountry, oilCost);
+      if (!hasOil) {
+        damage = Math.max(1, Math.floor(damage * 0.45));
+        if (!attacker.silentCombat) setStatus(`${UNIT_DEFINITIONS[attacker.type].label} is fuel-starved; combat effectiveness reduced.`);
+      }
+    }
     target.health = Math.max(0, target.health - damage);
 
     if (target.health <= 0) {
@@ -632,6 +674,11 @@ class CountrySystem {
         unrest: 18,
         warWeariness: 8,
         economicStress: 14,
+        oil: RESOURCE_CONFIG.defaultOil,
+        maxOil: RESOURCE_CONFIG.defaultMaxOil,
+        oilPerTick: 0,
+        manpowerPool: RESOURCE_CONFIG.defaultManpowerPool,
+        manpowerRegenPerTick: 0,
         industrialCapacity: 20,
         manpower: COUNTRY_CONFIG.baseManpower,
         militaryReadiness: 50,
@@ -684,6 +731,11 @@ class CountrySystem {
     if (typeof country.domesticOutputModifier !== 'number') country.domesticOutputModifier = 1;
     if (country.domesticLastTickAt == null) country.domesticLastTickAt = null;
     if (!country.domesticAlertBucket) country.domesticAlertBucket = 'stable';
+    if (typeof country.oil !== 'number') country.oil = RESOURCE_CONFIG.defaultOil;
+    if (typeof country.maxOil !== 'number') country.maxOil = RESOURCE_CONFIG.defaultMaxOil;
+    if (typeof country.oilPerTick !== 'number') country.oilPerTick = 0;
+    if (typeof country.manpowerPool !== 'number') country.manpowerPool = RESOURCE_CONFIG.defaultManpowerPool;
+    if (typeof country.manpowerRegenPerTick !== 'number') country.manpowerRegenPerTick = 0;
     return country;
   }
 
@@ -755,6 +807,90 @@ class CountrySystem {
         this.scheduleTick();
       }
     });
+  }
+}
+
+class ResourceSystem {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.countrySystem = countrySystem;
+    this.diplomacySystem = diplomacySystem;
+    this.started = false;
+  }
+
+  getUnitResourceCost(unitType) {
+    return RESOURCE_CONFIG.productionCosts[unitType] || { manpower: 0, oil: 0 };
+  }
+
+  getIndustryBuildFactor(countryName) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    const industry = Math.max(1, country.industrialCapacity || 1);
+    return Math.max(0.65, Math.min(1.65, 35 / industry));
+  }
+
+  canSpend(countryName, cost) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return { ok: false, message: 'Country not found.' };
+    if ((cost.manpower || 0) > country.manpowerPool) return { ok: false, message: 'Not enough manpower.' };
+    if ((cost.oil || 0) > country.oil) return { ok: false, message: 'Not enough oil.' };
+    return { ok: true };
+  }
+
+  spend(countryName, cost) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    const check = this.canSpend(countryName, cost);
+    if (!check.ok) return check;
+    country.manpowerPool = Math.max(0, country.manpowerPool - (cost.manpower || 0));
+    country.oil = Math.max(0, country.oil - (cost.oil || 0));
+    return { ok: true };
+  }
+
+  consumeOperationalOil(countryName, amount) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return false;
+    if (country.oil < amount) return false;
+    country.oil -= amount;
+    return true;
+  }
+
+  processCountry(countryName) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country) return;
+    const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
+    const cityCount = country.controlledCityIds.length;
+    const baseCount = country.controlledBaseIds.length;
+    const stabilityFactor = Math.max(0.7, Math.min(1.1, (country.stability || 50) / 80));
+
+    const oilGain = Math.max(0, (8 + cityCount * 2.2 + baseCount * 0.8) * (1 - pressure.oilPenalty) * stabilityFactor);
+    const manpowerGain = Math.max(0, 40 + cityCount * 14 + Math.round((country.population || 0) / 600000) - (country.unrest || 0) * 0.4);
+    country.oilPerTick = oilGain;
+    country.manpowerRegenPerTick = manpowerGain;
+    country.oil = Math.max(0, Math.min(country.maxOil, country.oil + oilGain));
+    country.manpowerPool = Math.max(0, Math.min(RESOURCE_CONFIG.manpowerPoolMax, country.manpowerPool + manpowerGain));
+  }
+
+  processTick() {
+    Object.keys(this.gameState.countries).forEach((countryName) => this.processCountry(countryName));
+    this.gameState.resources.lastTickAt = this.gameState.currentTimeMs;
+    refreshCountryHud();
+    refreshDomesticHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + RESOURCE_CONFIG.tickMs,
+      type: 'RESOURCE_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
   }
 }
 
@@ -964,23 +1100,27 @@ class DiplomacySystem {
     let stressDrift = 0;
     let stabilityDrift = 0;
     let blockedTradeCount = 0;
+    let oilPenalty = 0;
 
     incoming.forEach(({ state }) => {
       if (state.sanctionsLevel === 'light') {
         incomeMultiplier *= 0.9;
         industryMultiplier *= 0.92;
         stressDrift += 0.12;
+        oilPenalty += 0.05;
       } else if (state.sanctionsLevel === 'heavy') {
         incomeMultiplier *= 0.75;
         industryMultiplier *= 0.8;
         stressDrift += 0.3;
         stabilityDrift += 0.04;
+        oilPenalty += 0.14;
       }
       if (state.tradeAllowed === false) {
         incomeMultiplier *= 0.95;
         industryMultiplier *= 0.96;
         stressDrift += 0.06;
         blockedTradeCount += 1;
+        oilPenalty += 0.03;
       }
     });
 
@@ -989,6 +1129,7 @@ class DiplomacySystem {
       blockedTradeCount,
       incomeMultiplier: Math.max(0.45, incomeMultiplier),
       industryMultiplier: Math.max(0.5, industryMultiplier),
+      oilPenalty: Math.max(0, Math.min(0.5, oilPenalty)),
       stressDrift,
       stabilityDrift
     };
@@ -1155,13 +1296,18 @@ class DomesticStateSystem {
     const militarySpending = policy.militarySpendingLevel || 'normal';
     const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
+    const oilShortage = country.oil < RESOURCE_CONFIG.oilShortageThreshold ? 0.18 : 0;
+    const industryStrain = country.industrialCapacity < 22 ? 0.14 : 0;
+    const manpowerShortage = country.manpowerPool < 1200 ? 0.12 : 0;
 
     country.warWeariness = this.clamp(country.warWeariness + (activeWars > 0 ? 0.4 + activeWars * 0.2 : -0.3) + (militarySpending === 'high' ? 0.08 : 0));
     country.economicStress = this.clamp(country.economicStress
       + (country.treasury < 0 ? 0.6 + Math.min(0.35, Math.abs(country.treasury) / 10000) : -0.22)
       + (country.netPerTick < 0 ? 0.25 : -0.1)
       + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0)
-      + pressure.stressDrift);
+      + pressure.stressDrift
+      + oilShortage
+      + industryStrain);
 
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
@@ -1175,7 +1321,8 @@ class DomesticStateSystem {
       - country.warWeariness * 0.008
       - country.economicStress * 0.009
       - activeWars * 0.06
-      - pressure.stabilityDrift;
+      - pressure.stabilityDrift
+      - manpowerShortage;
     country.stability = this.clamp(country.stability + stabilityDelta);
     country.domesticOutputModifier = Math.max(
       0.65,
@@ -1456,6 +1603,9 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No domestic updates yet.'
   },
+  resources: {
+    lastTickAt: null
+  },
   economy: {
     treasuryByCountry: {},
     lastTickAt: null,
@@ -1472,11 +1622,12 @@ const gameClock = new GameClock({
 const scheduler = new TaskScheduler(gameState);
 const countrySystem = new CountrySystem(gameState, scheduler);
 const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem);
+const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem);
-const productionSystem = new ProductionSystem(gameState, scheduler);
-const movementSystem = new MovementSystem(gameState, scheduler);
-const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem);
+const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
+const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
+const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
 const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem, diplomacySystem);
 const economySystem = new EconomySystem(gameState, scheduler, countrySystem, diplomacySystem);
 const aiSystem = new AISystem(gameState, scheduler, {
@@ -1504,8 +1655,10 @@ const countryHudName = document.getElementById('countryHudName');
 const countryHudTreasury = document.getElementById('countryHudTreasury');
 const countryHudPop = document.getElementById('countryHudPop');
 const countryHudStability = document.getElementById('countryHudStability');
+const countryHudOil = document.getElementById('countryHudOil');
 const countryHudIndustry = document.getElementById('countryHudIndustry');
 const countryHudManpower = document.getElementById('countryHudManpower');
+const countryHudStrain = document.getElementById('countryHudStrain');
 const countryHudAssets = document.getElementById('countryHudAssets');
 const countryHudFlow = document.getElementById('countryHudFlow');
 const diplomacyFocusCountry = document.getElementById('diplomacyFocusCountry');
@@ -1657,8 +1810,10 @@ function refreshCountryHud() {
     countryHudTreasury.textContent = 'Treasury: --';
     countryHudPop.textContent = 'Population: --';
     countryHudStability.textContent = 'Stability: --';
+    countryHudOil.textContent = 'Oil: --';
     countryHudIndustry.textContent = 'Industry: --';
     countryHudManpower.textContent = 'Manpower: --';
+    countryHudStrain.textContent = 'Resource strain: --';
     countryHudAssets.textContent = 'Cities/Bases/Units: --';
     countryHudFlow.textContent = 'Income/Upkeep/Net: --';
     return;
@@ -1668,8 +1823,14 @@ function refreshCountryHud() {
   countryHudTreasury.textContent = `Treasury: ${Math.round(country.treasury).toLocaleString()}`;
   countryHudPop.textContent = `Population: ${Math.round(country.population).toLocaleString()}`;
   countryHudStability.textContent = `Stability: ${country.stability.toFixed(1)}`;
+  countryHudOil.textContent = `Oil: ${country.oil.toFixed(1)} (+${country.oilPerTick.toFixed(1)}/day)`;
   countryHudIndustry.textContent = `Industry: ${country.industrialCapacity.toFixed(1)}`;
-  countryHudManpower.textContent = `Manpower: ${Math.round(country.manpower).toLocaleString()}`;
+  countryHudManpower.textContent = `Manpower: pool ${Math.round(country.manpowerPool).toLocaleString()} (+${Math.round(country.manpowerRegenPerTick)}/day), capacity ${Math.round(country.manpower).toLocaleString()}`;
+  const strainFlags = [];
+  if (country.oil < RESOURCE_CONFIG.oilShortageThreshold) strainFlags.push('oil shortage');
+  if (country.manpowerPool < 1200) strainFlags.push('manpower shortage');
+  if (country.industrialCapacity < 22) strainFlags.push('industrial strain');
+  countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}`;
   countryHudAssets.textContent = `Cities/Bases/Units: ${country.controlledCityIds.length}/${country.controlledBaseIds.length}/${country.controlledUnitIds.length}`;
   countryHudFlow.textContent = `Income/Upkeep/Net: +${country.incomePerTick}/-${country.upkeepPerTick}/${country.netPerTick >= 0 ? '+' : ''}${country.netPerTick}`;
 }
@@ -1861,6 +2022,7 @@ function setPlayerCountry(countryFeature) {
   economySystem.startEconomyLoop();
   countrySystem.start();
   diplomacySystem.start();
+  resourceSystem.start();
   policySystem.start();
   domesticStateSystem.start();
   countrySystem.syncOwnership();
