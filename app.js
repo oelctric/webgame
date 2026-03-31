@@ -10,12 +10,12 @@ const BASE_BUILD_DURATIONS_MS = {
 };
 
 const UNIT_DEFINITIONS = {
-  infantry: { label: 'Infantry', domain: 'ground', durationMs: 2 * DAY_MS, health: 100, strength: 20 },
-  armor: { label: 'Armor', domain: 'ground', durationMs: 5 * DAY_MS, health: 150, strength: 50 },
-  fighter: { label: 'Fighter', domain: 'air', durationMs: 4 * DAY_MS, health: 90, strength: 45 },
-  bomber: { label: 'Bomber', domain: 'air', durationMs: 6 * DAY_MS, health: 120, strength: 60 },
-  patrolBoat: { label: 'Patrol Boat', domain: 'naval', durationMs: 5 * DAY_MS, health: 130, strength: 40 },
-  destroyer: { label: 'Destroyer', domain: 'naval', durationMs: 10 * DAY_MS, health: 220, strength: 85 }
+  infantry: { label: 'Infantry', domain: 'ground', durationMs: 2 * DAY_MS, maxHealth: 100, attack: 14, defense: 6, rangeKm: 260, attackCooldownMs: 8 * 60 * 60 * 1000 },
+  armor: { label: 'Armor', domain: 'ground', durationMs: 5 * DAY_MS, maxHealth: 150, attack: 24, defense: 10, rangeKm: 340, attackCooldownMs: 6 * 60 * 60 * 1000 },
+  fighter: { label: 'Fighter', domain: 'air', durationMs: 4 * DAY_MS, maxHealth: 90, attack: 30, defense: 7, rangeKm: 1200, attackCooldownMs: 3 * 60 * 60 * 1000 },
+  bomber: { label: 'Bomber', domain: 'air', durationMs: 6 * DAY_MS, maxHealth: 120, attack: 36, defense: 8, rangeKm: 1400, attackCooldownMs: 4 * 60 * 60 * 1000 },
+  patrolBoat: { label: 'Patrol Boat', domain: 'naval', durationMs: 5 * DAY_MS, maxHealth: 130, attack: 20, defense: 9, rangeKm: 500, attackCooldownMs: 6 * 60 * 60 * 1000 },
+  destroyer: { label: 'Destroyer', domain: 'naval', durationMs: 10 * DAY_MS, maxHealth: 220, attack: 32, defense: 14, rangeKm: 620, attackCooldownMs: 5 * 60 * 60 * 1000 }
 };
 
 const BASE_TO_DOMAIN = {
@@ -134,6 +134,9 @@ class ProductionSystem {
     const base = this.gameState.bases.find((entry) => entry.id === baseId);
     const unitDef = UNIT_DEFINITIONS[unitType];
     if (!base || !unitDef) return { ok: false, message: 'Invalid base or unit type.' };
+    if (!this.gameState.selectedPlayerCountry || base.ownerCountry !== this.gameState.selectedPlayerCountry.properties.name) {
+      return { ok: false, message: 'You can only queue production at your own bases.' };
+    }
     if (base.status !== 'active') return { ok: false, message: 'Base must be active before production can begin.' };
 
     const baseDomain = BASE_TO_DOMAIN[base.type];
@@ -150,8 +153,17 @@ class ProductionSystem {
       activatedAt: null,
       sourceBaseId: base.id,
       lonLat: [...base.lonLat],
-      health: unitDef.health,
-      strength: unitDef.strength
+      health: unitDef.maxHealth,
+      maxHealth: unitDef.maxHealth,
+      attack: unitDef.attack,
+      defense: unitDef.defense,
+      rangeKm: unitDef.rangeKm,
+      attackCooldownMs: unitDef.attackCooldownMs,
+      combatStatus: 'idle',
+      currentTargetId: null,
+      targetType: null,
+      strength: unitDef.attack,
+      movement: null
     };
 
     this.gameState.units.push(unit);
@@ -211,6 +223,9 @@ class MovementSystem {
     const unit = this.gameState.units.find((entry) => entry.id === unitId);
     if (!unit) return { ok: false, message: 'Select a valid unit first.' };
     if (unit.status !== 'active') return { ok: false, message: 'Only active units can receive new move orders.' };
+    if (unit.combatStatus === 'attacking' || unit.combatStatus === 'defending') {
+      return { ok: false, message: 'Cannot move while unit is in combat.' };
+    }
 
     const startLonLat = this.getDisplayLonLat(unit);
     const distanceKm = d3.geoDistance(startLonLat, targetLonLat) * 6371;
@@ -261,6 +276,115 @@ class MovementSystem {
   }
 }
 
+class CombatSystem {
+  constructor(gameState, scheduler, movementSystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.movementSystem = movementSystem;
+  }
+
+  startAttack(attackerId, targetType, targetId, isCounter = false) {
+    const attacker = this.gameState.units.find((u) => u.id === attackerId);
+    if (!attacker || attacker.status === 'destroyed') return { ok: false, message: 'Attacker is not available.' };
+    if (attacker.status === 'moving') return { ok: false, message: 'Cannot attack while unit is moving.' };
+
+    const target = targetType === 'unit'
+      ? this.gameState.units.find((u) => u.id === targetId)
+      : this.gameState.bases.find((b) => b.id === targetId);
+    if (!target) return { ok: false, message: 'Target no longer exists.' };
+    if ((targetType === 'unit' && target.status === 'destroyed') || (targetType === 'base' && target.combatStatus === 'destroyed')) {
+      return { ok: false, message: 'Target already destroyed.' };
+    }
+    if (attacker.ownerCountry === target.ownerCountry) return { ok: false, message: 'Friendly fire is blocked.' };
+
+    const attackerPos = this.movementSystem.getDisplayLonLat(attacker);
+    const targetPos = targetType === 'unit' ? this.movementSystem.getDisplayLonLat(target) : target.lonLat;
+    const distanceKm = d3.geoDistance(attackerPos, targetPos) * 6371;
+    if (distanceKm > attacker.rangeKm) return { ok: false, message: 'Target out of range.' };
+
+    attacker.combatStatus = 'attacking';
+    attacker.currentTargetId = targetId;
+    attacker.targetType = targetType;
+    if (targetType === 'unit' && target.combatStatus !== 'attacking') target.combatStatus = 'defending';
+    if (targetType === 'base' && target.combatStatus !== 'destroyed') target.combatStatus = 'under_attack';
+
+    this.scheduleCombatTick(attacker.id, attacker.attackCooldownMs);
+
+    if (!isCounter && targetType === 'unit' && target.status === 'active' && target.combatStatus === 'defending') {
+      this.startAttack(target.id, 'unit', attacker.id, true);
+    }
+
+    return { ok: true };
+  }
+
+  scheduleCombatTick(attackerId, cooldownMs) {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + cooldownMs,
+      type: 'COMBAT_TICK',
+      payload: { attackerId },
+      handler: ({ attackerId: id }) => this.resolveCombatTick(id)
+    });
+  }
+
+  resolveCombatTick(attackerId) {
+    const attacker = this.gameState.units.find((u) => u.id === attackerId);
+    if (!attacker || attacker.status === 'destroyed' || attacker.combatStatus !== 'attacking') return;
+
+    const target = attacker.targetType === 'unit'
+      ? this.gameState.units.find((u) => u.id === attacker.currentTargetId)
+      : this.gameState.bases.find((b) => b.id === attacker.currentTargetId);
+    if (!target) return this.clearUnitCombat(attacker);
+
+    const targetDestroyed = attacker.targetType === 'unit'
+      ? target.status === 'destroyed'
+      : target.combatStatus === 'destroyed';
+    if (targetDestroyed) return this.clearUnitCombat(attacker);
+
+    const attackerPos = this.movementSystem.getDisplayLonLat(attacker);
+    const targetPos = attacker.targetType === 'unit' ? this.movementSystem.getDisplayLonLat(target) : target.lonLat;
+    const distanceKm = d3.geoDistance(attackerPos, targetPos) * 6371;
+    if (distanceKm > attacker.rangeKm) {
+      setStatus(`${UNIT_DEFINITIONS[attacker.type].label} target moved out of range.`);
+      return this.clearUnitCombat(attacker);
+    }
+
+    const defense = attacker.targetType === 'unit' ? target.defense : target.defense;
+    const damage = Math.max(1, attacker.attack - defense);
+    target.health = Math.max(0, target.health - damage);
+
+    if (target.health <= 0) {
+      if (attacker.targetType === 'unit') {
+        target.status = 'destroyed';
+        target.combatStatus = 'destroyed';
+        target.currentTargetId = null;
+        target.targetType = null;
+        target.movement = null;
+      } else {
+        target.combatStatus = 'destroyed';
+        target.status = 'destroyed';
+        target.production.currentUnitId = null;
+        target.production.queue = [];
+      }
+      setStatus(`${UNIT_DEFINITIONS[attacker.type].label} destroyed ${attacker.targetType} #${attacker.currentTargetId}.`);
+      this.clearUnitCombat(attacker);
+      renderBases();
+      renderUnits();
+      renderProductionPanel();
+      renderSelectedUnitPanel();
+      return;
+    }
+
+    this.scheduleCombatTick(attacker.id, attacker.attackCooldownMs);
+  }
+
+  clearUnitCombat(unit) {
+    if (!unit) return;
+    unit.combatStatus = unit.status === 'destroyed' ? 'destroyed' : 'idle';
+    unit.currentTargetId = null;
+    unit.targetType = null;
+  }
+}
+
 const gameState = {
   selectedPlayerCountry: null,
   currentTimeMs: Date.parse(GAME_START_ISO),
@@ -274,7 +398,9 @@ const gameState = {
   nextUnitId: 1,
   selectedBaseId: null,
   selectedUnitId: null,
-  moveMode: false
+  moveMode: false,
+  attackMode: false,
+  enemySpawned: false
 };
 
 const gameClock = new GameClock({
@@ -285,6 +411,7 @@ const gameClock = new GameClock({
 const scheduler = new TaskScheduler(gameState);
 const productionSystem = new ProductionSystem(gameState, scheduler);
 const movementSystem = new MovementSystem(gameState, scheduler);
+const combatSystem = new CombatSystem(gameState, scheduler, movementSystem);
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -305,8 +432,10 @@ const unitList = document.getElementById('unitList');
 const selectedUnitLabel = document.getElementById('selectedUnitLabel');
 const selectedUnitMeta = document.getElementById('selectedUnitMeta');
 const moveUnitBtn = document.getElementById('moveUnitBtn');
+const attackUnitBtn = document.getElementById('attackUnitBtn');
 const clearUnitSelectionBtn = document.getElementById('clearUnitSelectionBtn');
 const moveModeStatus = document.getElementById('moveModeStatus');
+const attackModeStatus = document.getElementById('attackModeStatus');
 
 const overlays = {
   mainMenu: document.getElementById('mainMenu'),
@@ -434,11 +563,65 @@ function setPlayerCountry(countryFeature) {
   gameState.selectedBaseId = null;
   gameState.selectedUnitId = null;
   gameState.moveMode = false;
+  gameState.attackMode = false;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
+  spawnEnemyForces();
   renderProductionPanel();
   renderSelectedUnitPanel();
+}
+
+function spawnEnemyForces() {
+  if (gameState.enemySpawned || !projection || !countries.length || !gameState.selectedPlayerCountry) return;
+  const enemyCountry = countries.find((c) => c.id !== gameState.selectedPlayerCountry.id) || countries[0];
+  if (!enemyCountry) return;
+  const [lon, lat] = d3.geoCentroid(enemyCountry);
+
+  const enemyBase = {
+    id: gameState.nextBaseId++,
+    ownerCountry: `Enemy ${enemyCountry.properties.name}`,
+    type: 'ground',
+    lonLat: [lon, lat],
+    status: 'active',
+    combatStatus: 'idle',
+    createdAt: gameState.currentTimeMs,
+    buildStartedAt: gameState.currentTimeMs,
+    buildCompleteAt: gameState.currentTimeMs,
+    health: 260,
+    maxHealth: 260,
+    defense: 10,
+    production: { currentUnitId: null, currentCompleteAt: null, queue: [] }
+  };
+  gameState.bases.push(enemyBase);
+
+  const def = UNIT_DEFINITIONS.infantry;
+  gameState.units.push({
+    id: gameState.nextUnitId++,
+    ownerCountry: enemyBase.ownerCountry,
+    type: 'infantry',
+    domain: def.domain,
+    status: 'active',
+    createdAt: gameState.currentTimeMs,
+    activatedAt: gameState.currentTimeMs,
+    sourceBaseId: enemyBase.id,
+    lonLat: [lon + 1.3, lat + 0.6],
+    health: def.maxHealth,
+    maxHealth: def.maxHealth,
+    attack: def.attack,
+    defense: def.defense,
+    rangeKm: def.rangeKm,
+    attackCooldownMs: def.attackCooldownMs,
+    combatStatus: 'idle',
+    currentTargetId: null,
+    targetType: null,
+    strength: def.attack,
+    movement: null
+  });
+
+  gameState.enemySpawned = true;
+  renderBases();
+  renderUnits();
 }
 
 function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -547,9 +730,13 @@ function createBase({ type, lonLat }) {
     type,
     lonLat,
     status: 'building',
+    combatStatus: 'idle',
     createdAt: now,
     buildStartedAt: now,
     buildCompleteAt: now + buildDurationMs,
+    health: 300,
+    maxHealth: 300,
+    defense: 12,
     production: {
       currentUnitId: null,
       currentCompleteAt: null,
@@ -579,7 +766,8 @@ function createBase({ type, lonLat }) {
 function renderBases() {
   if (!basesLayer || !projection) return;
 
-  const points = basesLayer.selectAll('g.base-point').data(gameState.bases, (d) => d.id);
+  const visibleBases = gameState.bases.filter((base) => base.combatStatus !== 'destroyed');
+  const points = basesLayer.selectAll('g.base-point').data(visibleBases, (d) => d.id);
   const enter = points.enter().append('g').attr('class', 'base-point');
 
   enter
@@ -601,22 +789,36 @@ function renderBases() {
     })
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (gameState.attackMode && gameState.selectedUnitId) {
+        const result = combatSystem.startAttack(gameState.selectedUnitId, 'base', d.id);
+        if (!result.ok) {
+          setStatus(result.message, true);
+        } else {
+          setStatus(`Combat started against base #${d.id}.`);
+        }
+        gameState.attackMode = false;
+        renderSelectedUnitPanel();
+        renderUnits();
+        return;
+      }
       gameState.selectedBaseId = d.id;
       renderBases();
       renderProductionPanel();
     })
     .select('rect')
     .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color)
-    .attr('class', (d) => `base ${d.status} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
+    .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
 
   points
     .merge(enter)
     .select('title')
-    .text((d) => `${d.type} base (${d.status}) - ${d.ownerCountry}`);
+    .text((d) => `${d.type} base (${d.status}) HP ${d.health}/${d.maxHealth} - ${d.ownerCountry}`);
+
+  points.exit().remove();
 }
 
 function renderUnits() {
-  const visibleUnits = gameState.units.filter((unit) => unit.status === 'active' || unit.status === 'moving');
+  const visibleUnits = gameState.units.filter((unit) => unit.status !== 'destroyed');
   unitCount.textContent = `Total units: ${visibleUnits.length}`;
   unitList.innerHTML = '';
 
@@ -638,13 +840,26 @@ function renderUnits() {
   enter.append('title');
   markers
     .merge(enter)
-    .attr('class', (d) => `unit-marker unit-point ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
+    .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
     .attr('cx', (d) => projection(movementSystem.getDisplayLonLat(d))[0])
     .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (gameState.attackMode && gameState.selectedUnitId && gameState.selectedUnitId !== d.id) {
+        const result = combatSystem.startAttack(gameState.selectedUnitId, 'unit', d.id);
+        if (!result.ok) {
+          setStatus(result.message, true);
+        } else {
+          setStatus(`Combat started against unit #${d.id}.`);
+        }
+        gameState.attackMode = false;
+        renderSelectedUnitPanel();
+        renderUnits();
+        return;
+      }
       gameState.selectedUnitId = d.id;
       gameState.moveMode = false;
+      gameState.attackMode = false;
       renderSelectedUnitPanel();
       renderUnits();
     })
@@ -662,11 +877,14 @@ function renderSelectedUnitPanel() {
     selectedUnitLabel.textContent = `Unit #${unit.id}: ${UNIT_DEFINITIONS[unit.type].label} (${unit.ownerCountry})`;
     if (unit.status === 'moving' && unit.movement) {
       selectedUnitMeta.textContent = `Status: moving • ETA ${formatDateTime(unit.movement.arrivalAt)} • Target ${unit.movement.targetLonLat.map((n) => n.toFixed(1)).join(', ')}`;
+    } else if (unit.status === 'destroyed') {
+      selectedUnitMeta.textContent = 'Status: destroyed';
     } else {
-      selectedUnitMeta.textContent = `Status: active • Position ${unit.lonLat.map((n) => n.toFixed(1)).join(', ')}`;
+      selectedUnitMeta.textContent = `Status: ${unit.status} • HP ${unit.health}/${unit.maxHealth} • ATK ${unit.attack} DEF ${unit.defense} RNG ${unit.rangeKm}km`;
     }
   }
   moveModeStatus.textContent = `Move mode: ${gameState.moveMode ? 'On (click map destination)' : 'Off'}`;
+  attackModeStatus.textContent = `Attack mode: ${gameState.attackMode ? 'On (click enemy unit/base)' : 'Off'}`;
 }
 
 function renderProductionPanel() {
@@ -680,7 +898,7 @@ function renderProductionPanel() {
     return;
   }
 
-  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status}`;
+  prodBaseLabel.textContent = `Base #${base.id} (${base.type}) - ${base.status} - HP ${base.health}/${base.maxHealth}`;
   const currentUnit = base.production.currentUnitId
     ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
     : null;
@@ -705,6 +923,13 @@ function renderProductionPanel() {
     const li = document.createElement('li');
     li.textContent = 'Queue empty';
     prodQueue.appendChild(li);
+  }
+
+  if (!gameState.selectedPlayerCountry || base.ownerCountry !== gameState.selectedPlayerCountry.properties.name) {
+    const info = document.createElement('p');
+    info.textContent = 'Enemy base: production controls unavailable.';
+    prodUnitButtons.appendChild(info);
+    return;
   }
 
   const allowedUnits = productionSystem.getAllowedUnitsForBase(base);
@@ -811,13 +1036,26 @@ function attachUnitControls() {
       return;
     }
     gameState.moveMode = true;
+    gameState.attackMode = false;
     renderSelectedUnitPanel();
     setStatus('Move mode enabled. Click destination on the map.');
+  });
+
+  attackUnitBtn.addEventListener('click', () => {
+    if (!gameState.selectedUnitId) {
+      setStatus('Select a unit first, then enable attack mode.', true);
+      return;
+    }
+    gameState.attackMode = true;
+    gameState.moveMode = false;
+    renderSelectedUnitPanel();
+    setStatus('Attack mode enabled. Click an enemy unit or enemy base in range.');
   });
 
   clearUnitSelectionBtn.addEventListener('click', () => {
     gameState.selectedUnitId = null;
     gameState.moveMode = false;
+    gameState.attackMode = false;
     renderSelectedUnitPanel();
     renderUnits();
   });
@@ -923,6 +1161,11 @@ async function setupMap() {
       gameState.moveMode = false;
       renderSelectedUnitPanel();
       renderUnits();
+      return;
+    }
+
+    if (gameState.attackMode && gameState.selectedUnitId) {
+      setStatus('Click an enemy unit or enemy base marker to attack.', true);
       return;
     }
 
