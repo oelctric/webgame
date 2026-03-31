@@ -1,69 +1,229 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Game</title>
-    <style>
-        body {
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background: #1a1a2e;
-            font-family: Arial, sans-serif;
-        }
-        #game {
-            width: 400px;
-            height: 400px;
-            background: #16213e;
-            position: relative;
-            border: 2px solid #0f3460;
-        }
-        #player {
-            width: 30px;
-            height: 30px;
-            background: #e94560;
-            position: absolute;
-            top: 185px;
-            left: 185px;
-            border-radius: 5px;
-        }
-        #score {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #fff;
-            font-size: 18px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geo Command - Robinson Projection</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div id="game">
-        <div id="score">Score: 0</div>
-        <div id="player"></div>
+  <aside class="sidebar">
+    <div class="card">
+      <h1>Geo Command</h1>
+      <p>Robinson projection world map with real country borders.</p>
+      <p id="playerProfile">Player not created yet. Open Play from main menu.</p>
     </div>
-    <script>
-        const player = document.getElementById('player');
-        const scoreEl = document.getElementById('score');
-        const game = document.getElementById('game');
-        
-        let x = 185, y = 185, score = 0;
-        const speed = 20;
 
-        document.addEventListener('keydown', (e) => {
-            switch(e.key) {
-                case 'ArrowUp': y = Math.max(0, y - speed); break;
-                case 'ArrowDown': y = Math.min(370, y + speed); break;
-                case 'ArrowLeft': x = Math.max(0, x - speed); break;
-                case 'ArrowRight': x = Math.min(370, x + speed); break;
-            }
-            player.style.left = x + 'px';
-            player.style.top = y + 'px';
-            score++;
-            scoreEl.textContent = 'Score: ' + score;
-        });
-    </script>
+    <div class="card">
+      <h2>Build Mode</h2>
+      <p><strong id="selectedCountry">No country selected</strong></p>
+      <div class="row" id="baseButtons"></div>
+      <p id="status">Open Play from the main menu, pick your country and leader, then place bases.</p>
+    </div>
+
+    <div class="card">
+      <h2>Simulation</h2>
+      <p><strong id="gameDateTime">Date: --</strong></p>
+      <p><strong id="simSpeedLabel">Speed: --</strong></p>
+      <p><strong id="treasuryLabel">Treasury: --</strong></p>
+      <p id="aiCountriesLabel">AI Countries: --</p>
+      <p id="economySummary">Economy: --</p>
+      <div class="row" id="timeControlButtons">
+        <button data-speed="0">Pause</button>
+        <button data-speed="1">1x</button>
+        <button data-speed="5">5x</button>
+        <button data-speed="20">20x</button>
+      </div>
+      <div class="row">
+        <button id="skipDayBtn">+1 Day</button>
+        <button id="skipWeekBtn">+1 Week</button>
+        <button id="skipMonthBtn">+1 Month</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Included Major Cities</h2>
+      <ul id="cityList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Country State</h2>
+      <p id="countryHudName">Country: --</p>
+      <p id="countryHudTreasury">Treasury: --</p>
+      <p id="countryHudPop">Population: --</p>
+      <p id="countryHudStability">Stability: --</p>
+      <p id="countryHudIndustry">Industry: --</p>
+      <p id="countryHudManpower">Manpower: --</p>
+      <p id="countryHudAssets">Cities/Bases/Units: --</p>
+      <p id="countryHudFlow">Income/Upkeep/Net: --</p>
+    </div>
+
+    <div class="card">
+      <h2>Diplomacy</h2>
+      <p id="diplomacyFocusCountry">Diplomacy for: --</p>
+      <p id="diplomacySummary">Diplomacy: --</p>
+      <div class="field">
+        <label for="diplomacyTargetCountry">Target Country</label>
+        <select id="diplomacyTargetCountry"></select>
+      </div>
+      <div class="row">
+        <button id="declareWarBtn">Declare War</button>
+        <button id="makePeaceBtn">Make Peace</button>
+      </div>
+      <div class="row">
+        <button id="improveRelationsBtn">Improve +10</button>
+        <button id="worsenRelationsBtn">Worsen -10</button>
+      </div>
+      <ul id="relationsList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Domestic Policy</h2>
+      <p id="policyFocusCountry">Policy for: --</p>
+      <p id="policySummary">Policy: --</p>
+      <div class="field">
+        <label for="militaryPolicySelect">Military Spending</label>
+        <select id="militaryPolicySelect">
+          <option value="low">Low</option>
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="industryPolicySelect">Industry Investment</label>
+        <select id="industryPolicySelect">
+          <option value="low">Low</option>
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="securityPolicySelect">Internal Security</label>
+        <select id="securityPolicySelect">
+          <option value="low">Low</option>
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+      <p id="policyCostLabel">Daily policy cost: --</p>
+      <button id="applyPolicyBtn">Apply Policies</button>
+    </div>
+
+    <div class="card">
+      <h2>Domestic State</h2>
+      <p id="domesticFocusCountry">Domestic state for: --</p>
+      <p id="domesticStability">Stability: --</p>
+      <p id="domesticUnrest">Unrest: --</p>
+      <p id="domesticWarWeariness">War weariness: --</p>
+      <p id="domesticEconomicStress">Economic stress: --</p>
+      <p id="domesticTrend">Domestic trend: --</p>
+    </div>
+
+    <div class="card">
+      <h2>Base Production</h2>
+      <p id="prodBaseLabel">Select a base to manage production.</p>
+      <div class="row" id="prodUnitButtons"></div>
+      <p id="prodCurrent">Current: --</p>
+      <ul id="prodQueue"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Units</h2>
+      <p id="unitCount">Total active units: 0</p>
+      <ul id="unitList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Unit Orders</h2>
+      <p id="selectedUnitLabel">No unit selected.</p>
+      <p id="selectedUnitMeta">Status: --</p>
+      <div class="row">
+        <button id="moveUnitBtn">Move Selected Unit</button>
+        <button id="attackUnitBtn">Attack with Selected Unit</button>
+        <button id="captureUnitBtn">Capture with Selected Unit</button>
+        <button id="clearUnitSelectionBtn">Clear Unit Selection</button>
+      </div>
+      <p id="moveModeStatus">Move mode: Off</p>
+      <p id="attackModeStatus">Attack mode: Off</p>
+      <p id="captureModeStatus">Capture mode: Off</p>
+      <p id="selectedAssetStatus">Selected asset: none</p>
+    </div>
+
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="legend-item"><span class="swatch" style="background: var(--city)"></span>Major city</div>
+      <div class="legend-item"><span class="swatch" style="background: var(--base-ground)"></span>Ground base</div>
+      <div class="legend-item"><span class="swatch" style="background: var(--base-air)"></span>Air base</div>
+      <div class="legend-item"><span class="swatch" style="background: var(--base-naval)"></span>Naval base</div>
+      <div class="legend-item"><span class="swatch" style="background: var(--base-aa)"></span>Anti-air site</div>
+    </div>
+  </aside>
+
+  <main id="mapWrap">
+    <svg id="map" aria-label="World map with Robinson projection"></svg>
+    <div class="tooltip" id="tooltip"></div>
+
+    <section class="overlay" id="mainMenu" aria-label="Main menu">
+      <div class="menu-panel">
+        <h2>Main Menu</h2>
+        <p>Welcome commander. Start a game or adjust audio settings.</p>
+        <div class="menu-actions">
+          <button class="primary" id="playBtn">Play</button>
+          <button id="settingsBtn">Settings</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="playFlow" aria-label="Play flow">
+      <div class="menu-panel">
+        <h2 id="playTitle">Choose Your Country</h2>
+        <div id="playStepCountry">
+          <div class="field">
+            <label for="countrySelect">Country</label>
+            <select id="countrySelect"></select>
+          </div>
+          <p class="muted-note">You can only place bases inside your chosen country's borders.</p>
+          <p id="countryWarning"></p>
+        </div>
+
+        <div id="playStepLeader" class="hidden">
+          <div class="field">
+            <label for="leaderName">Leader Name</label>
+            <input id="leaderName" maxlength="36" placeholder="Enter leader name" />
+          </div>
+        </div>
+
+        <div class="menu-actions">
+          <button id="playBackBtn">Back</button>
+          <button class="primary" id="playNextBtn">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="settingsPanel" aria-label="Settings">
+      <div class="menu-panel">
+        <h2>Settings</h2>
+        <div class="volume-row">
+          <label for="musicVolume">Music Volume</label>
+          <input type="range" id="musicVolume" min="0" max="100" value="40" />
+          <span id="musicValue">40</span>
+        </div>
+        <div class="volume-row">
+          <label for="sfxVolume">Sound Effects</label>
+          <input type="range" id="sfxVolume" min="0" max="100" value="60" />
+          <span id="sfxValue">60</span>
+        </div>
+        <p class="muted-note">Volumes are stored in your browser for this game.</p>
+        <div class="menu-actions">
+          <button id="settingsBackBtn">Back</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>
