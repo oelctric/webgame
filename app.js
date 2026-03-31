@@ -1,5 +1,6 @@
 const GAME_START_ISO = '2026-01-01T00:00:00Z';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const GAME_TIME_SCALE = 600; // 1 real second = 10 in-game minutes at 1x
 
 const BASE_BUILD_DURATIONS_MS = {
   ground: 3 * DAY_MS,
@@ -48,7 +49,7 @@ class GameClock {
 
   advanceBy(realDeltaMs) {
     const safeDelta = Math.max(0, realDeltaMs || 0);
-    const gameDelta = safeDelta * this.speed;
+    const gameDelta = safeDelta * this.speed * GAME_TIME_SCALE;
     this.currentTimeMs += gameDelta;
     return gameDelta;
   }
@@ -299,7 +300,12 @@ function formatDateTime(timestamp) {
 
 function refreshTimeHud() {
   gameDateTime.textContent = `Date: ${formatDateTime(gameState.currentTimeMs)}`;
-  simSpeedLabel.textContent = `Speed: ${gameState.simulationSpeed === 0 ? 'Paused' : `${gameState.simulationSpeed}x`}`;
+  if (gameState.simulationSpeed === 0) {
+    simSpeedLabel.textContent = 'Speed: Paused';
+  } else {
+    const gameMinutesPerRealSecond = (GAME_TIME_SCALE * gameState.simulationSpeed) / (60 * 1000) * 1000;
+    simSpeedLabel.textContent = `Speed: ${gameState.simulationSpeed}x (${gameMinutesPerRealSecond.toFixed(0)} game min/sec)`;
+  }
   timeControlButtons.querySelectorAll('button').forEach((btn) => {
     const speed = Number(btn.dataset.speed);
     btn.classList.toggle('active', speed === gameState.simulationSpeed);
@@ -418,6 +424,9 @@ function setSimulationSpeed(multiplier) {
   gameClock.setSpeed(multiplier);
   gameState.simulationSpeed = gameClock.speed;
   refreshTimeHud();
+  setStatus(gameState.simulationSpeed === 0
+    ? 'Simulation paused.'
+    : `Simulation speed set to ${gameState.simulationSpeed}x.`);
 }
 
 function attachTimeControls() {
@@ -670,8 +679,8 @@ function attachMenuHandlers() {
 
 async function loadCountriesData() {
   const geoJsonSources = [
-    'https://cdn.jsdelivr.net/npm/world-countries@5.1.0/dist/countries.geo.json',
-    'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson'
+    'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
+    'https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json'
   ];
 
   for (const url of geoJsonSources) {
