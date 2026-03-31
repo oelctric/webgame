@@ -98,6 +98,10 @@
     .base.under_attack { stroke: #ff4f4f; stroke-width: 1.4; }
     .base.destroyed { opacity: 0.2; }
     .base.selected-base { stroke: #ffffff; stroke-width: 1.6; }
+    .base.enemy-owner { filter: hue-rotate(160deg); }
+    .unit-marker { fill: #ffffff; stroke: #111; stroke-width: 0.4; }
+    .unit-marker.selected { fill: #ffde59; stroke: #000; stroke-width: 0.8; }
+    .unit-marker.enemy-owner { fill: #ff8d8d; }
     .unit-marker { fill: #ffffff; stroke: #111; stroke-width: 0.4; }
     .unit-marker.selected { fill: #ffde59; stroke: #000; stroke-width: 0.8; }
     .unit-marker.attacking { fill: #ff7a7a; }

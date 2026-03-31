@@ -50,6 +50,12 @@ const ECONOMY_CONFIG = {
   defaultTreasury: 4000
 };
 
+const AI_CONFIG = {
+  tickMs: 12 * 60 * 60 * 1000,
+  baseThreshold: 2,
+  baseExpansionTreasury: 2500
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -146,6 +152,16 @@ class ProductionSystem {
       .map(([key, def]) => ({ key, ...def }));
   }
 
+  queueUnit(baseId, unitType, actorCountry = null) {
+    const base = this.gameState.bases.find((entry) => entry.id === baseId);
+    const unitDef = UNIT_DEFINITIONS[unitType];
+    if (!base || !unitDef) return { ok: false, message: 'Invalid base or unit type.' };
+    const actingCountry = actorCountry || (this.gameState.selectedPlayerCountry && this.gameState.selectedPlayerCountry.properties.name);
+    if (!actingCountry || base.ownerCountry !== actingCountry) {
+      return { ok: false, message: 'You can only queue production at your own bases.' };
+    }
+    const unitCost = ECONOMY_CONFIG.unitBuildCost[unitType] || 0;
+    if (!economySystem.spend(actingCountry, unitCost, `queue ${unitType}`)) {
   queueUnit(baseId, unitType) {
     const base = this.gameState.bases.find((entry) => entry.id === baseId);
     const unitDef = UNIT_DEFINITIONS[unitType];
@@ -241,6 +257,7 @@ class MovementSystem {
     this.scheduler = scheduler;
   }
 
+  issueMoveOrder(unitId, targetLonLat, silent = false) {
   issueMoveOrder(unitId, targetLonLat) {
     const unit = this.gameState.units.find((entry) => entry.id === unitId);
     if (!unit) return { ok: false, message: 'Select a valid unit first.' };
@@ -273,6 +290,7 @@ class MovementSystem {
     });
 
     unit.movement.taskId = taskId;
+    return { ok: true, unit, silent };
     return { ok: true, unit };
   }
 
@@ -306,6 +324,7 @@ class CombatSystem {
     this.movementSystem = movementSystem;
   }
 
+  startAttack(attackerId, targetType, targetId, isCounter = false, silent = false) {
   startAttack(attackerId, targetType, targetId, isCounter = false) {
     const attacker = this.gameState.units.find((u) => u.id === attackerId);
     if (!attacker || attacker.status === 'destroyed') return { ok: false, message: 'Attacker is not available.' };
@@ -329,6 +348,7 @@ class CombatSystem {
     attacker.combatStatus = 'attacking';
     attacker.currentTargetId = targetId;
     attacker.targetType = targetType;
+    attacker.silentCombat = silent;
     if (targetType === 'unit' && target.combatStatus !== 'attacking') target.combatStatus = 'defending';
     if (targetType === 'base' && target.combatStatus !== 'destroyed') target.combatStatus = 'under_attack';
 
@@ -368,6 +388,7 @@ class CombatSystem {
     const targetPos = attacker.targetType === 'unit' ? this.movementSystem.getDisplayLonLat(target) : target.lonLat;
     const distanceKm = d3.geoDistance(attackerPos, targetPos) * 6371;
     if (distanceKm > attacker.rangeKm) {
+      if (!attacker.silentCombat) setStatus(`${UNIT_DEFINITIONS[attacker.type].label} target moved out of range.`);
       setStatus(`${UNIT_DEFINITIONS[attacker.type].label} target moved out of range.`);
       return this.clearUnitCombat(attacker);
     }
@@ -391,6 +412,7 @@ class CombatSystem {
         target.production.currentUnitId = null;
         target.production.queue = [];
       }
+      if (!attacker.silentCombat) setStatus(`${UNIT_DEFINITIONS[attacker.type].label} destroyed ${attacker.targetType} #${attacker.currentTargetId}.`);
       setStatus(`${UNIT_DEFINITIONS[attacker.type].label} destroyed ${attacker.targetType} #${attacker.currentTargetId}.`);
       this.clearUnitCombat(attacker);
       renderBases();
@@ -408,6 +430,7 @@ class CombatSystem {
     unit.combatStatus = unit.status === 'destroyed' ? 'destroyed' : 'idle';
     unit.currentTargetId = null;
     unit.targetType = null;
+    unit.silentCombat = false;
   }
 }
 
@@ -418,6 +441,7 @@ class CaptureSystem {
     this.movementSystem = movementSystem;
   }
 
+  startCapture(unitId, targetType, targetId, silent = false) {
   startCapture(unitId, targetType, targetId) {
     const unit = this.gameState.units.find((u) => u.id === unitId);
     if (!unit || unit.status === 'destroyed') return { ok: false, message: 'Capturing unit is not available.' };
@@ -459,6 +483,7 @@ class CaptureSystem {
     });
     target.captureState.taskId = taskId;
 
+    return { ok: true, target, silent };
     return { ok: true, target };
   }
 
@@ -595,6 +620,115 @@ class EconomySystem {
   }
 }
 
+class AISystem {
+  constructor(gameState, scheduler, systems) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.productionSystem = systems.productionSystem;
+    this.movementSystem = systems.movementSystem;
+    this.combatSystem = systems.combatSystem;
+    this.captureSystem = systems.captureSystem;
+    this.economySystem = systems.economySystem;
+    this.started = false;
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleNext();
+  }
+
+  scheduleNext() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + AI_CONFIG.tickMs,
+      type: 'AI_TICK',
+      payload: {},
+      handler: () => this.tick()
+    });
+  }
+
+  tick() {
+    this.gameState.aiCountries.forEach((country) => this.runCountryTick(country));
+    this.scheduleNext();
+  }
+
+  runCountryTick(country) {
+    const aiBases = this.gameState.bases.filter((b) => b.ownerCountry === country && b.status === 'active' && b.combatStatus !== 'destroyed');
+    const aiUnits = this.gameState.units.filter((u) => u.ownerCountry === country && u.status === 'active');
+    const enemyCities = this.gameState.cities.filter((c) => c.ownerCountry !== country && c.status !== 'destroyed');
+    const enemyBases = this.gameState.bases.filter((b) => b.ownerCountry !== country && b.combatStatus !== 'destroyed');
+    const enemyUnits = this.gameState.units.filter((u) => u.ownerCountry !== country && u.status !== 'destroyed');
+
+    aiBases.forEach((base) => {
+      if (base.production.currentUnitId || base.production.queue.length) return;
+      const options = this.productionSystem.getAllowedUnitsForBase(base).sort((a, b) => (ECONOMY_CONFIG.unitBuildCost[a.key] || 0) - (ECONOMY_CONFIG.unitBuildCost[b.key] || 0));
+      for (const option of options) {
+        const result = this.productionSystem.queueUnit(base.id, option.key, country);
+        if (result.ok) break;
+      }
+    });
+
+    aiUnits.forEach((unit) => {
+      if (unit.movement || unit.captureTarget || unit.combatStatus === 'attacking' || unit.combatStatus === 'defending') return;
+
+      const capturableCity = enemyCities.find((city) => this.distanceKm(unit, city.lonLat) <= CAPTURE_CONFIG.captureRangeKm && unit.domain === 'ground');
+      if (capturableCity) {
+        this.captureSystem.startCapture(unit.id, 'city', capturableCity.id, true);
+        return;
+      }
+      const capturableBase = enemyBases.find((base) => this.distanceKm(unit, base.lonLat) <= CAPTURE_CONFIG.captureRangeKm && unit.domain === 'ground');
+      if (capturableBase) {
+        this.captureSystem.startCapture(unit.id, 'base', capturableBase.id, true);
+        return;
+      }
+
+      const attackableUnit = enemyUnits.find((target) => this.distanceKm(unit, this.movementSystem.getDisplayLonLat(target)) <= unit.rangeKm);
+      if (attackableUnit) {
+        this.combatSystem.startAttack(unit.id, 'unit', attackableUnit.id, false, true);
+        return;
+      }
+      const attackableBase = enemyBases.find((target) => this.distanceKm(unit, target.lonLat) <= unit.rangeKm);
+      if (attackableBase) {
+        this.combatSystem.startAttack(unit.id, 'base', attackableBase.id, false, true);
+        return;
+      }
+
+      const nearestTarget = this.findNearestTargetLonLat(unit, [...enemyCities.map((c) => c.lonLat), ...enemyBases.map((b) => b.lonLat)]);
+      if (nearestTarget) {
+        this.movementSystem.issueMoveOrder(unit.id, nearestTarget, true);
+      }
+    });
+
+    if (aiBases.length < AI_CONFIG.baseThreshold && this.economySystem.getTreasury(country) >= AI_CONFIG.baseExpansionTreasury) {
+      const ownedCity = this.gameState.cities.find((city) => city.ownerCountry === country);
+      if (ownedCity && this.economySystem.spend(country, ECONOMY_CONFIG.baseBuildCost.ground, 'AI base expansion')) {
+        const lonLat = [ownedCity.lonLat[0] + 1.5, ownedCity.lonLat[1] + 1];
+        const base = createBase('ground', lonLat, country);
+        base.status = 'active';
+        base.buildCompleteAt = this.gameState.currentTimeMs;
+      }
+    }
+  }
+
+  distanceKm(unit, lonLat) {
+    return d3.geoDistance(this.movementSystem.getDisplayLonLat(unit), lonLat) * 6371;
+  }
+
+  findNearestTargetLonLat(unit, targetLonLats) {
+    if (!targetLonLats.length) return null;
+    let best = targetLonLats[0];
+    let bestDistance = this.distanceKm(unit, best);
+    for (const target of targetLonLats.slice(1)) {
+      const d = this.distanceKm(unit, target);
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = target;
+      }
+    }
+    return best;
+  }
+}
+
 const gameState = {
   selectedPlayerCountry: null,
   currentTimeMs: Date.parse(GAME_START_ISO),
@@ -613,6 +747,7 @@ const gameState = {
   captureMode: false,
   selectedAsset: null,
   enemySpawned: false,
+  aiCountries: [],
   economy: {
     treasuryByCountry: {},
     lastTickAt: null,
@@ -633,6 +768,13 @@ const movementSystem = new MovementSystem(gameState, scheduler);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem);
 const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem);
 const economySystem = new EconomySystem(gameState, scheduler);
+const aiSystem = new AISystem(gameState, scheduler, {
+  productionSystem,
+  movementSystem,
+  combatSystem,
+  captureSystem,
+  economySystem
+});
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -646,6 +788,7 @@ const gameDateTime = document.getElementById('gameDateTime');
 const simSpeedLabel = document.getElementById('simSpeedLabel');
 const treasuryLabel = document.getElementById('treasuryLabel');
 const economySummary = document.getElementById('economySummary');
+const aiCountriesLabel = document.getElementById('aiCountriesLabel');
 const prodBaseLabel = document.getElementById('prodBaseLabel');
 const prodUnitButtons = document.getElementById('prodUnitButtons');
 const prodCurrent = document.getElementById('prodCurrent');
@@ -749,12 +892,14 @@ function refreshTimeHud() {
 function refreshEconomyHud() {
   if (!gameState.selectedPlayerCountry) {
     treasuryLabel.textContent = 'Treasury: --';
+    aiCountriesLabel.textContent = 'AI Countries: --';
     economySummary.textContent = 'Economy: --';
     return;
   }
   const country = gameState.selectedPlayerCountry.properties.name;
   const treasury = economySystem.getTreasury(country);
   treasuryLabel.textContent = `Treasury: ${treasury.toLocaleString()}`;
+  aiCountriesLabel.textContent = `AI Countries: ${gameState.aiCountries.length ? gameState.aiCountries.join(', ') : 'none'}`;
   economySummary.textContent = `Economy: ${gameState.economy.lastSummary}`;
 }
 
@@ -862,6 +1007,9 @@ function spawnEnemyForces() {
   };
   gameState.bases.push(enemyBase);
   economySystem.ensureCountry(enemyBase.ownerCountry);
+  if (!gameState.aiCountries.includes(enemyBase.ownerCountry)) {
+    gameState.aiCountries.push(enemyBase.ownerCountry);
+  }
 
   const def = UNIT_DEFINITIONS.infantry;
   gameState.units.push({
@@ -889,6 +1037,7 @@ function spawnEnemyForces() {
   });
 
   gameState.enemySpawned = true;
+  aiSystem.start();
   renderBases();
   renderUnits();
 }
@@ -990,11 +1139,16 @@ function skipGameTime(deltaGameMs) {
   refreshTimeHud();
 }
 
+function createBase(baseInput, lonLatArg = null, ownerCountryArg = null) {
+  const type = typeof baseInput === 'string' ? baseInput : baseInput.type;
+  const lonLat = Array.isArray(lonLatArg) ? lonLatArg : baseInput.lonLat;
+  const ownerCountry = ownerCountryArg || (gameState.selectedPlayerCountry && gameState.selectedPlayerCountry.properties.name);
 function createBase({ type, lonLat }) {
   const now = gameState.currentTimeMs;
   const buildDurationMs = BASE_BUILD_DURATIONS_MS[type] ?? 3 * DAY_MS;
   const base = {
     id: gameState.nextBaseId++,
+    ownerCountry,
     ownerCountry: gameState.selectedPlayerCountry.properties.name,
     type,
     lonLat,
@@ -1092,6 +1246,7 @@ function renderBases() {
     })
     .select('rect')
     .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color)
+    .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
     .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
 
   points
@@ -1160,6 +1315,7 @@ function renderUnits() {
   enter.append('title');
   markers
     .merge(enter)
+    .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
     .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
     .attr('cx', (d) => projection(movementSystem.getDisplayLonLat(d))[0])
     .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
