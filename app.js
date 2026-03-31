@@ -759,6 +759,31 @@ async function setupMap() {
 
   countries = await loadCountriesData();
 
+  function placeBaseFromEvent(event) {
+    const [x, y] = d3.pointer(event, svg.node());
+    const lonLat = projection.invert([x, y]);
+    if (!lonLat) return;
+
+    if (!gameState.selectedPlayerCountry) {
+      setStatus('Start from Play in the main menu before placing bases.', true);
+      return;
+    }
+
+    const clickedCountry = countries.find((country) => pointInsideCountry(country, lonLat));
+    if (!clickedCountry || clickedCountry.id !== gameState.selectedPlayerCountry.id) {
+      setStatus(`Place bases only inside ${gameState.selectedPlayerCountry.properties.name}.`, true);
+      return;
+    }
+
+    const base = createBase({ type: selectedBaseType, lonLat });
+    gameState.selectedBaseId = base.id;
+    renderBases();
+    renderProductionPanel();
+
+    const completeText = formatDateTime(base.buildCompleteAt);
+    setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
+  }
+
   countriesLayer
     .selectAll('path')
     .data(countries)
@@ -789,6 +814,9 @@ async function setupMap() {
       selectedCountryLabel.textContent = `Selected: ${d.properties.name}`;
       renderCityList(d.properties.name);
       updateCountryStyles();
+
+      // When already in-game and clicking inside your country, place a base.
+      placeBaseFromEvent(event);
     });
 
   citiesLayer
@@ -804,28 +832,7 @@ async function setupMap() {
     .text((d) => `${d.name}, ${d.country}`);
 
   svg.on('click', function (event) {
-    const [x, y] = d3.pointer(event, this);
-    const lonLat = projection.invert([x, y]);
-    if (!lonLat) return;
-
-    if (!gameState.selectedPlayerCountry) {
-      setStatus('Start from Play in the main menu before placing bases.', true);
-      return;
-    }
-
-    const clickedCountry = countries.find((country) => pointInsideCountry(country, lonLat));
-    if (!clickedCountry || clickedCountry.id !== gameState.selectedPlayerCountry.id) {
-      setStatus(`Place bases only inside ${gameState.selectedPlayerCountry.properties.name}.`, true);
-      return;
-    }
-
-    const base = createBase({ type: selectedBaseType, lonLat });
-    gameState.selectedBaseId = base.id;
-    renderBases();
-    renderProductionPanel();
-
-    const completeText = formatDateTime(base.buildCompleteAt);
-    setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
+    placeBaseFromEvent(event);
   });
 
   renderCityList();
