@@ -732,6 +732,18 @@ function renderProductionPanel() {
   });
 }
 
+function refreshProductionTicker() {
+  const base = gameState.bases.find((entry) => entry.id === gameState.selectedBaseId);
+  if (!base) return;
+  const currentUnit = base.production.currentUnitId
+    ? gameState.units.find((unit) => unit.id === base.production.currentUnitId)
+    : null;
+  if (!currentUnit) return;
+  const remainingMs = Math.max(0, base.production.currentCompleteAt - gameState.currentTimeMs);
+  const remainingDays = (remainingMs / DAY_MS).toFixed(2);
+  prodCurrent.textContent = `Current: ${UNIT_DEFINITIONS[currentUnit.type].label} (${remainingDays} days left)`;
+}
+
 function attachMenuHandlers() {
   document.getElementById('playBtn').addEventListener('click', () => {
     playStep = 1;
@@ -868,7 +880,7 @@ function startSimulationLoop() {
 
     scheduler.processDue(gameState.currentTimeMs);
     refreshTimeHud();
-    renderProductionPanel();
+    refreshProductionTicker();
     renderSelectedUnitPanel();
     renderUnits();
 
