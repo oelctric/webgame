@@ -47,6 +47,37 @@
     </div>
 
     <div class="card">
+      <h2>Country State</h2>
+      <p id="countryHudName">Country: --</p>
+      <p id="countryHudTreasury">Treasury: --</p>
+      <p id="countryHudPop">Population: --</p>
+      <p id="countryHudStability">Stability: --</p>
+      <p id="countryHudIndustry">Industry: --</p>
+      <p id="countryHudManpower">Manpower: --</p>
+      <p id="countryHudAssets">Cities/Bases/Units: --</p>
+      <p id="countryHudFlow">Income/Upkeep/Net: --</p>
+    </div>
+
+    <div class="card">
+      <h2>Diplomacy</h2>
+      <p id="diplomacyFocusCountry">Diplomacy for: --</p>
+      <p id="diplomacySummary">Diplomacy: --</p>
+      <div class="field">
+        <label for="diplomacyTargetCountry">Target Country</label>
+        <select id="diplomacyTargetCountry"></select>
+      </div>
+      <div class="row">
+        <button id="declareWarBtn">Declare War</button>
+        <button id="makePeaceBtn">Make Peace</button>
+      </div>
+      <div class="row">
+        <button id="improveRelationsBtn">Improve +10</button>
+        <button id="worsenRelationsBtn">Worsen -10</button>
+      </div>
+      <ul id="relationsList"></ul>
+    </div>
+
+    <div class="card">
       <h2>Base Production</h2>
       <p id="prodBaseLabel">Select a base to manage production.</p>
       <div class="row" id="prodUnitButtons"></div>

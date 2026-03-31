@@ -102,11 +102,10 @@
     .unit-marker { fill: #ffffff; stroke: #111; stroke-width: 0.4; }
     .unit-marker.selected { fill: #ffde59; stroke: #000; stroke-width: 0.8; }
     .unit-marker.enemy-owner { fill: #ff8d8d; }
-    .unit-marker { fill: #ffffff; stroke: #111; stroke-width: 0.4; }
-    .unit-marker.selected { fill: #ffde59; stroke: #000; stroke-width: 0.8; }
     .unit-marker.attacking { fill: #ff7a7a; }
     .unit-marker.defending { fill: #7ad8ff; }
-    #prodQueue, #unitList { margin: 0.4rem 0 0; padding-left: 1rem; }
+    #prodQueue, #unitList, #relationsList { margin: 0.4rem 0 0; padding-left: 1rem; }
+    #relationsList { max-height: 180px; overflow-y: auto; }
 
     .tooltip {
       position: absolute;
