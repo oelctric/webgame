@@ -142,6 +142,7 @@
           <option value="financial_panic">Financial Panic</option>
           <option value="protest_wave">Protest Wave</option>
           <option value="border_incident">Border Incident</option>
+          <option value="chokepoint_disruption">Chokepoint Disruption</option>
         </select>
       </div>
       <div class="field">
@@ -157,6 +158,32 @@
       <ul id="activeEventsList"></ul>
       <p><strong>Recent events:</strong></p>
       <ul id="eventLogList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Chokepoints & Route Pressure</h2>
+      <p id="chokepointSummary">Route pressure: --</p>
+      <div class="field">
+        <label for="chokepointSelect">Chokepoint</label>
+        <select id="chokepointSelect"></select>
+      </div>
+      <div class="field">
+        <label for="chokepointControllerSelect">Controller</label>
+        <select id="chokepointControllerSelect"></select>
+      </div>
+      <div class="row">
+        <button id="chokepointOpenBtn">Set Open</button>
+        <button id="chokepointRestrictedBtn">Set Restricted</button>
+        <button id="chokepointBlockedBtn">Set Blocked</button>
+      </div>
+      <div class="row">
+        <button id="chokepointContestedToggleBtn">Toggle Contested</button>
+        <button id="assignChokepointControllerBtn">Assign Controller</button>
+      </div>
+      <div class="row">
+        <button id="recomputeRoutePressureBtn">Recompute Route Pressure</button>
+      </div>
+      <ul id="chokepointList"></ul>
     </div>
 
     <div class="card">

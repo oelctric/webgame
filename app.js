@@ -149,7 +149,8 @@ const EVENT_CONFIG = {
     industrial_strike: 8 * DAY_MS,
     financial_panic: 9 * DAY_MS,
     protest_wave: 7 * DAY_MS,
-    border_incident: 5 * DAY_MS
+    border_incident: 5 * DAY_MS,
+    chokepoint_disruption: 6 * DAY_MS
   }
 };
 
@@ -164,6 +165,51 @@ const NEGOTIATION_CONFIG = {
   temporaryTradeDefaultDays: 60,
   tickMs: DAY_MS
 };
+
+const CHOKEPOINT_CONFIG = {
+  tickMs: DAY_MS,
+  stateEfficiency: {
+    open: 1,
+    restricted: 0.55,
+    blocked: 0
+  },
+  contestedPenalty: 0.8
+};
+
+const CHOKEPOINT_DEFINITIONS = [
+  {
+    id: 'suez_corridor',
+    name: 'Suez Corridor',
+    position: [32.3, 30.0],
+    region: 'Mediterranean-Red Sea',
+    controllingCountryId: 'Egypt',
+    strategicValue: 92
+  },
+  {
+    id: 'malacca_strait',
+    name: 'Malacca Strait',
+    position: [101.0, 2.5],
+    region: 'Indian-Pacific',
+    controllingCountryId: 'Singapore',
+    strategicValue: 95
+  },
+  {
+    id: 'hormuz_strait',
+    name: 'Strait of Hormuz',
+    position: [56.3, 26.5],
+    region: 'Gulf Gateway',
+    controllingCountryId: 'Oman',
+    strategicValue: 90
+  },
+  {
+    id: 'gibraltar_passage',
+    name: 'Gibraltar Passage',
+    position: [-5.4, 35.9],
+    region: 'Atlantic-Mediterranean',
+    controllingCountryId: 'Spain',
+    strategicValue: 78
+  }
+];
 
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
@@ -954,7 +1000,7 @@ class EventSystem {
       && JSON.stringify(event.targetCountryIds || []) === JSON.stringify(targetCountryIds || []));
   }
 
-  createEvent(type, { targetCountryId = null, targetCountryIds = [], severity = EVENT_CONFIG.defaultSeverity } = {}) {
+  createEvent(type, { targetCountryId = null, targetCountryIds = [], targetChokepointId = null, severity = EVENT_CONFIG.defaultSeverity } = {}) {
     if (!type || (!targetCountryId && !targetCountryIds.length)) return null;
     if (this.hasDuplicateActive(type, targetCountryId, targetCountryIds)) return null;
     const startTime = this.gameState.currentTimeMs;
@@ -966,6 +1012,7 @@ class EventSystem {
       description: this.getDescription(type),
       targetCountryId,
       targetCountryIds: targetCountryIds.length ? [...targetCountryIds] : (targetCountryId ? [targetCountryId] : []),
+      targetChokepointId,
       startTime,
       endTime: startTime + duration,
       duration,
@@ -987,7 +1034,8 @@ class EventSystem {
       industrial_strike: 'Industrial Strike',
       financial_panic: 'Financial Panic',
       protest_wave: 'Protest Wave',
-      border_incident: 'Border Incident'
+      border_incident: 'Border Incident',
+      chokepoint_disruption: 'Chokepoint Disruption'
     };
     return titles[type] || 'Unknown Event';
   }
@@ -998,7 +1046,8 @@ class EventSystem {
       industrial_strike: 'Strike action lowers productive output and raises unrest.',
       financial_panic: 'Capital flight and fear reduce income and increase economic stress.',
       protest_wave: 'Mass protest movement increases unrest and pressures stability.',
-      border_incident: 'Border confrontation increases bilateral tension.'
+      border_incident: 'Border confrontation increases bilateral tension.',
+      chokepoint_disruption: 'Strategic route disruption restricts a major chokepoint and pressures connected trade.'
     };
     return descriptions[type] || 'No description.';
   }
@@ -1009,7 +1058,8 @@ class EventSystem {
       industrial_strike: { incomeMultiplier: 0.88, industryGrowthMultiplier: 0.8, unrestDrift: 0.18 },
       financial_panic: { incomeMultiplier: 0.82, treasuryDailyDelta: -60, economicStressDrift: 0.22 },
       protest_wave: { unrestDrift: 0.28, stabilityDrift: -0.16 },
-      border_incident: { relationDailyDelta: -2, warWearinessDrift: 0.06 }
+      border_incident: { relationDailyDelta: -2, warWearinessDrift: 0.06 },
+      chokepoint_disruption: { chokepointOpenState: 'blocked', economicStressDrift: 0.08 }
     };
     return effects[type] || {};
   }
@@ -1089,10 +1139,13 @@ class EventSystem {
     if (!countries.length) return;
     const primary = countries[Math.floor(Math.random() * countries.length)];
     const secondary = countries.find((name) => name !== primary);
-    const types = ['oil_supply_shock', 'industrial_strike', 'financial_panic', 'protest_wave', 'border_incident'];
+    const types = ['oil_supply_shock', 'industrial_strike', 'financial_panic', 'protest_wave', 'border_incident', 'chokepoint_disruption'];
     const type = types[Math.floor(Math.random() * types.length)];
     if (type === 'border_incident' && secondary) {
       this.createEvent(type, { targetCountryIds: [primary, secondary] });
+    } else if (type === 'chokepoint_disruption' && this.gameState.chokepoints.points.length) {
+      const target = this.gameState.chokepoints.points[Math.floor(Math.random() * this.gameState.chokepoints.points.length)];
+      this.createEvent(type, { targetCountryId: primary, targetChokepointId: target.id });
     } else {
       this.createEvent(type, { targetCountryId: primary });
     }
@@ -1122,12 +1175,157 @@ class EventSystem {
   }
 }
 
+class ChokepointSystem {
+  constructor(gameState, scheduler, diplomacySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.diplomacySystem = diplomacySystem;
+    this.started = false;
+  }
+
+  initializeDefaults() {
+    if (this.gameState.chokepoints.points.length) return;
+    this.gameState.chokepoints.points = CHOKEPOINT_DEFINITIONS.map((cp) => ({
+      ...cp,
+      contested: false,
+      openState: 'open',
+      connectedTradeFlowIds: [],
+      lastChangedAt: this.gameState.currentTimeMs,
+      disruptionSource: null
+    }));
+  }
+
+  getChokepoint(chokepointId) {
+    return this.gameState.chokepoints.points.find((cp) => cp.id === chokepointId) || null;
+  }
+
+  setOpenState(chokepointId, openState, reason = 'manual') {
+    const chokepoint = this.getChokepoint(chokepointId);
+    if (!chokepoint || !CHOKEPOINT_CONFIG.stateEfficiency[openState]) return null;
+    chokepoint.openState = openState;
+    chokepoint.lastChangedAt = this.gameState.currentTimeMs;
+    chokepoint.disruptionSource = reason;
+    this.gameState.chokepoints.lastSummary = `${chokepoint.name} set to ${openState.toUpperCase()} (${reason}).`;
+    return chokepoint;
+  }
+
+  setController(chokepointId, controllingCountryId) {
+    const chokepoint = this.getChokepoint(chokepointId);
+    if (!chokepoint) return null;
+    chokepoint.controllingCountryId = controllingCountryId || null;
+    chokepoint.lastChangedAt = this.gameState.currentTimeMs;
+    this.gameState.chokepoints.lastSummary = `${chokepoint.name} control set to ${controllingCountryId || 'None'}.`;
+    return chokepoint;
+  }
+
+  setContested(chokepointId, contested = true) {
+    const chokepoint = this.getChokepoint(chokepointId);
+    if (!chokepoint) return null;
+    chokepoint.contested = Boolean(contested);
+    chokepoint.lastChangedAt = this.gameState.currentTimeMs;
+    this.gameState.chokepoints.lastSummary = `${chokepoint.name} is now ${contested ? 'contested' : 'stable'}.`;
+    return chokepoint;
+  }
+
+  getRouteEfficiency(flow) {
+    if (!flow.requiredChokepoints?.length) return { efficiency: 1, reason: null };
+    let efficiency = 1;
+    let hardBlockedBy = null;
+    flow.requiredChokepoints.forEach((id) => {
+      const chokepoint = this.getChokepoint(id);
+      if (!chokepoint) return;
+      const stateEff = CHOKEPOINT_CONFIG.stateEfficiency[chokepoint.openState] ?? 1;
+      efficiency *= stateEff;
+      if (chokepoint.contested) efficiency *= CHOKEPOINT_CONFIG.contestedPenalty;
+      if (stateEff <= 0.01) hardBlockedBy = chokepoint.name;
+    });
+    if (hardBlockedBy) return { efficiency: 0, reason: `chokepoint_blocked:${hardBlockedBy}` };
+    return { efficiency, reason: efficiency < 0.999 ? 'chokepoint_restriction' : null };
+  }
+
+  assignFlowDependencies(flow) {
+    const routeRules = [
+      { id: 'hormuz_strait', exporters: ['Saudi Arabia', 'Iraq', 'Iran', 'Kuwait', 'United Arab Emirates', 'Qatar', 'Oman'], resources: ['oil'] },
+      { id: 'suez_corridor', exporters: ['Saudi Arabia', 'Iraq', 'Kuwait', 'United Arab Emirates', 'Egypt'], importers: ['United Kingdom', 'France', 'Germany', 'Italy', 'Spain'], resources: ['oil', 'industry_support'] },
+      { id: 'malacca_strait', exporters: ['Saudi Arabia', 'United Arab Emirates', 'India', 'Australia'], importers: ['China', 'Japan', 'South Korea', 'Indonesia'], resources: ['oil', 'industry_support'] },
+      { id: 'gibraltar_passage', exporters: ['United States of America', 'Brazil', 'Argentina'], importers: ['France', 'Germany', 'Italy', 'Egypt'], resources: ['oil', 'industry_support'] }
+    ];
+    const deps = routeRules
+      .filter((rule) => (!rule.exporters || rule.exporters.includes(flow.exporterCountryId))
+        && (!rule.importers || rule.importers.includes(flow.importerCountryId))
+        && (!rule.resources || rule.resources.includes(flow.resourceType)))
+      .map((rule) => rule.id);
+    flow.requiredChokepoints = deps;
+    return deps;
+  }
+
+  applyWarPressure() {
+    this.gameState.chokepoints.points.forEach((chokepoint) => {
+      if (!chokepoint.controllingCountryId) return;
+      const relations = this.diplomacySystem.getRelationsForCountry(chokepoint.controllingCountryId);
+      const atWar = relations.some((relation) => relation.status === 'war');
+      const hostile = relations.some((relation) => relation.status === 'hostile' && relation.relationScore < -60);
+      if (atWar && chokepoint.openState === 'open') {
+        chokepoint.openState = 'restricted';
+        chokepoint.disruptionSource = 'war_pressure';
+      } else if (!atWar && !hostile && chokepoint.disruptionSource === 'war_pressure') {
+        chokepoint.openState = 'open';
+        chokepoint.disruptionSource = 'stabilized';
+      }
+      chokepoint.contested = atWar || hostile;
+    });
+  }
+
+  applyEventPressure() {
+    this.gameState.chokepoints.points.forEach((chokepoint) => {
+      if (chokepoint.disruptionSource?.startsWith('event:')) {
+        chokepoint.openState = 'open';
+        chokepoint.contested = false;
+        chokepoint.disruptionSource = 'event_resolved';
+      }
+    });
+    const disruptions = this.gameState.events.active.filter((event) => event.active && event.type === 'chokepoint_disruption');
+    disruptions.forEach((event) => {
+      const chokepoint = this.getChokepoint(event.targetChokepointId);
+      if (!chokepoint) return;
+      chokepoint.openState = event.effects.chokepointOpenState || 'restricted';
+      chokepoint.contested = true;
+      chokepoint.disruptionSource = `event:${event.title}`;
+      chokepoint.lastChangedAt = this.gameState.currentTimeMs;
+    });
+  }
+
+  processTick() {
+    this.applyWarPressure();
+    this.applyEventPressure();
+    refreshChokepointHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + CHOKEPOINT_CONFIG.tickMs,
+      type: 'CHOKEPOINT_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.initializeDefaults();
+    this.scheduleTick();
+  }
+}
+
 class TradeSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
+    this.chokepointSystem = chokepointSystem;
     this.started = false;
     this.nextFlowId = 1;
   }
@@ -1172,7 +1370,9 @@ class TradeSystem {
       existing.tradeValue = tradeValue;
       existing.active = active;
       existing.blockedReason = blockedReason;
+      if (!existing.requiredChokepoints) existing.requiredChokepoints = [];
       existing.updatedAt = this.gameState.currentTimeMs;
+      this.chokepointSystem.assignFlowDependencies(existing);
       return existing;
     }
     const flow = {
@@ -1186,8 +1386,11 @@ class TradeSystem {
       updatedAt: this.gameState.currentTimeMs,
       blockedReason,
       tradeValue,
-      manual
+      manual,
+      requiredChokepoints: [],
+      routeEfficiency: 1
     };
+    this.chokepointSystem.assignFlowDependencies(flow);
     this.gameState.trade.flows.push(flow);
     return flow;
   }
@@ -1253,17 +1456,27 @@ class TradeSystem {
       const exporter = this.countrySystem.ensureCountry(flow.exporterCountryId);
       const importer = this.countrySystem.ensureCountry(flow.importerCountryId);
       if (!exporter || !importer) return;
+      const route = this.chokepointSystem.getRouteEfficiency(flow);
+      flow.routeEfficiency = route.efficiency;
+      if (route.reason?.startsWith('chokepoint_blocked')) {
+        flow.blockedReason = route.reason;
+        return;
+      }
+      const effectiveFlow = flow.flowAmount * Math.max(0, route.efficiency);
+      if (effectiveFlow <= 0.05) return;
+      flow.blockedReason = route.reason;
       if (flow.resourceType === 'oil') {
-        const deliverable = Math.min(flow.flowAmount, exporter.oil);
+        const deliverable = Math.min(effectiveFlow, exporter.oil);
         exporter.oil -= deliverable;
         importer.oil += deliverable;
         importer.tradeStressRelief += deliverable * 0.02;
       } else if (flow.resourceType === 'industry_support') {
-        importer.tradeIndustrySupportBonus += flow.flowAmount * 0.12;
-        importer.tradeStressRelief += flow.flowAmount * 0.015;
+        importer.tradeIndustrySupportBonus += effectiveFlow * 0.12;
+        importer.tradeStressRelief += effectiveFlow * 0.015;
       }
-      exporter.tradeIncomeBonus += flow.tradeValue;
-      importer.tradeIncomeBonus += flow.tradeValue * 0.35;
+      const effectiveTradeValue = flow.tradeValue * Math.max(0, route.efficiency);
+      exporter.tradeIncomeBonus += effectiveTradeValue;
+      importer.tradeIncomeBonus += effectiveTradeValue * 0.35;
     });
   }
 
@@ -1678,6 +1891,13 @@ class NegotiationSystem {
     const relation = this.diplomacySystem.makePeace(countryA, countryB, `${countryA} and ${countryB} signed a peace deal.`);
     if (!relation) return null;
     this.diplomacySystem.adjustRelationScore(countryA, countryB, 12, 'Peace deal normalization');
+    gameState.chokepoints.points
+      .filter((cp) => [countryA, countryB].includes(cp.controllingCountryId) && cp.disruptionSource === 'war_pressure')
+      .forEach((cp) => {
+        cp.openState = 'open';
+        cp.contested = false;
+        cp.disruptionSource = 'peace_reopened';
+      });
     this.gameState.negotiation.lastSummary = `Peace deal signed: ${countryA} ↔ ${countryB}.`;
     return relation;
   }
@@ -1724,6 +1944,9 @@ class NegotiationSystem {
     };
     this.diplomacySystem.setTradeAllowed(countryA, countryB, true);
     this.diplomacySystem.setTradeAllowed(countryB, countryA, true);
+    gameState.chokepoints.points
+      .filter((cp) => [countryA, countryB].includes(cp.controllingCountryId) && cp.openState === 'restricted')
+      .forEach((cp) => { cp.openState = 'open'; cp.disruptionSource = 'trade_restoration'; });
     this.diplomacySystem.adjustRelationScore(countryA, countryB, 4, 'Temporary trade restoration');
     this.tradeSystem.processTick();
     this.gameState.negotiation.lastSummary = `Temporary trade restored: ${countryA} ↔ ${countryB} (${this.formatDaysLeft(expiresAt)}).`;
@@ -2364,6 +2587,10 @@ const gameState = {
     autoEnabled: TRADE_CONFIG.autoGenerationEnabled,
     lastTickAt: null
   },
+  chokepoints: {
+    points: [],
+    lastSummary: 'No chokepoint updates yet.'
+  },
   events: {
     active: [],
     recentLog: []
@@ -2386,7 +2613,8 @@ const countrySystem = new CountrySystem(gameState, scheduler);
 const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem);
 const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
-const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem);
+const chokepointSystem = new ChokepointSystem(gameState, scheduler, diplomacySystem);
+const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem);
 const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacySystem, tradeSystem);
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
@@ -2475,6 +2703,16 @@ const eventSecondaryCountry = document.getElementById('eventSecondaryCountry');
 const triggerEventBtn = document.getElementById('triggerEventBtn');
 const activeEventsList = document.getElementById('activeEventsList');
 const eventLogList = document.getElementById('eventLogList');
+const chokepointSummary = document.getElementById('chokepointSummary');
+const chokepointSelect = document.getElementById('chokepointSelect');
+const chokepointControllerSelect = document.getElementById('chokepointControllerSelect');
+const chokepointOpenBtn = document.getElementById('chokepointOpenBtn');
+const chokepointRestrictedBtn = document.getElementById('chokepointRestrictedBtn');
+const chokepointBlockedBtn = document.getElementById('chokepointBlockedBtn');
+const chokepointContestedToggleBtn = document.getElementById('chokepointContestedToggleBtn');
+const assignChokepointControllerBtn = document.getElementById('assignChokepointControllerBtn');
+const recomputeRoutePressureBtn = document.getElementById('recomputeRoutePressureBtn');
+const chokepointList = document.getElementById('chokepointList');
 const tradeSummary = document.getElementById('tradeSummary');
 const tradeBalanceSummary = document.getElementById('tradeBalanceSummary');
 const toggleAutoTradeBtn = document.getElementById('toggleAutoTradeBtn');
@@ -2830,7 +3068,8 @@ function refreshEventHud() {
     active.forEach((event) => {
       const li = document.createElement('li');
       const remainingDays = Math.max(0, (event.endTime - gameState.currentTimeMs) / DAY_MS).toFixed(1);
-      li.textContent = `${event.title} (${remainingDays} days left)`;
+      const chokepointTag = event.targetChokepointId ? ` • chokepoint ${event.targetChokepointId}` : '';
+      li.textContent = `${event.title} (${remainingDays} days left)${chokepointTag}`;
       activeEventsList.appendChild(li);
     });
   }
@@ -2844,6 +3083,59 @@ function refreshEventHud() {
       li.textContent = `${formatDateTime(entry.at)}: ${entry.message}`;
       eventLogList.appendChild(li);
     });
+  }
+}
+
+function refreshChokepointHud() {
+  const chokepoints = gameState.chokepoints.points || [];
+  chokepointSummary.textContent = `Route pressure: ${gameState.chokepoints.lastSummary}`;
+  const previousChokepoint = chokepointSelect.value;
+  chokepointSelect.innerHTML = '';
+  chokepoints.forEach((cp) => {
+    const option = document.createElement('option');
+    option.value = cp.id;
+    option.textContent = cp.name;
+    chokepointSelect.appendChild(option);
+  });
+  if (previousChokepoint && chokepoints.some((cp) => cp.id === previousChokepoint)) {
+    chokepointSelect.value = previousChokepoint;
+  }
+
+  const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  const previousController = chokepointControllerSelect.value;
+  chokepointControllerSelect.innerHTML = '<option value="">None</option>';
+  names.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    chokepointControllerSelect.appendChild(option);
+  });
+  if (previousController && names.includes(previousController)) {
+    chokepointControllerSelect.value = previousController;
+  }
+
+  chokepointList.innerHTML = '';
+  if (!chokepoints.length) {
+    chokepointList.innerHTML = '<li>No chokepoints initialized.</li>';
+    [chokepointOpenBtn, chokepointRestrictedBtn, chokepointBlockedBtn, chokepointContestedToggleBtn, assignChokepointControllerBtn]
+      .forEach((btn) => { btn.disabled = true; });
+    return;
+  }
+  [chokepointOpenBtn, chokepointRestrictedBtn, chokepointBlockedBtn, chokepointContestedToggleBtn, assignChokepointControllerBtn]
+    .forEach((btn) => { btn.disabled = false; });
+
+  chokepoints.forEach((cp) => {
+    const linkedFlows = gameState.trade.flows.filter((flow) => flow.requiredChokepoints?.includes(cp.id));
+    const affectedCountries = new Set(linkedFlows.flatMap((flow) => [flow.exporterCountryId, flow.importerCountryId]));
+    const li = document.createElement('li');
+    li.textContent = `${cp.name} • ${cp.openState.toUpperCase()} • controller ${cp.controllingCountryId || 'None'} • contested ${cp.contested ? 'Yes' : 'No'} • linked flows ${linkedFlows.length} • countries ${affectedCountries.size}`;
+    chokepointList.appendChild(li);
+  });
+
+  const selected = chokepointSystem.getChokepoint(chokepointSelect.value);
+  if (selected) {
+    chokepointControllerSelect.value = selected.controllingCountryId || '';
+    chokepointContestedToggleBtn.textContent = selected.contested ? 'Mark Not Contested' : 'Mark Contested';
   }
 }
 
@@ -2884,7 +3176,9 @@ function refreshTradeHud() {
     flows.slice(-10).forEach((flow) => {
       const li = document.createElement('li');
       const dir = `${flow.exporterCountryId} → ${flow.importerCountryId}`;
-      li.textContent = `${flow.resourceType} ${flow.flowAmount.toFixed(1)} (${dir}) ${flow.active ? 'ACTIVE' : `BLOCKED:${flow.blockedReason || 'n/a'}`}`;
+      const routeLabel = flow.requiredChokepoints?.length ? ` via ${flow.requiredChokepoints.join(',')}` : '';
+      const efficiency = typeof flow.routeEfficiency === 'number' ? ` eff ${(flow.routeEfficiency * 100).toFixed(0)}%` : '';
+      li.textContent = `${flow.resourceType} ${flow.flowAmount.toFixed(1)} (${dir}) ${flow.active ? `ACTIVE${efficiency}` : `BLOCKED:${flow.blockedReason || 'n/a'}`}${routeLabel}${flow.blockedReason && flow.active ? ` (${flow.blockedReason})` : ''}`;
       tradeFlowsList.appendChild(li);
     });
   }
@@ -2965,6 +3259,7 @@ function setPlayerCountry(countryFeature) {
   eventSystem.start();
   diplomacySystem.start();
   resourceSystem.start();
+  chokepointSystem.start();
   tradeSystem.start();
   negotiationSystem.start();
   policySystem.start();
@@ -2979,6 +3274,7 @@ function setPlayerCountry(countryFeature) {
   refreshPolicyHud();
   refreshDomesticHud();
   refreshEventHud();
+  refreshChokepointHud();
   refreshTradeHud();
 }
 
@@ -3762,6 +4058,13 @@ function attachEventControls() {
         return;
       }
       created = eventSystem.createEvent(type, { targetCountryIds: [primary, secondary] });
+    } else if (type === 'chokepoint_disruption') {
+      const chokepointId = chokepointSelect.value;
+      if (!chokepointId) {
+        setStatus('Select a chokepoint before triggering chokepoint disruption.', true);
+        return;
+      }
+      created = eventSystem.createEvent(type, { targetCountryId: primary, targetChokepointId: chokepointId });
     } else {
       created = eventSystem.createEvent(type, { targetCountryId: primary });
     }
@@ -3771,6 +4074,54 @@ function attachEventControls() {
     }
     refreshEventHud();
   });
+}
+
+function attachChokepointControls() {
+  const selectedId = () => chokepointSelect.value;
+  const setState = (state) => {
+    const chokepoint = chokepointSystem.setOpenState(selectedId(), state, 'manual');
+    if (!chokepoint) {
+      setStatus('Unable to update chokepoint state.', true);
+      return;
+    }
+    tradeSystem.processTick();
+    refreshChokepointHud();
+    refreshTradeHud();
+    setStatus(`${chokepoint.name} set to ${state}.`);
+  };
+
+  chokepointOpenBtn.addEventListener('click', () => setState('open'));
+  chokepointRestrictedBtn.addEventListener('click', () => setState('restricted'));
+  chokepointBlockedBtn.addEventListener('click', () => setState('blocked'));
+  chokepointContestedToggleBtn.addEventListener('click', () => {
+    const chokepoint = chokepointSystem.getChokepoint(selectedId());
+    if (!chokepoint) {
+      setStatus('Select a chokepoint first.', true);
+      return;
+    }
+    chokepointSystem.setContested(chokepoint.id, !chokepoint.contested);
+    tradeSystem.processTick();
+    refreshChokepointHud();
+    refreshTradeHud();
+    setStatus(`${chokepoint.name} contestation toggled.`);
+  });
+  assignChokepointControllerBtn.addEventListener('click', () => {
+    const chokepoint = chokepointSystem.setController(selectedId(), chokepointControllerSelect.value || null);
+    if (!chokepoint) {
+      setStatus('Unable to assign chokepoint controller.', true);
+      return;
+    }
+    refreshChokepointHud();
+    refreshDiplomacyHud();
+    setStatus(`Controller updated for ${chokepoint.name}.`);
+  });
+  recomputeRoutePressureBtn.addEventListener('click', () => {
+    tradeSystem.processTick();
+    refreshTradeHud();
+    refreshChokepointHud();
+    setStatus('Route pressure recomputed.');
+  });
+  chokepointSelect.addEventListener('change', () => refreshChokepointHud());
 }
 
 function attachTradeControls() {
@@ -3881,6 +4232,7 @@ function startSimulationLoop() {
     refreshPolicyHud();
     refreshDomesticHud();
     refreshEventHud();
+    refreshChokepointHud();
     refreshTradeHud();
     refreshProductionTicker();
     renderSelectedUnitPanel();
@@ -4036,6 +4388,7 @@ async function init() {
   attachNegotiationControls();
   attachPolicyControls();
   attachEventControls();
+  attachChokepointControls();
   attachTradeControls();
   refreshTimeHud();
   refreshEconomyHud();
@@ -4044,6 +4397,7 @@ async function init() {
   refreshPolicyHud();
   refreshDomesticHud();
   refreshEventHud();
+  refreshChokepointHud();
   refreshTradeHud();
   renderSelectedUnitPanel();
 
