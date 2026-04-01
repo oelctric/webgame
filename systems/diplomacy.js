@@ -1,8 +1,9 @@
 class DiplomacySystem {
-  constructor(gameState, scheduler, countrySystem) {
+  constructor(gameState, scheduler, countrySystem, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
   }
 
@@ -151,18 +152,22 @@ class DiplomacySystem {
       this.gameState.diplomacy.lastSummary = `${sourceCountry} avoided sanctioning bloc partner ${targetCountry}.`;
       return null;
     }
+    const sourceProfile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getForeignPolicyBias(this.countrySystem.ensureCountry(sourceCountry))
+      : { sanctionsBias: 1 };
+    const requestedLevel = level === 'heavy' && (sourceProfile.sanctionsBias || 1) < 0.9 ? 'light' : level;
     relation.sanctionsBySource = relation.sanctionsBySource || {};
     relation.sanctionsBySource[sourceCountry] = {
-      sanctionsLevel: level,
+      sanctionsLevel: requestedLevel,
       tradeAllowed: relation.sanctionsBySource[sourceCountry]?.tradeAllowed ?? true,
       startedAt: this.gameState.currentTimeMs
     };
     relation.sanctions = true;
-    relation.sanctionsLevel = level;
+    relation.sanctionsLevel = requestedLevel;
     relation.sanctionsSourceCountry = sourceCountry;
     relation.sanctionsStartedAt = this.gameState.currentTimeMs;
     relation.lastChangedAt = this.gameState.currentTimeMs;
-    this.gameState.diplomacy.lastSummary = `${sourceCountry} imposed ${level} sanctions on ${targetCountry}.`;
+    this.gameState.diplomacy.lastSummary = `${sourceCountry} imposed ${requestedLevel} sanctions on ${targetCountry}.`;
     return relation;
   }
 
@@ -213,6 +218,16 @@ class DiplomacySystem {
     let blockedTradeCount = 0;
     let oilPenalty = 0;
 
+    const target = this.countrySystem.ensureCountry(targetCountry);
+    const economicProfile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getEconomicModifiers(target)
+      : {
+        sanctionsStressMult: 1,
+        sanctionsIndustryMult: 1,
+        sanctionsIncomeMult: 1,
+        sanctionsOilPenaltyMult: 1
+      };
+
     incoming.forEach(({ state }) => {
       if (state.sanctionsLevel === 'light') {
         incomeMultiplier *= 0.9;
@@ -234,6 +249,11 @@ class DiplomacySystem {
         oilPenalty += 0.03;
       }
     });
+
+    incomeMultiplier = 1 - ((1 - incomeMultiplier) * (economicProfile.sanctionsIncomeMult || 1));
+    industryMultiplier = 1 - ((1 - industryMultiplier) * (economicProfile.sanctionsIndustryMult || 1));
+    stressDrift *= (economicProfile.sanctionsStressMult || 1);
+    oilPenalty *= (economicProfile.sanctionsOilPenaltyMult || 1);
 
     return {
       incomingCount: incoming.length,

@@ -87,18 +87,19 @@ const gameClock = new GameClock({
 });
 
 const scheduler = new TaskScheduler(gameState);
-const countrySystem = new CountrySystem(gameState, scheduler);
-const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem);
+const governmentProfileSystem = new GovernmentProfileSystem(gameState);
+const countrySystem = new CountrySystem(gameState, scheduler, governmentProfileSystem);
+const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem, governmentProfileSystem);
 const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const chokepointSystem = new ChokepointSystem(gameState, scheduler, diplomacySystem);
 const blocSystem = new BlocSystem(gameState, scheduler, diplomacySystem, countrySystem);
-const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem);
+const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem, governmentProfileSystem);
 const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacySystem, tradeSystem);
-const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
-const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
-const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
-const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
+const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem, governmentProfileSystem);
+const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
@@ -118,7 +119,8 @@ const aiSystem = new AISystem(gameState, scheduler, {
   chokepointSystem,
   blocSystem,
   eventSystem,
-  negotiationSystem
+  negotiationSystem,
+  governmentProfileSystem
 });
 
 const svg = d3.select('#map');
@@ -176,6 +178,13 @@ const industryPolicySelect = document.getElementById('industryPolicySelect');
 const securityPolicySelect = document.getElementById('securityPolicySelect');
 const applyPolicyBtn = document.getElementById('applyPolicyBtn');
 const policyCostLabel = document.getElementById('policyCostLabel');
+const govProfileFocusCountry = document.getElementById('govProfileFocusCountry');
+const govProfileSummary = document.getElementById('govProfileSummary');
+const govProfileHint = document.getElementById('govProfileHint');
+const regimeTypeSelect = document.getElementById('regimeTypeSelect');
+const economicOrientationSelect = document.getElementById('economicOrientationSelect');
+const foreignPolicyStyleSelect = document.getElementById('foreignPolicyStyleSelect');
+const applyGovernmentProfileBtn = document.getElementById('applyGovernmentProfileBtn');
 const domesticFocusCountry = document.getElementById('domesticFocusCountry');
 const domesticStability = document.getElementById('domesticStability');
 const domesticUnrest = document.getElementById('domesticUnrest');
@@ -373,7 +382,8 @@ function refreshCountryHud() {
   const aiState = gameState.aiStateByCountry[countryName];
   const aiPosture = aiState?.posture;
   const strategicGoal = aiState?.strategicGoal;
-  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${strategicGoal ? `: ${strategicGoal}` : ''}${aiPosture ? ` / ${aiPosture}` : ''})` : ''}`;
+  const profileSummary = governmentProfileSystem.getProfileSummary(country);
+  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${strategicGoal ? `: ${strategicGoal}` : ''}${aiPosture ? ` / ${aiPosture}` : ''})` : ''} • ${profileSummary}`;
   countryHudTreasury.textContent = `Treasury: ${Math.round(country.treasury).toLocaleString()}`;
   countryHudPop.textContent = `Population: ${Math.round(country.population).toLocaleString()}`;
   countryHudStability.textContent = `Stability: ${country.stability.toFixed(1)}`;
@@ -510,6 +520,30 @@ function refreshNegotiationHud() {
     li.textContent = `Temporary trade ${agreement.countryA} ↔ ${agreement.countryB} (${negotiationSystem.formatDaysLeft(agreement.expiresAt)})`;
     negotiationStateList.appendChild(li);
   });
+}
+
+
+function refreshGovernmentProfileHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  if (!focusCountry) {
+    govProfileFocusCountry.textContent = 'Profile for: --';
+    govProfileSummary.textContent = 'Government profile: --';
+    govProfileHint.textContent = 'Profile effect: --';
+    [regimeTypeSelect, economicOrientationSelect, foreignPolicyStyleSelect, applyGovernmentProfileBtn]
+      .forEach((el) => { el.disabled = true; });
+    return;
+  }
+
+  const country = countrySystem.ensureCountry(focusCountry);
+  const profile = governmentProfileSystem.getProfile(country);
+  govProfileFocusCountry.textContent = `Profile for: ${focusCountry}`;
+  govProfileSummary.textContent = `Government profile: ${governmentProfileSystem.getProfileSummary(country)}`;
+  govProfileHint.textContent = `Profile effect: ${governmentProfileSystem.getProfileHint(country)}`;
+  regimeTypeSelect.value = profile.regimeType;
+  economicOrientationSelect.value = profile.economicOrientation;
+  foreignPolicyStyleSelect.value = profile.foreignPolicyStyle;
+  [regimeTypeSelect, economicOrientationSelect, foreignPolicyStyleSelect, applyGovernmentProfileBtn]
+    .forEach((el) => { el.disabled = false; });
 }
 
 function refreshPolicyHud() {
@@ -897,7 +931,8 @@ function setPlayerCountry(countryFeature) {
   gameState.selectedAsset = null;
   selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
   economySystem.ensureCountry(countryFeature.properties.name);
-  countrySystem.ensureCountry(countryFeature.properties.name, false);
+  const playerCountryState = countrySystem.ensureCountry(countryFeature.properties.name, false);
+  playerProfile.textContent = `Player country: ${countryFeature.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)})`;
   gameState.selectedCountryForHud = countryFeature.properties.name;
   renderCityList(countryFeature.properties.name);
   updateCountryStyles();
@@ -923,6 +958,7 @@ function setPlayerCountry(countryFeature) {
   refreshDiplomacyHud();
   refreshNegotiationHud();
   refreshPolicyHud();
+  refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -992,6 +1028,7 @@ function spawnEnemyForces() {
   renderUnits();
   refreshDiplomacyHud();
   refreshPolicyHud();
+  refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -1463,7 +1500,8 @@ function attachMenuHandlers() {
       return;
     }
 
-    playerProfile.textContent = `Leader ${leaderName} of ${gameState.selectedPlayerCountry.properties.name}`;
+    const playerCountryState = countrySystem.ensureCountry(gameState.selectedPlayerCountry.properties.name);
+    playerProfile.textContent = `Leader ${leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)})`;
     setStatus(`Commander ${leaderName}, place bases and run time to complete construction.`);
     hideOverlays();
   });
@@ -1694,6 +1732,32 @@ function attachPolicyControls() {
     refreshPolicyHud();
     refreshCountryHud();
     refreshDomesticHud();
+  });
+}
+
+
+function attachGovernmentProfileControls() {
+  applyGovernmentProfileBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const country = countrySystem.ensureCountry(focusCountry);
+    governmentProfileSystem.setCountryProfile(country, {
+      regimeType: regimeTypeSelect.value,
+      economicOrientation: economicOrientationSelect.value,
+      foreignPolicyStyle: foreignPolicyStyleSelect.value
+    });
+    gameState.policy.lastSummary = `${focusCountry} profile set to ${governmentProfileSystem.getProfileSummary(country)}.`;
+    setStatus(`Government profile updated for ${focusCountry}.`);
+    refreshGovernmentProfileHud();
+    refreshCountryHud();
+    refreshPolicyHud();
+    refreshDomesticHud();
+    refreshDiplomacyHud();
+    refreshTradeHud();
+    refreshMigrationHud();
   });
 }
 
@@ -1993,6 +2057,7 @@ function startSimulationLoop() {
     refreshDiplomacyHud();
     refreshNegotiationHud();
     refreshPolicyHud();
+    refreshGovernmentProfileHud();
     refreshDomesticHud();
     refreshMigrationHud();
     refreshEventHud();
@@ -2152,6 +2217,7 @@ async function init() {
   attachDiplomacyControls();
   attachNegotiationControls();
   attachPolicyControls();
+  attachGovernmentProfileControls();
   attachMigrationControls();
   attachEventControls();
   attachChokepointControls();
@@ -2162,6 +2228,7 @@ async function init() {
   refreshCountryHud();
   refreshDiplomacyHud();
   refreshPolicyHud();
+  refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshMigrationHud();
   refreshEventHud();

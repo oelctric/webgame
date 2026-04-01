@@ -16,6 +16,7 @@ class AISystem {
     this.blocSystem = systems.blocSystem;
     this.eventSystem = systems.eventSystem;
     this.negotiationSystem = systems.negotiationSystem;
+    this.governmentProfileSystem = systems.governmentProfileSystem || null;
     this.started = false;
   }
 
@@ -179,6 +180,21 @@ class AISystem {
     }
 
     const strengthScore = country.stability + country.industrialCapacity + (country.treasury / 120) + (country.manpowerPool / 220) - country.economicStress - country.warWeariness;
+
+    const foreignProfile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getForeignPolicyBias(country)
+      : {
+        escalationBias: 0,
+        deescalationBias: 1,
+        sanctionsBias: 1,
+        blocAffinity: 1,
+        tradePreservationBias: 1,
+        hostilityPersistence: 1
+      };
+    const domesticProfile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getDomesticModifiers(country)
+      : { warWearinessDriftMult: 1 };
+
     const rivalStrengthScore = rivalCountry
       ? (rivalCountry.stability + rivalCountry.industrialCapacity + (rivalCountry.treasury / 120) + (rivalCountry.manpowerPool / 220) - rivalCountry.economicStress)
       : 0;
@@ -207,18 +223,22 @@ class AISystem {
         activeCrisisCount: activeEvents.length,
         treasuryLow: country.treasury < 1100,
         domesticStrain: country.stability < 42 || country.unrest > 58 || country.economicStress > 60 || country.legitimacy < 45 || country.publicSupport < 43,
-        severeWarFatigue: country.warWeariness > 62 || (country.warWeariness > 48 && country.economicStress > 55) || country.publicSupport < 35,
+        severeWarFatigue: country.warWeariness > (58 / (domesticProfile.warWearinessDriftMult || 1)) || (country.warWeariness > 48 && country.economicStress > 55) || country.publicSupport < 35,
         isolated: blocs.length === 0,
         rivalBlocSize,
         rivalCrisisPressure,
         strengthDelta: strengthScore - rivalStrengthScore,
         politicalWeakness: country.legitimacy < 40 || country.publicSupport < 38 || country.eliteSupport < 36
+      },
+      profile: {
+        foreign: foreignProfile,
+        domestic: domesticProfile
       }
     };
   }
 
   selectStrategicGoal(state, evaluation, now) {
-    const { country, wars, hostiles, pressure, strongestRival, metrics } = evaluation;
+    const { country, wars, hostiles, pressure, strongestRival, metrics, profile } = evaluation;
     const scores = {
       stabilize_domestic: 8,
       secure_resources: 8,
@@ -231,6 +251,12 @@ class AISystem {
       defend_chokepoints: 6
     };
     const reasons = {};
+
+    scores.protect_trade += (profile.foreign.tradePreservationBias - 1) * 22;
+    scores.join_or_strengthen_bloc += (profile.foreign.blocAffinity - 1) * 18;
+    scores.deescalate_conflict += (profile.foreign.deescalationBias - 1) * 26;
+    scores.pressure_rival += profile.foreign.escalationBias * 20;
+    scores.isolate_rival += (profile.foreign.sanctionsBias - 1) * 18;
 
     if (metrics.domesticStrain) {
       scores.stabilize_domestic += 45;
@@ -339,11 +365,13 @@ class AISystem {
   }
 
   buildPolicyForGoal(goal, country) {
+    const foreign = this.governmentProfileSystem ? this.governmentProfileSystem.getForeignPolicyBias(country) : { escalationBias: 0 };
+    const domestic = this.governmentProfileSystem ? this.governmentProfileSystem.getDomesticModifiers(country) : { securitySuppressionMult: 1 };
     if (goal === 'deescalate_conflict' || goal === 'stabilize_domestic') {
       return {
         militarySpendingLevel: country.treasury < 1500 ? 'low' : 'normal',
         industryInvestmentLevel: country.economicStress > 58 ? 'low' : 'normal',
-        internalSecurityLevel: 'high'
+        internalSecurityLevel: domestic.securitySuppressionMult > 1.15 ? 'high' : 'normal'
       };
     }
     if (goal === 'secure_resources' || goal === 'protect_trade') {
@@ -362,7 +390,7 @@ class AISystem {
     }
     if (goal === 'pressure_rival' || goal === 'isolate_rival' || goal === 'defend_chokepoints') {
       return {
-        militarySpendingLevel: 'high',
+        militarySpendingLevel: foreign.escalationBias > 0 ? 'high' : 'normal',
         industryInvestmentLevel: country.treasury > 2600 ? 'high' : 'normal',
         internalSecurityLevel: 'normal'
       };
@@ -459,11 +487,15 @@ class AISystem {
     }
 
     if (state.strategicGoal === 'isolate_rival' || state.strategicGoal === 'pressure_rival') {
+      const foreign = this.governmentProfileSystem
+        ? this.governmentProfileSystem.getForeignPolicyBias(country)
+        : { sanctionsBias: 1, escalationBias: 0 };
       const rivalName = strongestRival.counterpart;
       this.performStrategicAction(state, now, 'sanction_rival', `sanction:${rivalName}`, () => {
-        this.diplomacySystem.imposeSanctions(countryName, rivalName, strongestRival.relationScore < -55 ? 'heavy' : 'light');
+        const level = foreign.sanctionsBias > 1.15 || strongestRival.relationScore < -60 ? 'heavy' : 'light';
+        this.diplomacySystem.imposeSanctions(countryName, rivalName, level);
       });
-      if (metrics.strengthDelta > 16) {
+      if (metrics.strengthDelta > (foreign.escalationBias > 0 ? 10 : 16)) {
         this.performStrategicAction(state, now, 'harden_relations', `harden:${rivalName}`, () => {
           this.diplomacySystem.adjustRelationScore(countryName, rivalName, -6, `${countryName} strategic pressure campaign`, true);
         });

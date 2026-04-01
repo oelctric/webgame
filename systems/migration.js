@@ -1,10 +1,11 @@
 class MigrationSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.eventSystem = eventSystem;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
   }
 
@@ -176,11 +177,14 @@ class MigrationSystem {
     const origin = this.countrySystem.ensureCountry(flow.originCountryId);
     if (!origin) return;
     const pressureScale = flow.amount / 20;
+    const domestic = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getDomesticModifiers(origin)
+      : { migrationShockMult: 1 };
 
     origin.manpowerPool = Math.max(0, origin.manpowerPool - pressureScale * (flow.type === 'refugee' ? 38 : 18));
     origin.unrest = this.clampPercent(origin.unrest + (flow.type === 'refugee' ? -0.08 : -0.04));
-    origin.legitimacy = this.clampPercent(origin.legitimacy - pressureScale * (flow.type === 'refugee' ? 0.2 : 0.1));
-    origin.publicSupport = this.clampPercent(origin.publicSupport - pressureScale * (flow.type === 'refugee' ? 0.14 : 0.06));
+    origin.legitimacy = this.clampPercent(origin.legitimacy - pressureScale * (flow.type === 'refugee' ? 0.2 : 0.1) * (domestic.migrationShockMult || 1));
+    origin.publicSupport = this.clampPercent(origin.publicSupport - pressureScale * (flow.type === 'refugee' ? 0.14 : 0.06) * (domestic.migrationShockMult || 1));
     origin.economicStress = this.clampPercent(origin.economicStress + pressureScale * 0.07);
   }
 
@@ -190,14 +194,17 @@ class MigrationSystem {
     if (!destination || !origin) return;
 
     const scale = flow.amount / 16;
+    const domestic = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getDomesticModifiers(destination)
+      : { migrationShockMult: 1 };
     const absorptionFactor = Math.max(0.65, Math.min(1.25, 1 - (destination.stability - destination.unrest) / 240));
     const humanitarianDelta = flow.type === 'refugee' ? scale * 1.8 : scale * 0.6;
 
     destination.humanitarianBurden = Math.max(0, (destination.humanitarianBurden || 0) + humanitarianDelta * absorptionFactor);
     destination.economicStress = this.clampPercent(destination.economicStress + scale * 0.22 * absorptionFactor);
-    destination.publicSupport = this.clampPercent(destination.publicSupport - scale * 0.2 * absorptionFactor);
-    destination.legitimacy = this.clampPercent(destination.legitimacy - scale * 0.12 * absorptionFactor);
-    destination.unrest = this.clampPercent(destination.unrest + scale * 0.18 * absorptionFactor);
+    destination.publicSupport = this.clampPercent(destination.publicSupport - scale * 0.2 * absorptionFactor * (domestic.migrationShockMult || 1));
+    destination.legitimacy = this.clampPercent(destination.legitimacy - scale * 0.12 * absorptionFactor * (domestic.migrationShockMult || 1));
+    destination.unrest = this.clampPercent(destination.unrest + scale * 0.18 * absorptionFactor * (domestic.migrationShockMult || 1));
 
     if (flow.type === 'migration') {
       destination.manpowerPool = Math.min(RESOURCE_CONFIG.manpowerPoolMax, destination.manpowerPool + scale * 20);

@@ -1,10 +1,11 @@
 class PoliticalSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.eventSystem = eventSystem;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
   }
 
@@ -39,23 +40,33 @@ class PoliticalSystem {
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
     const events = this.eventSystem.getActiveEventsForCountry(countryName);
     const policy = country.policy || {};
+    const profile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getDomesticModifiers(country)
+      : {
+        warWearinessDriftMult: 1,
+        repressionSupportPenaltyMult: 1,
+        legitimacyRecoveryMult: 1,
+        legitimacyCrisisThreshold: 24,
+        legitimacyCollapseMult: 1
+      };
 
     const crisisCount = events.length;
     const economicCrisisCount = events.filter((event) => ['financial_panic', 'oil_supply_shock', 'industrial_strike'].includes(event.type)).length;
     const borderIncidentCount = events.filter((event) => event.type === 'border_incident').length;
 
     const economicPain = Math.max(0, country.economicStress - 35) / 65;
-    const warPain = Math.max(0, country.warWeariness - 20) / 80;
+    const warPain = Math.max(0, country.warWeariness - 20) / 80 * (profile.warWearinessDriftMult || 1);
     const unrestPain = Math.max(0, country.unrest - 20) / 80;
     const sanctionsPain = Math.min(1, pressure.incomingCount / 4);
 
-    const securityPenalty = policy.internalSecurityLevel === 'high' ? 0.24 : (policy.internalSecurityLevel === 'normal' ? 0.08 : 0);
+    const securityPenaltyBase = policy.internalSecurityLevel === 'high' ? 0.24 : (policy.internalSecurityLevel === 'normal' ? 0.08 : 0);
+    const securityPenalty = securityPenaltyBase * (profile.repressionSupportPenaltyMult || 1);
     const securityEliteBoost = policy.internalSecurityLevel === 'high' ? 0.26 : (policy.internalSecurityLevel === 'normal' ? 0.08 : -0.06);
     const militaryStrainPenalty = policy.militarySpendingLevel === 'high' && activeWars === 0 && country.economicStress > 40 ? 0.2 : 0;
     const industryConfidenceBoost = policy.industryInvestmentLevel === 'high' && country.economicStress < 55 ? 0.15 : 0;
 
     const supportRecovery = country.treasury > 1500 && country.economicStress < 40 ? 0.22 : 0;
-    const legitimacyRecovery = country.stability > 58 && country.unrest < 35 ? 0.2 : 0;
+    const legitimacyRecovery = (country.stability > 58 && country.unrest < 35 ? 0.2 : 0) * (profile.legitimacyRecoveryMult || 1);
 
     country.publicSupport = this.clamp(country.publicSupport
       - (economicPain * 1.2)
@@ -67,11 +78,15 @@ class PoliticalSystem {
       - militaryStrainPenalty
       + supportRecovery);
 
+    const legitimacyCliff = country.publicSupport < (profile.legitimacyCrisisThreshold || 24)
+      ? ((profile.legitimacyCollapseMult || 1) * 0.45)
+      : 0;
     country.legitimacy = this.clamp(country.legitimacy
       - (unrestPain * 1.15)
       - (economicPain * 0.8)
       - (warPain * 0.75)
       - (crisisCount * 0.18)
+      - legitimacyCliff
       + legitimacyRecovery
       + industryConfidenceBoost);
 

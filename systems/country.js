@@ -1,7 +1,8 @@
 class CountrySystem {
-  constructor(gameState, scheduler) {
+  constructor(gameState, scheduler, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
   }
 
@@ -12,6 +13,9 @@ class CountrySystem {
         id: name.toLowerCase().replace(/\s+/g, '_'),
         name,
         aiControlled,
+        regimeType: null,
+        economicOrientation: null,
+        foreignPolicyStyle: null,
         treasury: ECONOMY_CONFIG.defaultTreasury,
         population: COUNTRY_CONFIG.basePopulation,
         stability: 70,
@@ -112,6 +116,10 @@ class CountrySystem {
     if (typeof country.tradeStressRelief !== 'number') country.tradeStressRelief = 0;
     if (typeof country.tradeIndustrySupportBonus !== 'number') country.tradeIndustrySupportBonus = 0;
     if (!country.tradeBalance) country.tradeBalance = {};
+
+    if (this.governmentProfileSystem) {
+      this.governmentProfileSystem.ensureCountryProfile(country);
+    }
     return country;
   }
 

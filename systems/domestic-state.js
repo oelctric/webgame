@@ -1,11 +1,12 @@
 class DomesticStateSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.policySystem = policySystem;
     this.eventSystem = eventSystem;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
   }
 
@@ -35,16 +36,26 @@ class DomesticStateSystem {
       crisisResilience: 1
     };
     const crisisStressFactor = 1 / Math.max(0.8, Math.min(1.2, politicalEffects.crisisResilience || 1));
+    const profile = this.governmentProfileSystem
+      ? this.governmentProfileSystem.getDomesticModifiers(country)
+      : {
+        warWearinessDriftMult: 1,
+        unrestSensitivity: 1,
+        securitySuppressionMult: 1,
+        migrationShockMult: 1
+      };
+    const securitySuppression = profile.securitySuppressionMult || 1;
     const oilShortage = country.oil < RESOURCE_CONFIG.oilShortageThreshold ? 0.18 : 0;
     const industryStrain = country.industrialCapacity < 22 ? 0.14 : 0;
     const manpowerShortage = country.manpowerPool < 1200 ? 0.12 : 0;
 
-    country.warWeariness = this.clamp(country.warWeariness + (activeWars > 0 ? 0.4 + activeWars * 0.2 : -0.3) + (militarySpending === 'high' ? 0.08 : 0));
+    country.warWeariness = this.clamp(country.warWeariness + ((activeWars > 0 ? 0.4 + activeWars * 0.2 : -0.3) + (militarySpending === 'high' ? 0.08 : 0)) * (profile.warWearinessDriftMult || 1));
     country.economicStress = this.clamp(country.economicStress
       + (country.treasury < 0 ? 0.6 + Math.min(0.35, Math.abs(country.treasury) / 10000) : -0.22)
       + (country.netPerTick < 0 ? 0.25 : -0.1)
       + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0)
       + pressure.stressDrift
+      + Math.max(0, (country.humanitarianBurden || 0) - 10) * 0.01 * (profile.migrationShockMult || 1)
       + oilShortage
       + industryStrain
       + eventModifiers.economicStressDrift * crisisStressFactor
@@ -53,12 +64,13 @@ class DomesticStateSystem {
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
       + country.economicStress * 0.005
-      + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity]
+      + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity] * (internalSecurity === 'high' ? securitySuppression : 1)
       + (politicalEffects.unrestDrift || 0);
-    country.unrest = this.clamp(country.unrest + unrestDrift + (country.stability < 40 ? 0.15 : -0.06) + eventModifiers.unrestDrift * crisisStressFactor);
+
+    country.unrest = this.clamp(country.unrest + unrestDrift * (profile.unrestSensitivity || 1) + (country.stability < 40 ? 0.15 : -0.06) + eventModifiers.unrestDrift * crisisStressFactor);
 
     const stabilityDelta = 0.14
-      + DOMESTIC_CONFIG.stabilitySecurityBonus[internalSecurity]
+      + DOMESTIC_CONFIG.stabilitySecurityBonus[internalSecurity] * (internalSecurity === 'high' ? securitySuppression : 1)
       - country.unrest * 0.01
       - country.warWeariness * 0.008
       - country.economicStress * 0.009
