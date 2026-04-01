@@ -180,6 +180,48 @@ const INFORMATION_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+const INFLUENCE_CONFIG = {
+  tickMs: DAY_MS,
+  effectBasePerDay: 1,
+  defaultDurationDays: 28,
+  minDurationDays: 7,
+  maxDurationDays: 120,
+  minIntensity: 0.5,
+  maxIntensity: 2.5,
+  maxActiveOpsPerCountry: 3,
+  cooldownMs: 10 * DAY_MS,
+  types: {
+    domestic_propaganda: {
+      label: 'Domestic Propaganda',
+      requiresForeignTarget: false,
+      baseCost: 130,
+      dailyCost: 20,
+      effectProfile: { narrativeShield: 1, politicalRecovery: 1 }
+    },
+    foreign_disinformation: {
+      label: 'Foreign Disinformation',
+      requiresForeignTarget: true,
+      baseCost: 180,
+      dailyCost: 28,
+      effectProfile: { narrativeDestabilization: 1, legitimacyPressure: 1 }
+    },
+    reputation_campaign: {
+      label: 'Reputation Campaign',
+      requiresForeignTarget: false,
+      baseCost: 120,
+      dailyCost: 16,
+      effectProfile: { reputationShift: 1, diplomaticSignaling: 1 }
+    },
+    destabilization_campaign: {
+      label: 'Destabilization Campaign',
+      requiresForeignTarget: true,
+      baseCost: 220,
+      dailyCost: 34,
+      effectProfile: { unrestPressure: 1, proxyPressure: 1 }
+    }
+  }
+};
+
 const RESOURCE_CONFIG = {
   tickMs: DAY_MS,
   defaultOil: 220,

@@ -282,7 +282,14 @@
     .menu-nav-btn.active { border-color: #88bdff; background: linear-gradient(180deg, #24467a, #19375f); }
     .menu-preview-label { margin: 0; text-transform: uppercase; letter-spacing: 0.09em; font-size: 0.74rem; color: #8db2ef; }
     .menu-preview-panel h2 { margin-top: 0.2rem; }
-    .menu-preview-bullets { margin: 0.5rem 0 0; padding-left: 1rem; color: #c2d4f5; }
+.menu-preview-bullets { margin: 0.5rem 0 0; padding-left: 1rem; color: #c2d4f5; }
+
+.compact-list {
+  margin: 0.5rem 0;
+  padding-left: 1rem;
+  max-height: 7.5rem;
+  overflow-y: auto;
+}
     .menu-build { margin: 0.9rem 0 0; color: #7f98c3; font-size: 0.8rem; }
 
     .menu-panel {
