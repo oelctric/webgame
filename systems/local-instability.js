@@ -1,5 +1,5 @@
 class LocalInstabilitySystem {
-  constructor(gameState, scheduler, countrySystem, migrationSystem, eventSystem, internalResistanceSystem, informationSystem = null) {
+  constructor(gameState, scheduler, countrySystem, migrationSystem, eventSystem, internalResistanceSystem, informationSystem = null, stateStructureSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
@@ -7,6 +7,7 @@ class LocalInstabilitySystem {
     this.eventSystem = eventSystem;
     this.internalResistanceSystem = internalResistanceSystem;
     this.informationSystem = informationSystem;
+    this.stateStructureSystem = stateStructureSystem;
     this.started = false;
   }
 
@@ -136,10 +137,19 @@ class LocalInstabilitySystem {
     if (!country) return;
     const hotspots = this.getCountryHotspots(countryName);
     if (!hotspots.length) return;
+    const structureModifiers = this.stateStructureSystem?.getModifiers(country) || {
+      localRecovery: 0,
+      spilloverBuffer: 0,
+      separatistSensitivity: 1,
+      crackdownControlBonus: 0,
+      emergencyControlBonus: 0,
+      proxyVulnerability: 1,
+      centerRegionPenalty: 0
+    };
 
     const migrationPressure = (migrationPressureByCountry[countryName] || 0) / 20;
     const eventPressure = eventPressureByCountry[countryName] || 0;
-    const nationalSpillover = Math.max(0, country.unrest - country.stability) / 24;
+    const nationalSpillover = (Math.max(0, country.unrest - country.stability) / 24) * (1 - Math.min(0.7, structureModifiers.spilloverBuffer * 0.42));
     const legitimacyWeakness = Math.max(0, 55 - (country.legitimacy || 0)) / 18;
     const continuityWeakness = Math.max(0, 58 - (country.governmentContinuity || 0)) / 20;
     const securityRecovery = country.policy?.internalSecurityLevel === 'high' ? 0.9 : (country.policy?.internalSecurityLevel === 'low' ? -0.5 : 0.25);
@@ -150,10 +160,10 @@ class LocalInstabilitySystem {
 
     hotspots.forEach((hotspot, index) => {
       const concentrationBias = hotspot.staticRisk / 100;
-      const migrationConcentration = migrationPressure * (hotspot.migrationAttractiveness / 100) * (index < 2 ? 1.25 : 0.7);
+      const migrationConcentration = migrationPressure * (hotspot.migrationAttractiveness / 100) * (index < 2 ? 1.25 : 0.7) * (1 - Math.min(0.45, structureModifiers.localRecovery * 0.32));
       const crisisConcentration = eventPressure * (0.4 + concentrationBias * 0.7) * (index === 0 ? 1.15 : 1);
-      const insurgencyConcentration = insurgencyNational * (0.7 + concentrationBias * 0.8);
-      const separatistConcentration = separatistNational * (0.6 + (1 - concentrationBias) * 0.6);
+      const insurgencyConcentration = insurgencyNational * (0.7 + concentrationBias * 0.8) * structureModifiers.proxyVulnerability;
+      const separatistConcentration = separatistNational * (0.6 + (1 - concentrationBias) * 0.6) * structureModifiers.separatistSensitivity;
 
       const pressure = {
         nationalSpillover,
@@ -173,10 +183,10 @@ class LocalInstabilitySystem {
         + pressure.insurgency * 0.55
         + pressure.separatist * 0.42
         + pressure.crisis * 0.45
-        + pressure.governanceWeakness * 0.4
+        + pressure.governanceWeakness * (0.4 + structureModifiers.centerRegionPenalty * 0.18)
         + pressure.information * 0.35
         + pressure.economic * 0.25
-        - securityRecovery * 0.35
+        - (securityRecovery + structureModifiers.localRecovery * 0.26 + structureModifiers.emergencyControlBonus * 0.35) * 0.35
         - ((hotspot.localStability - 55) / 60),
         -1.7,
         2.4
@@ -188,7 +198,7 @@ class LocalInstabilitySystem {
         - pressure.insurgency * 0.5
         - pressure.separatist * 0.44
         - pressure.crisis * 0.24
-        + securityRecovery * 0.46
+        + (securityRecovery + structureModifiers.crackdownControlBonus * 0.38 + structureModifiers.emergencyControlBonus * 0.3) * 0.46
         + ((country.stateControl || 60) - 55) * 0.02,
         -2.2,
         1.3
@@ -201,7 +211,7 @@ class LocalInstabilitySystem {
         - pressure.crisis * 0.33
         - pressure.information * 0.22
         - pressure.economic * 0.2
-        + securityRecovery * 0.22,
+        + (securityRecovery + structureModifiers.localRecovery * 0.32) * 0.22,
         -2,
         1.6
       );
@@ -209,7 +219,7 @@ class LocalInstabilitySystem {
       hotspot.localUnrest = this.clamp(hotspot.localUnrest + unrestDelta);
       hotspot.localStateControl = this.clamp(hotspot.localStateControl + controlDelta);
       hotspot.localStability = this.clamp(hotspot.localStability + stabilityDelta);
-      hotspot.localHumanitarianStrain = this.clamp((hotspot.localHumanitarianStrain || 0) * 0.85 + pressure.migration * 6 + pressure.crisis * 2.5);
+      hotspot.localHumanitarianStrain = this.clamp((hotspot.localHumanitarianStrain || 0) * 0.85 + pressure.migration * (6 - structureModifiers.localRecovery * 1.6) + pressure.crisis * 2.5);
 
       const tags = [];
       if (hotspot.localUnrest >= 62) tags.push('unrest hotspot');
@@ -243,7 +253,7 @@ class LocalInstabilitySystem {
       narrativeDrift: Math.min(0.55, pressureRatio * 0.28 + severeCount * 0.09),
       stateControlDrag: Math.min(0.45, pressureRatio * 0.23 + severeCount * 0.06),
       insurgencyDrift: Math.min(0.45, pressureRatio * 0.2 + severeCount * 0.05),
-      separatistDrift: Math.min(0.38, pressureRatio * 0.16 + severeCount * 0.05)
+      separatistDrift: Math.min(0.38, (pressureRatio * 0.16 + severeCount * 0.05) * structureModifiers.separatistSensitivity)
     };
 
     country.unrest = this.clamp(country.unrest + country.localInstabilityEffects.unrestDrift * 0.12);

@@ -93,6 +93,13 @@ class CountrySystem {
         insurgencyPressure: 8,
         separatistPressure: 6,
         stateControl: 78,
+        stateStructure: 'hybrid',
+        regionalAutonomy: 52,
+        localGovernanceCapacity: 60,
+        emergencyPowersActive: false,
+        emergencyPowersSince: 0,
+        lastEmergencyToggleAt: 0,
+        centerRegionTension: 16,
         foreignBackedPressure: 0,
         resistanceEffects: {
           outputPenalty: 0,
@@ -200,6 +207,16 @@ class CountrySystem {
     if (typeof country.insurgencyPressure !== 'number') country.insurgencyPressure = 8;
     if (typeof country.separatistPressure !== 'number') country.separatistPressure = 6;
     if (typeof country.stateControl !== 'number') country.stateControl = 78;
+    if (!['centralized', 'hybrid', 'federal'].includes(country.stateStructure)) country.stateStructure = 'hybrid';
+    if (typeof country.regionalAutonomy !== 'number') country.regionalAutonomy = 52;
+    country.regionalAutonomy = Math.max(0, Math.min(100, country.regionalAutonomy));
+    if (typeof country.localGovernanceCapacity !== 'number') country.localGovernanceCapacity = 60;
+    country.localGovernanceCapacity = Math.max(0, Math.min(100, country.localGovernanceCapacity));
+    if (typeof country.emergencyPowersActive !== 'boolean') country.emergencyPowersActive = false;
+    if (typeof country.emergencyPowersSince !== 'number') country.emergencyPowersSince = 0;
+    if (typeof country.lastEmergencyToggleAt !== 'number') country.lastEmergencyToggleAt = 0;
+    if (typeof country.centerRegionTension !== 'number') country.centerRegionTension = 16;
+    country.centerRegionTension = Math.max(0, Math.min(100, country.centerRegionTension));
     if (typeof country.foreignBackedPressure !== 'number') country.foreignBackedPressure = 0;
     country.resistanceEffects = country.resistanceEffects || {
       outputPenalty: 0,

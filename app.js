@@ -129,6 +129,7 @@ const gameClock = new GameClock({
 const scheduler = new TaskScheduler(gameState);
 const governmentProfileSystem = new GovernmentProfileSystem(gameState);
 const countrySystem = new CountrySystem(gameState, scheduler, governmentProfileSystem);
+const stateStructureSystem = new StateStructureSystem(gameState, scheduler, countrySystem);
 const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem, governmentProfileSystem);
 const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
@@ -142,8 +143,8 @@ const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem,
 const factionSystem = new FactionSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem, null, factionSystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
-const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem);
-const localInstabilitySystem = new LocalInstabilitySystem(gameState, scheduler, countrySystem, migrationSystem, eventSystem, internalResistanceSystem);
+const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, stateStructureSystem);
+const localInstabilitySystem = new LocalInstabilitySystem(gameState, scheduler, countrySystem, migrationSystem, eventSystem, internalResistanceSystem, null, stateStructureSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const influenceSystem = new InfluenceSystem(gameState, scheduler, countrySystem, diplomacySystem, governmentProfileSystem);
 const proxyConflictSystem = new ProxyConflictSystem(gameState, scheduler, countrySystem, diplomacySystem, localInstabilitySystem, factionSystem, blocSystem);
@@ -171,7 +172,8 @@ const aiSystem = new AISystem(gameState, scheduler, {
   internalResistanceSystem,
   influenceSystem,
   negotiationSystem,
-  governmentProfileSystem
+  governmentProfileSystem,
+  stateStructureSystem
 });
 leadershipSystem.aiSystem = aiSystem;
 
@@ -311,6 +313,20 @@ const triggerElectionCheckBtn = document.getElementById('triggerElectionCheckBtn
 const triggerTurnoverBtn = document.getElementById('triggerTurnoverBtn');
 const electionOffsetDaysInput = document.getElementById('electionOffsetDaysInput');
 const applyElectionOffsetBtn = document.getElementById('applyElectionOffsetBtn');
+const stateStructureFocusCountry = document.getElementById('stateStructureFocusCountry');
+const stateStructureSummary = document.getElementById('stateStructureSummary');
+const stateAutonomyLabel = document.getElementById('stateAutonomyLabel');
+const stateGovernanceLabel = document.getElementById('stateGovernanceLabel');
+const stateEmergencyLabel = document.getElementById('stateEmergencyLabel');
+const stateTensionLabel = document.getElementById('stateTensionLabel');
+const stateStructureSelect = document.getElementById('stateStructureSelect');
+const autonomyUpBtn = document.getElementById('autonomyUpBtn');
+const autonomyDownBtn = document.getElementById('autonomyDownBtn');
+const governanceUpBtn = document.getElementById('governanceUpBtn');
+const governanceDownBtn = document.getElementById('governanceDownBtn');
+const tensionUpBtn = document.getElementById('tensionUpBtn');
+const tensionDownBtn = document.getElementById('tensionDownBtn');
+const toggleEmergencyPowersBtn = document.getElementById('toggleEmergencyPowersBtn');
 const infoFocusCountry = document.getElementById('infoFocusCountry');
 const infoNarrativePressure = document.getElementById('infoNarrativePressure');
 const infoReputation = document.getElementById('infoReputation');
@@ -800,6 +816,34 @@ function refreshDomesticHud() {
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
   const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
+}
+
+function refreshStateStructureHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  if (!focusCountry) {
+    stateStructureFocusCountry.textContent = 'Structure for: --';
+    stateStructureSummary.textContent = 'State structure: --';
+    stateAutonomyLabel.textContent = 'Regional autonomy: --';
+    stateGovernanceLabel.textContent = 'Local governance capacity: --';
+    stateEmergencyLabel.textContent = 'Emergency powers: --';
+    stateTensionLabel.textContent = 'Center-region tension: --';
+    [stateStructureSelect, autonomyUpBtn, autonomyDownBtn, governanceUpBtn, governanceDownBtn, tensionUpBtn, tensionDownBtn, toggleEmergencyPowersBtn]
+      .forEach((el) => { el.disabled = true; });
+    return;
+  }
+  const country = countrySystem.ensureCountry(focusCountry);
+  stateStructureSystem.ensureCountryFields(country);
+  stateStructureFocusCountry.textContent = `Structure for: ${focusCountry}`;
+  stateStructureSummary.textContent = `State structure: ${stateStructureSystem.getStructureLabel(country)}`;
+  stateAutonomyLabel.textContent = `Regional autonomy: ${country.regionalAutonomy.toFixed(1)} / 100`;
+  stateGovernanceLabel.textContent = `Local governance capacity: ${country.localGovernanceCapacity.toFixed(1)} / 100 (${stateStructureSystem.getGovernanceLabel(country)})`;
+  stateEmergencyLabel.textContent = `Emergency powers: ${country.emergencyPowersActive ? 'emergency rule active' : 'inactive'}`;
+  stateTensionLabel.textContent = `Center-region tension: ${country.centerRegionTension.toFixed(1)} / 100`;
+  stateStructureSelect.value = country.stateStructure;
+  const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+  const editable = playerCountry && focusCountry === playerCountry;
+  [stateStructureSelect, autonomyUpBtn, autonomyDownBtn, governanceUpBtn, governanceDownBtn, tensionUpBtn, tensionDownBtn, toggleEmergencyPowersBtn]
+    .forEach((el) => { el.disabled = !editable; });
 }
 
 function refreshResistanceHud() {
@@ -1566,6 +1610,7 @@ function setPlayerCountry(countryFeature) {
   negotiationSystem.start();
   policySystem.start();
   domesticStateSystem.start();
+  stateStructureSystem.start();
   politicalSystem.start();
   factionSystem.start();
   leadershipSystem.start();
@@ -1585,6 +1630,7 @@ function setPlayerCountry(countryFeature) {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshStateStructureHud();
   refreshResistanceHud();
   refreshLocalHotspotHud();
   refreshInformationHud();
@@ -2659,6 +2705,7 @@ function attachResistanceControls() {
     mutator(country, focusCountry);
     refreshResistanceHud();
     refreshDomesticHud();
+    refreshStateStructureHud();
     refreshCountryHud();
     refreshEconomyHud();
     setStatus(message);
@@ -2705,6 +2752,7 @@ function attachLocalHotspotControls() {
     refreshLocalHotspotHud();
     refreshResistanceHud();
     refreshDomesticHud();
+    refreshStateStructureHud();
     refreshCountryHud();
     refreshEconomyHud();
     renderCities();
@@ -2871,6 +2919,51 @@ function attachFactionControls() {
     factionSystem.resetCountryFactions(focusCountry);
     refreshDomesticHud();
     setStatus(`Faction state reset for ${focusCountry}.`);
+  });
+}
+
+function attachStateStructureControls() {
+  const mutate = (mutator, successMessage) => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    mutator(focusCountry);
+    refreshStateStructureHud();
+    refreshDomesticHud();
+    refreshResistanceHud();
+    refreshLocalHotspotHud();
+    refreshCountryHud();
+    setStatus(successMessage);
+  };
+
+  stateStructureSelect.addEventListener('change', () => mutate((focusCountry) => {
+    stateStructureSystem.setStateStructure(focusCountry, stateStructureSelect.value);
+  }, 'State structure updated.'));
+  autonomyUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustRegionalAutonomy(focusCountry, 8), 'Regional autonomy increased.'));
+  autonomyDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustRegionalAutonomy(focusCountry, -8), 'Regional autonomy reduced.'));
+  governanceUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustLocalGovernance(focusCountry, 8), 'Local governance capacity increased.'));
+  governanceDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustLocalGovernance(focusCountry, -8), 'Local governance capacity reduced.'));
+  tensionUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustCenterRegionTension(focusCountry, 8), 'Center-region tension increased.'));
+  tensionDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustCenterRegionTension(focusCountry, -8), 'Center-region tension reduced.'));
+  toggleEmergencyPowersBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const result = stateStructureSystem.toggleEmergencyPowers(focusCountry);
+    if (!result.ok) {
+      setStatus(result.reason, true);
+      return;
+    }
+    refreshStateStructureHud();
+    refreshDomesticHud();
+    refreshResistanceHud();
+    refreshLocalHotspotHud();
+    refreshCountryHud();
+    setStatus(`Emergency powers ${result.active ? 'activated' : 'deactivated'} for ${focusCountry}.`);
   });
 }
 
@@ -3172,6 +3265,7 @@ function startSimulationLoop() {
     refreshPolicyHud();
     refreshGovernmentProfileHud();
     refreshDomesticHud();
+    refreshStateStructureHud();
     refreshResistanceHud();
     refreshInformationHud();
     refreshProxyConflictHud();
@@ -3362,6 +3456,7 @@ async function init() {
   attachPolicyControls();
   attachGovernmentProfileControls();
   attachLeadershipControls();
+  attachStateStructureControls();
   attachInformationControls();
   attachProxyConflictControls();
   attachResistanceControls();
@@ -3379,6 +3474,7 @@ async function init() {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshStateStructureHud();
   refreshResistanceHud();
   refreshLocalHotspotHud();
   refreshInformationHud();

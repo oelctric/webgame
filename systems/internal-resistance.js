@@ -1,11 +1,12 @@
 class InternalResistanceSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem = null) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem = null, stateStructureSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.eventSystem = eventSystem;
     this.migrationSystem = migrationSystem;
+    this.stateStructureSystem = stateStructureSystem;
     this.started = false;
     this.nextHotspotId = 1;
   }
@@ -105,6 +106,14 @@ class InternalResistanceSystem {
     const foreignFactor = (country.foreignBackedPressure || 0) / 100;
     const localEffects = country.localInstabilityEffects || {};
     const localSeverityFactor = Math.max(0, (localEffects.avgSeverity || 0) / 100);
+    const structureModifiers = this.stateStructureSystem?.getModifiers(country) || {
+      localRecovery: 0,
+      spilloverBuffer: 0,
+      separatistSensitivity: 1,
+      crackdownControlBonus: 0,
+      emergencyControlBonus: 0,
+      centerRegionPenalty: 0
+    };
 
     const insurgencyDrift = this.clampDelta(
       0.12
@@ -122,7 +131,9 @@ class InternalResistanceSystem {
       + foreignFactor * 0.8
       + localSeverityFactor * 0.42
       + (localEffects.insurgencyDrift || 0) * 0.5
+      + structureModifiers.centerRegionPenalty * 0.26
       - (country.stateControl > 74 ? 0.45 : 0)
+      - structureModifiers.localRecovery * 0.34
       - (country.legitimacy > 66 ? 0.22 : 0),
       -1.8,
       2.8
@@ -137,9 +148,11 @@ class InternalResistanceSystem {
       + leadershipWeakness * 0.34
       + foreignFactor * 0.52
       + localSeverityFactor * 0.32
-      + (localEffects.separatistDrift || 0) * 0.55
+      + (localEffects.separatistDrift || 0) * 0.55 * structureModifiers.separatistSensitivity
       + (activeWars > 0 ? 0.2 : 0)
+      + structureModifiers.centerRegionPenalty * 0.3
       - (policy.internalSecurityLevel === 'high' ? 0.26 : 0)
+      - structureModifiers.localRecovery * 0.2
       - (country.stateControl > 72 ? 0.3 : 0),
       -1.6,
       2.2
@@ -174,7 +187,13 @@ class InternalResistanceSystem {
     country.separatistPressure = this.clamp(country.separatistPressure + drifts.separatistDrift);
 
     const securityLevel = country.policy?.internalSecurityLevel || 'normal';
-    const securityBoost = securityLevel === 'high' ? 0.9 : (securityLevel === 'normal' ? 0.3 : -0.35);
+    const structureModifiers = this.stateStructureSystem?.getModifiers(country) || {
+      crackdownControlBonus: 0,
+      emergencyControlBonus: 0
+    };
+    const securityBoost = (securityLevel === 'high' ? 0.9 : (securityLevel === 'normal' ? 0.3 : -0.35))
+      + (structureModifiers.crackdownControlBonus * 0.28)
+      + (structureModifiers.emergencyControlBonus * 0.4);
     const legitimacyGuard = (country.legitimacy - 50) * 0.012;
     const continuityGuard = ((country.governmentContinuity || 55) - 55) * 0.01;
     const resistanceDrag = country.insurgencyPressure * 0.014 + country.separatistPressure * 0.012;
