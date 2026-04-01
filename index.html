@@ -243,8 +243,44 @@
       <p id="infoNarrativePressure">Domestic narrative pressure: --</p>
       <p id="infoReputation">International reputation: --</p>
       <p id="infoControl">Information control: --</p>
+      <p id="infoLegitimacy">Legitimacy impact: --</p>
+      <p id="infoInfluenceSummary">Influence ops: --</p>
       <p id="infoLabel">Narrative status: --</p>
       <p id="reputationLabel">Reputation status: --</p>
+      <div class="field">
+        <label for="influenceTypeSelect">Operation Type</label>
+        <select id="influenceTypeSelect">
+          <option value="domestic_propaganda">Domestic Propaganda</option>
+          <option value="foreign_disinformation">Foreign Disinformation</option>
+          <option value="reputation_campaign">Reputation Campaign</option>
+          <option value="destabilization_campaign">Destabilization Campaign</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="influenceTargetCountry">Target Country</label>
+        <select id="influenceTargetCountry"></select>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="influenceIntensityInput">Strength</label>
+          <input id="influenceIntensityInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+        </div>
+        <div class="field">
+          <label for="influenceDurationInput">Duration (days)</label>
+          <input id="influenceDurationInput" type="number" min="7" max="120" step="1" value="28" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="startInfluenceOperationBtn">Start Operation</button>
+        <button id="cancelInfluenceOperationBtn">Cancel Selected</button>
+      </div>
+      <div class="field">
+        <label for="activeInfluenceOperationSelect">Active Operation</label>
+        <select id="activeInfluenceOperationSelect"></select>
+      </div>
+      <ul id="activeInfluenceList" class="compact-list">
+        <li>No active influence operations.</li>
+      </ul>
       <div class="row">
         <button id="raiseNarrativePressureBtn">Narrative +8</button>
         <button id="lowerNarrativePressureBtn">Narrative -8</button>
@@ -734,6 +770,7 @@
   <script src="systems/internal-resistance.js" defer></script>
   <script src="systems/leadership.js" defer></script>
   <script src="systems/information.js" defer></script>
+  <script src="systems/influence.js" defer></script>
   <script src="systems/migration.js" defer></script>
   <script src="systems/events.js" defer></script>
   <script src="systems/sanctions.js" defer></script>

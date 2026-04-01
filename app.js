@@ -57,6 +57,13 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No information updates yet.'
   },
+  influence: {
+    operations: [],
+    nextOperationId: 1,
+    cooldownsByKey: {},
+    lastTickAt: null,
+    lastSummary: 'No influence operations yet.'
+  },
   migration: {
     flows: [],
     nextFlowId: 1,
@@ -115,6 +122,7 @@ const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySyste
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
+const influenceSystem = new InfluenceSystem(gameState, scheduler, countrySystem, diplomacySystem, governmentProfileSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
@@ -135,6 +143,7 @@ const aiSystem = new AISystem(gameState, scheduler, {
   blocSystem,
   eventSystem,
   internalResistanceSystem,
+  influenceSystem,
   negotiationSystem,
   governmentProfileSystem
 });
@@ -255,8 +264,18 @@ const infoFocusCountry = document.getElementById('infoFocusCountry');
 const infoNarrativePressure = document.getElementById('infoNarrativePressure');
 const infoReputation = document.getElementById('infoReputation');
 const infoControl = document.getElementById('infoControl');
+const infoLegitimacy = document.getElementById('infoLegitimacy');
+const infoInfluenceSummary = document.getElementById('infoInfluenceSummary');
 const infoLabel = document.getElementById('infoLabel');
 const reputationLabel = document.getElementById('reputationLabel');
+const influenceTypeSelect = document.getElementById('influenceTypeSelect');
+const influenceTargetCountry = document.getElementById('influenceTargetCountry');
+const influenceIntensityInput = document.getElementById('influenceIntensityInput');
+const influenceDurationInput = document.getElementById('influenceDurationInput');
+const startInfluenceOperationBtn = document.getElementById('startInfluenceOperationBtn');
+const cancelInfluenceOperationBtn = document.getElementById('cancelInfluenceOperationBtn');
+const activeInfluenceOperationSelect = document.getElementById('activeInfluenceOperationSelect');
+const activeInfluenceList = document.getElementById('activeInfluenceList');
 const raiseNarrativePressureBtn = document.getElementById('raiseNarrativePressureBtn');
 const lowerNarrativePressureBtn = document.getElementById('lowerNarrativePressureBtn');
 const raiseReputationBtn = document.getElementById('raiseReputationBtn');
@@ -737,13 +756,32 @@ function refreshResistanceHud() {
 
 function refreshInformationHud() {
   const focusCountry = getDiplomacyFocusCountry();
+  const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+  const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  const previousTarget = influenceTargetCountry.value;
+  influenceTargetCountry.innerHTML = '';
+  countryNames.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    influenceTargetCountry.appendChild(option);
+  });
+  if (previousTarget && countryNames.includes(previousTarget)) influenceTargetCountry.value = previousTarget;
+  if (!influenceTargetCountry.value && playerCountry) influenceTargetCountry.value = playerCountry;
+
   if (!focusCountry) {
     infoFocusCountry.textContent = 'Information state for: --';
     infoNarrativePressure.textContent = 'Domestic narrative pressure: --';
     infoReputation.textContent = 'International reputation: --';
     infoControl.textContent = 'Information control: --';
+    infoLegitimacy.textContent = 'Legitimacy impact: --';
+    infoInfluenceSummary.textContent = 'Influence ops: --';
     infoLabel.textContent = 'Narrative status: --';
     reputationLabel.textContent = 'Reputation status: --';
+    activeInfluenceList.innerHTML = '<li>No active influence operations.</li>';
+    activeInfluenceOperationSelect.innerHTML = '<option value="">No active operations</option>';
+    startInfluenceOperationBtn.disabled = true;
+    cancelInfluenceOperationBtn.disabled = true;
     return;
   }
 
@@ -752,8 +790,40 @@ function refreshInformationHud() {
   infoNarrativePressure.textContent = `Domestic narrative pressure: ${country.domesticNarrativePressure.toFixed(1)} / 100`;
   infoReputation.textContent = `International reputation: ${country.internationalReputation.toFixed(1)} / 100`;
   infoControl.textContent = `Information control: ${country.informationControl.toFixed(1)} / 100`;
+  infoLegitimacy.textContent = `Legitimacy/Public support: ${country.legitimacy.toFixed(1)} / ${country.publicSupport.toFixed(1)}`;
+  infoInfluenceSummary.textContent = `Influence ops: ${gameState.influence.lastSummary}`;
   infoLabel.textContent = `Narrative status: ${informationSystem.getNarrativeLabel(country)}`;
   reputationLabel.textContent = `Reputation status: ${informationSystem.getReputationLabel(country)}`;
+  startInfluenceOperationBtn.disabled = !playerCountry || playerCountry !== focusCountry;
+  influenceTargetCountry.disabled = !INFLUENCE_CONFIG.types[influenceTypeSelect.value]?.requiresForeignTarget;
+
+  const playerOps = (gameState.influence.operations || []).filter((operation) => operation.sourceCountryId === playerCountry && operation.active);
+  const previousActiveOperation = activeInfluenceOperationSelect.value;
+  activeInfluenceOperationSelect.innerHTML = '<option value="">Select operation</option>';
+  playerOps.forEach((operation) => {
+    const option = document.createElement('option');
+    option.value = String(operation.id);
+    const targetLabel = operation.targetCountryId === operation.sourceCountryId ? 'domestic' : operation.targetCountryId;
+    option.textContent = `#${operation.id} ${influenceSystem.getOperationLabel(operation.type)} → ${targetLabel}`;
+    activeInfluenceOperationSelect.appendChild(option);
+  });
+  if (previousActiveOperation && playerOps.some((operation) => String(operation.id) === previousActiveOperation)) {
+    activeInfluenceOperationSelect.value = previousActiveOperation;
+  }
+  cancelInfluenceOperationBtn.disabled = !activeInfluenceOperationSelect.value;
+
+  activeInfluenceList.innerHTML = '';
+  if (!playerOps.length) {
+    activeInfluenceList.innerHTML = '<li>No active influence operations.</li>';
+  } else {
+    playerOps.forEach((operation) => {
+      const li = document.createElement('li');
+      const remainingDays = Math.ceil(influenceSystem.getRemainingDuration(operation) / DAY_MS);
+      const targetLabel = operation.targetCountryId === operation.sourceCountryId ? 'Domestic' : operation.targetCountryId;
+      li.textContent = `${influenceSystem.getOperationLabel(operation.type)} | Target: ${targetLabel} | Strength ${operation.intensity.toFixed(1)} | ${remainingDays}d left`;
+      activeInfluenceList.appendChild(li);
+    });
+  }
 }
 
 function refreshMigrationHud() {
@@ -1281,6 +1351,7 @@ function setPlayerCountry(countryFeature) {
   politicalSystem.start();
   leadershipSystem.start();
   informationSystem.start();
+  influenceSystem.start();
   migrationSystem.start();
   internalResistanceSystem.start();
   countrySystem.syncOwnership();
@@ -2159,6 +2230,77 @@ function attachGovernmentProfileControls() {
 
 
 function attachInformationControls() {
+  const syncInfluenceTargetState = () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+    const selectedType = influenceTypeSelect.value;
+    const typeMeta = INFLUENCE_CONFIG.types[selectedType];
+    const requiresForeignTarget = Boolean(typeMeta?.requiresForeignTarget);
+    influenceTargetCountry.disabled = !requiresForeignTarget;
+    if (!playerCountry || !focusCountry) {
+      startInfluenceOperationBtn.disabled = true;
+      return;
+    }
+    const canOperate = focusCountry === playerCountry;
+    startInfluenceOperationBtn.disabled = !canOperate;
+    if (!requiresForeignTarget) {
+      influenceTargetCountry.value = playerCountry;
+    } else if (influenceTargetCountry.value === playerCountry) {
+      const fallback = Object.keys(gameState.countries).find((name) => name !== playerCountry);
+      if (fallback) influenceTargetCountry.value = fallback;
+    }
+  };
+
+  influenceTypeSelect.addEventListener('change', syncInfluenceTargetState);
+  activeInfluenceOperationSelect.addEventListener('change', () => {
+    cancelInfluenceOperationBtn.disabled = !activeInfluenceOperationSelect.value;
+  });
+  startInfluenceOperationBtn.addEventListener('click', () => {
+    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!playerCountry || !focusCountry || focusCountry !== playerCountry) {
+      setStatus('Influence operations can only be started for your selected country.', true);
+      return;
+    }
+    const type = influenceTypeSelect.value;
+    const typeMeta = INFLUENCE_CONFIG.types[type];
+    const rawDuration = Math.max(INFLUENCE_CONFIG.minDurationDays, Math.min(INFLUENCE_CONFIG.maxDurationDays, Number(influenceDurationInput.value) || INFLUENCE_CONFIG.defaultDurationDays));
+    const rawIntensity = Math.max(INFLUENCE_CONFIG.minIntensity, Math.min(INFLUENCE_CONFIG.maxIntensity, Number(influenceIntensityInput.value) || 1));
+    const targetCountryId = typeMeta?.requiresForeignTarget ? influenceTargetCountry.value : playerCountry;
+    const result = influenceSystem.startOperation({
+      type,
+      sourceCountryId: playerCountry,
+      targetCountryId,
+      durationDays: rawDuration,
+      intensity: rawIntensity
+    });
+    if (!result.ok) {
+      setStatus(result.reason || 'Unable to start influence operation.', true);
+      return;
+    }
+    setStatus(`Started ${influenceSystem.getOperationLabel(type)} targeting ${result.operation.targetCountryId}.`);
+    refreshInformationHud();
+    refreshEconomyHud();
+    refreshDomesticHud();
+    refreshDiplomacyHud();
+    refreshResistanceHud();
+  });
+
+  cancelInfluenceOperationBtn.addEventListener('click', () => {
+    const operationId = Number(activeInfluenceOperationSelect.value);
+    if (!operationId) {
+      setStatus('Select an active operation to cancel.', true);
+      return;
+    }
+    const canceled = influenceSystem.cancelOperation(operationId, 'canceled');
+    if (!canceled) {
+      setStatus('Unable to cancel that operation.', true);
+      return;
+    }
+    setStatus(`Influence operation #${operationId} canceled.`);
+    refreshInformationHud();
+  });
+
   const mutate = (mutator, message) => {
     const focusCountry = getDiplomacyFocusCountry();
     if (!focusCountry) {
@@ -2201,6 +2343,7 @@ function attachInformationControls() {
     country.internationalReputation = Math.max(-100, country.internationalReputation - 7);
     country.infoMetrics.aggressiveActions += 0.4;
   }, 'Information scandal spread.'));
+  syncInfluenceTargetState();
 }
 
 function attachResistanceControls() {
