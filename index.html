@@ -494,20 +494,49 @@
     <div class="tooltip" id="tooltip"></div>
 
     <section class="overlay" id="mainMenu" aria-label="Main menu">
-      <div class="menu-panel">
-        <h2>Main Menu</h2>
-        <p>Welcome commander. Start a game or adjust audio settings.</p>
-        <div class="menu-actions">
-          <button class="primary" id="playBtn">Play</button>
-          <button id="settingsBtn">Settings</button>
+      <div class="menu-shell">
+        <div class="menu-atmosphere" aria-hidden="true">
+          <div class="atm-grid"></div>
+          <div class="atm-sweep"></div>
+          <div class="atm-ring ring-a"></div>
+          <div class="atm-ring ring-b"></div>
         </div>
+        <div class="menu-header">
+          <p class="menu-kicker">Strategic Operations Interface</p>
+          <h1 class="menu-title">Geo Command</h1>
+          <p class="menu-subtitle">Global geopolitical sandbox simulator</p>
+        </div>
+        <div class="menu-main-grid">
+          <nav class="menu-nav-panel" aria-label="Primary navigation">
+            <button class="menu-nav-btn" id="continueBtn" data-preview="continue">Continue</button>
+            <button class="menu-nav-btn primary" id="newSimulationBtn" data-preview="newSimulation">New Simulation</button>
+            <button class="menu-nav-btn" id="loadScenarioBtn" data-preview="loadScenario">Load Scenario</button>
+            <button class="menu-nav-btn" id="sandboxBtn" data-preview="sandbox">Sandbox</button>
+            <button class="menu-nav-btn" id="settingsBtn" data-preview="settings">Settings</button>
+            <button class="menu-nav-btn" id="tutorialBtn" data-preview="tutorial">Tutorial</button>
+            <button class="menu-nav-btn" id="creditsBtn" data-preview="credits">Credits</button>
+            <button class="menu-nav-btn" id="exitBtn" data-preview="exit">Exit</button>
+          </nav>
+          <section class="menu-preview-panel" aria-live="polite">
+            <p class="menu-preview-label" id="menuPreviewLabel">Command Brief</p>
+            <h2 id="menuPreviewTitle">Geo Command</h2>
+            <p id="menuPreviewDescription">Coordinate national policy, military posture, and diplomatic strategy in a persistent world simulation.</p>
+            <ul id="menuPreviewBullets" class="menu-preview-bullets">
+              <li>Start or resume long-form geopolitical campaigns.</li>
+              <li>Shape alliances, trade lanes, and internal stability.</li>
+            </ul>
+          </section>
+        </div>
+        <p class="menu-build">Build 0.4.0-alpha · Browser Edition</p>
       </div>
     </section>
 
-    <section class="overlay hidden" id="playFlow" aria-label="Play flow">
-      <div class="menu-panel">
-        <h2 id="playTitle">Choose Your Country</h2>
+    <section class="overlay hidden" id="playFlow" aria-label="New simulation setup">
+      <div class="menu-panel menu-panel-large">
+        <h2 id="playTitle">New Simulation Setup</h2>
+        <p class="muted-note">Step <span id="playStepIndicator">1</span> of 4</p>
         <div id="playStepCountry">
+          <h3>Select Starting Country</h3>
           <div class="field">
             <label for="countrySelect">Country</label>
             <select id="countrySelect"></select>
@@ -517,10 +546,35 @@
         </div>
 
         <div id="playStepLeader" class="hidden">
+          <h3>Name Your Leader</h3>
           <div class="field">
             <label for="leaderName">Leader Name</label>
             <input id="leaderName" maxlength="36" placeholder="Enter leader name" />
           </div>
+        </div>
+
+        <div id="playStepScenario" class="hidden">
+          <h3>Choose Start Conditions</h3>
+          <div class="field">
+            <label for="scenarioType">Scenario Type</label>
+            <select id="scenarioType">
+              <option value="modern" selected>Modern Baseline (Default Systems)</option>
+              <option value="high_tension">High Tension Standoff (Placeholder)</option>
+              <option value="economic_shock">Economic Shockwave (Placeholder)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="simulationMode">Simulation Mode</label>
+            <select id="simulationMode">
+              <option value="standard" selected>Standard Simulation</option>
+              <option value="sandbox">Sandbox-Favoring Ruleset</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="playStepConfirm" class="hidden">
+          <h3>Confirm Launch</h3>
+          <p id="launchSummary">Review your setup before deployment.</p>
         </div>
 
         <div class="menu-actions">
@@ -530,22 +584,121 @@
       </div>
     </section>
 
+    <section class="overlay hidden" id="loadPanel" aria-label="Load and scenarios">
+      <div class="menu-panel menu-panel-large">
+        <h2>Continue / Load / Scenario Browser</h2>
+        <div class="menu-card-grid">
+          <article class="menu-card">
+            <h3>Continue Last Session</h3>
+            <p>Resume the latest command state when a previous session exists.</p>
+            <button id="loadContinueBtn">Continue Last Session</button>
+          </article>
+          <article class="menu-card">
+            <h3>Recent Sessions</h3>
+            <p class="muted-note">Save/load UI scaffolded for future persistence integration.</p>
+            <ul class="menu-list">
+              <li>Autosave - Placeholder</li>
+              <li>Manual Save Slot A - Placeholder</li>
+            </ul>
+          </article>
+          <article class="menu-card">
+            <h3>Scenario Browser</h3>
+            <p>Select geopolitical starts. Full scenario data is planned.</p>
+            <ul class="menu-list">
+              <li>Balanced multipolar world (Default-compatible)</li>
+              <li>Regional escalation theater (Placeholder)</li>
+            </ul>
+          </article>
+        </div>
+        <div class="menu-actions">
+          <button id="loadBackBtn">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="sandboxPanel" aria-label="Sandbox setup">
+      <div class="menu-panel menu-panel-large">
+        <h2>Sandbox Command Deck</h2>
+        <p>Quickly launch into freeform geopolitical experimentation.</p>
+        <div class="menu-card-grid">
+          <article class="menu-card">
+            <h3>Quick Start Sandbox</h3>
+            <p>Pick a country and enter immediately with sandbox-friendly defaults.</p>
+            <button class="primary" id="sandboxQuickStartBtn">Quick Start</button>
+          </article>
+          <article class="menu-card">
+            <h3>Preset Worlds</h3>
+            <ul class="menu-list">
+              <li>Open Dynamics (Default)</li>
+              <li>Alliance blocs focus (Placeholder)</li>
+              <li>Resource stress world (Placeholder)</li>
+            </ul>
+          </article>
+          <article class="menu-card">
+            <h3>Custom World</h3>
+            <p class="muted-note">Custom seed and rule templates are planned for future updates.</p>
+          </article>
+        </div>
+        <div class="menu-actions">
+          <button id="sandboxBackBtn">Back</button>
+        </div>
+      </div>
+    </section>
+
     <section class="overlay hidden" id="settingsPanel" aria-label="Settings">
-      <div class="menu-panel">
+      <div class="menu-panel menu-panel-large">
         <h2>Settings</h2>
-        <div class="volume-row">
-          <label for="musicVolume">Music Volume</label>
-          <input type="range" id="musicVolume" min="0" max="100" value="40" />
-          <span id="musicValue">40</span>
+        <div class="menu-card-grid">
+          <article class="menu-card">
+            <h3>Audio</h3>
+            <div class="volume-row">
+              <label for="musicVolume">Music Volume</label>
+              <input type="range" id="musicVolume" min="0" max="100" value="40" />
+              <span id="musicValue">40</span>
+            </div>
+            <div class="volume-row">
+              <label for="sfxVolume">Sound Effects</label>
+              <input type="range" id="sfxVolume" min="0" max="100" value="60" />
+              <span id="sfxValue">60</span>
+            </div>
+          </article>
+          <article class="menu-card">
+            <h3>Interface</h3>
+            <div class="field">
+              <label for="uiScaleSelect">UI Scale</label>
+              <select id="uiScaleSelect">
+                <option value="100" selected>Standard (100%)</option>
+                <option value="90">Compact (90%)</option>
+                <option value="110">Large (110%)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="hudDensitySelect">HUD Density</label>
+              <select id="hudDensitySelect">
+                <option value="detailed" selected>Detailed</option>
+                <option value="reduced">Reduced</option>
+              </select>
+            </div>
+          </article>
+          <article class="menu-card">
+            <h3>Simulation Defaults</h3>
+            <p class="muted-note">Additional startup defaults and graphics toggles are scaffolded for expansion.</p>
+          </article>
         </div>
-        <div class="volume-row">
-          <label for="sfxVolume">Sound Effects</label>
-          <input type="range" id="sfxVolume" min="0" max="100" value="60" />
-          <span id="sfxValue">60</span>
-        </div>
-        <p class="muted-note">Volumes are stored in your browser for this game.</p>
         <div class="menu-actions">
           <button id="settingsBackBtn">Back</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="overlay hidden" id="creditsPanel" aria-label="Credits">
+      <div class="menu-panel">
+        <h2>Credits / About</h2>
+        <p><strong>Geo Command</strong> is a browser-based geopolitical sandbox simulator prototype.</p>
+        <p>Focus: strategic statecraft, military posture, diplomacy, and systemic simulation.</p>
+        <p class="muted-note">Version: 0.4.0-alpha · Built for iterative design and simulation expansion.</p>
+        <div class="menu-actions">
+          <button id="creditsBackBtn">Back</button>
         </div>
       </div>
     </section>
