@@ -59,6 +59,7 @@ class CountrySystem {
         },
         politicalLastTickAt: null,
         politicalAlertBucket: 'stable',
+        humanitarianBurden: 0,
         controlledCityIds: [],
         controlledBaseIds: [],
         controlledUnitIds: [],
@@ -101,6 +102,7 @@ class CountrySystem {
     };
     if (country.politicalLastTickAt == null) country.politicalLastTickAt = null;
     if (!country.politicalAlertBucket) country.politicalAlertBucket = 'stable';
+    if (typeof country.humanitarianBurden !== 'number') country.humanitarianBurden = 0;
     if (typeof country.oil !== 'number') country.oil = RESOURCE_CONFIG.defaultOil;
     if (typeof country.maxOil !== 'number') country.maxOil = RESOURCE_CONFIG.defaultMaxOil;
     if (typeof country.oilPerTick !== 'number') country.oilPerTick = 0;
