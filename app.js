@@ -139,6 +139,26 @@ const RESOURCE_CONFIG = {
   }
 };
 
+const EVENT_CONFIG = {
+  tickMs: DAY_MS,
+  randomChancePerTick: 0.08,
+  maxRecentLog: 14,
+  defaultSeverity: 'medium',
+  typeDurations: {
+    oil_supply_shock: 10 * DAY_MS,
+    industrial_strike: 8 * DAY_MS,
+    financial_panic: 9 * DAY_MS,
+    protest_wave: 7 * DAY_MS,
+    border_incident: 5 * DAY_MS
+  }
+};
+
+const TRADE_CONFIG = {
+  tickMs: DAY_MS,
+  autoGenerationEnabled: true,
+  resources: ['oil', 'industry_support']
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -682,6 +702,10 @@ class CountrySystem {
         oilPerTick: 0,
         manpowerPool: RESOURCE_CONFIG.defaultManpowerPool,
         manpowerRegenPerTick: 0,
+        tradeIncomeBonus: 0,
+        tradeStressRelief: 0,
+        tradeIndustrySupportBonus: 0,
+        tradeBalance: {},
         industrialCapacity: 20,
         manpower: COUNTRY_CONFIG.baseManpower,
         militaryReadiness: 50,
@@ -739,6 +763,10 @@ class CountrySystem {
     if (typeof country.oilPerTick !== 'number') country.oilPerTick = 0;
     if (typeof country.manpowerPool !== 'number') country.manpowerPool = RESOURCE_CONFIG.defaultManpowerPool;
     if (typeof country.manpowerRegenPerTick !== 'number') country.manpowerRegenPerTick = 0;
+    if (typeof country.tradeIncomeBonus !== 'number') country.tradeIncomeBonus = 0;
+    if (typeof country.tradeStressRelief !== 'number') country.tradeStressRelief = 0;
+    if (typeof country.tradeIndustrySupportBonus !== 'number') country.tradeIndustrySupportBonus = 0;
+    if (!country.tradeBalance) country.tradeBalance = {};
     return country;
   }
 
@@ -786,7 +814,7 @@ class CountrySystem {
       const baseStability = 78 + Math.min(10, country.netPerTick / 100) - domesticPenalty / 10;
       const baseReadiness = 45 + country.controlledBaseIds.length * 2 + country.controlledUnitIds.length * 0.6;
       country.population = basePopulation;
-      country.industrialCapacity = Math.max(1, baseIndustry + (country.policyModifiers?.industrialCapacity || 0));
+      country.industrialCapacity = Math.max(1, baseIndustry + (country.policyModifiers?.industrialCapacity || 0) + (country.tradeIndustrySupportBonus || 0));
       country.manpower = Math.max(0, baseManpower + (country.policyModifiers?.manpower || 0));
       country.stability = Math.max(0, Math.min(100, baseStability + (country.policyModifiers?.stability || 0)));
       country.militaryReadiness = Math.max(0, Math.min(100, baseReadiness + (country.policyModifiers?.readiness || 0)));
@@ -814,11 +842,12 @@ class CountrySystem {
 }
 
 class ResourceSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
+    this.eventSystem = eventSystem;
     this.started = false;
   }
 
@@ -861,12 +890,13 @@ class ResourceSystem {
     const country = this.countrySystem.ensureCountry(countryName);
     if (!country) return;
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
+    const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
     const cityCount = country.controlledCityIds.length;
     const baseCount = country.controlledBaseIds.length;
     const stabilityFactor = Math.max(0.7, Math.min(1.1, (country.stability || 50) / 80));
 
-    const oilGain = Math.max(0, (8 + cityCount * 2.2 + baseCount * 0.8) * (1 - pressure.oilPenalty) * stabilityFactor);
-    const manpowerGain = Math.max(0, 40 + cityCount * 14 + Math.round((country.population || 0) / 600000) - (country.unrest || 0) * 0.4);
+    const oilGain = Math.max(0, (8 + cityCount * 2.2 + baseCount * 0.8) * (1 - pressure.oilPenalty) * stabilityFactor * eventModifiers.oilGenerationMultiplier);
+    const manpowerGain = Math.max(0, (40 + cityCount * 14 + Math.round((country.population || 0) / 600000) - (country.unrest || 0) * 0.4) * eventModifiers.manpowerRegenMultiplier);
     country.oilPerTick = oilGain;
     country.manpowerRegenPerTick = manpowerGain;
     country.oil = Math.max(0, Math.min(country.maxOil, country.oil + oilGain));
@@ -885,6 +915,378 @@ class ResourceSystem {
     this.scheduler.schedule({
       executeAt: this.gameState.currentTimeMs + RESOURCE_CONFIG.tickMs,
       type: 'RESOURCE_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
+  }
+}
+
+class EventSystem {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.countrySystem = countrySystem;
+    this.diplomacySystem = diplomacySystem;
+    this.started = false;
+    this.nextEventId = 1;
+  }
+
+  getDurationForType(type) {
+    return EVENT_CONFIG.typeDurations[type] || (6 * DAY_MS);
+  }
+
+  hasDuplicateActive(type, targetCountryId, targetCountryIds = []) {
+    return this.gameState.events.active.some((event) => event.active
+      && event.type === type
+      && event.targetCountryId === targetCountryId
+      && JSON.stringify(event.targetCountryIds || []) === JSON.stringify(targetCountryIds || []));
+  }
+
+  createEvent(type, { targetCountryId = null, targetCountryIds = [], severity = EVENT_CONFIG.defaultSeverity } = {}) {
+    if (!type || (!targetCountryId && !targetCountryIds.length)) return null;
+    if (this.hasDuplicateActive(type, targetCountryId, targetCountryIds)) return null;
+    const startTime = this.gameState.currentTimeMs;
+    const duration = this.getDurationForType(type);
+    const event = {
+      id: this.nextEventId++,
+      type,
+      title: this.getTitle(type),
+      description: this.getDescription(type),
+      targetCountryId,
+      targetCountryIds: targetCountryIds.length ? [...targetCountryIds] : (targetCountryId ? [targetCountryId] : []),
+      startTime,
+      endTime: startTime + duration,
+      duration,
+      active: true,
+      severity,
+      effects: this.getEffects(type),
+      resolvedAt: null,
+      lastAppliedAt: null
+    };
+    this.gameState.events.active.push(event);
+    this.logEvent(`START: ${event.title} (${event.targetCountryIds.join(' vs ')})`);
+    setStatus(`Event started: ${event.title}`);
+    return event;
+  }
+
+  getTitle(type) {
+    const titles = {
+      oil_supply_shock: 'Oil Supply Shock',
+      industrial_strike: 'Industrial Strike',
+      financial_panic: 'Financial Panic',
+      protest_wave: 'Protest Wave',
+      border_incident: 'Border Incident'
+    };
+    return titles[type] || 'Unknown Event';
+  }
+
+  getDescription(type) {
+    const descriptions = {
+      oil_supply_shock: 'Temporary supply disruption reduces oil availability and raises stress.',
+      industrial_strike: 'Strike action lowers productive output and raises unrest.',
+      financial_panic: 'Capital flight and fear reduce income and increase economic stress.',
+      protest_wave: 'Mass protest movement increases unrest and pressures stability.',
+      border_incident: 'Border confrontation increases bilateral tension.'
+    };
+    return descriptions[type] || 'No description.';
+  }
+
+  getEffects(type) {
+    const effects = {
+      oil_supply_shock: { oilGenerationMultiplier: 0.72, economicStressDrift: 0.12 },
+      industrial_strike: { incomeMultiplier: 0.88, industryGrowthMultiplier: 0.8, unrestDrift: 0.18 },
+      financial_panic: { incomeMultiplier: 0.82, treasuryDailyDelta: -60, economicStressDrift: 0.22 },
+      protest_wave: { unrestDrift: 0.28, stabilityDrift: -0.16 },
+      border_incident: { relationDailyDelta: -2, warWearinessDrift: 0.06 }
+    };
+    return effects[type] || {};
+  }
+
+  logEvent(message) {
+    this.gameState.events.recentLog.unshift({ at: this.gameState.currentTimeMs, message });
+    this.gameState.events.recentLog = this.gameState.events.recentLog.slice(0, EVENT_CONFIG.maxRecentLog);
+  }
+
+  getActiveEventsForCountry(countryName) {
+    return this.gameState.events.active.filter((event) => event.active && event.targetCountryIds.includes(countryName));
+  }
+
+  getModifiersForCountry(countryName) {
+    const active = this.getActiveEventsForCountry(countryName);
+    let incomeMultiplier = 1;
+    let oilGenerationMultiplier = 1;
+    let industryGrowthMultiplier = 1;
+    let manpowerRegenMultiplier = 1;
+    let treasuryDailyDelta = 0;
+    let economicStressDrift = 0;
+    let unrestDrift = 0;
+    let stabilityDrift = 0;
+    let warWearinessDrift = 0;
+
+    active.forEach((event) => {
+      const fx = event.effects || {};
+      if (fx.incomeMultiplier != null) incomeMultiplier *= fx.incomeMultiplier;
+      if (fx.oilGenerationMultiplier != null) oilGenerationMultiplier *= fx.oilGenerationMultiplier;
+      if (fx.industryGrowthMultiplier != null) industryGrowthMultiplier *= fx.industryGrowthMultiplier;
+      if (fx.manpowerRegenMultiplier != null) manpowerRegenMultiplier *= fx.manpowerRegenMultiplier;
+      treasuryDailyDelta += fx.treasuryDailyDelta || 0;
+      economicStressDrift += fx.economicStressDrift || 0;
+      unrestDrift += fx.unrestDrift || 0;
+      stabilityDrift += fx.stabilityDrift || 0;
+      warWearinessDrift += fx.warWearinessDrift || 0;
+    });
+
+    return {
+      incomeMultiplier: Math.max(0.5, incomeMultiplier),
+      oilGenerationMultiplier: Math.max(0.5, oilGenerationMultiplier),
+      industryGrowthMultiplier: Math.max(0.55, industryGrowthMultiplier),
+      manpowerRegenMultiplier: Math.max(0.55, manpowerRegenMultiplier),
+      treasuryDailyDelta,
+      economicStressDrift,
+      unrestDrift,
+      stabilityDrift,
+      warWearinessDrift
+    };
+  }
+
+  applyDiplomaticIncidents() {
+    this.gameState.events.active.forEach((event) => {
+      if (!event.active || event.type !== 'border_incident') return;
+      if (event.lastAppliedAt && this.gameState.currentTimeMs - event.lastAppliedAt < DAY_MS) return;
+      const [a, b] = event.targetCountryIds;
+      if (!a || !b) return;
+      this.diplomacySystem.adjustRelationScore(a, b, event.effects.relationDailyDelta || -2, 'Border incident escalation', true);
+      event.lastAppliedAt = this.gameState.currentTimeMs;
+    });
+  }
+
+  resolveExpiredEvents() {
+    this.gameState.events.active.forEach((event) => {
+      if (!event.active || event.endTime > this.gameState.currentTimeMs) return;
+      event.active = false;
+      event.resolvedAt = this.gameState.currentTimeMs;
+      this.logEvent(`END: ${event.title} (${event.targetCountryIds.join(' vs ')})`);
+      setStatus(`Event ended: ${event.title}`);
+    });
+    this.gameState.events.active = this.gameState.events.active.filter((event) => event.active);
+  }
+
+  generateRandomEvent() {
+    if (Math.random() > EVENT_CONFIG.randomChancePerTick) return;
+    const countries = Object.keys(this.gameState.countries);
+    if (!countries.length) return;
+    const primary = countries[Math.floor(Math.random() * countries.length)];
+    const secondary = countries.find((name) => name !== primary);
+    const types = ['oil_supply_shock', 'industrial_strike', 'financial_panic', 'protest_wave', 'border_incident'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    if (type === 'border_incident' && secondary) {
+      this.createEvent(type, { targetCountryIds: [primary, secondary] });
+    } else {
+      this.createEvent(type, { targetCountryId: primary });
+    }
+  }
+
+  processTick() {
+    this.applyDiplomaticIncidents();
+    this.resolveExpiredEvents();
+    this.generateRandomEvent();
+    refreshEventHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + EVENT_CONFIG.tickMs,
+      type: 'EVENT_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
+  }
+}
+
+class TradeSystem {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.countrySystem = countrySystem;
+    this.diplomacySystem = diplomacySystem;
+    this.started = false;
+    this.nextFlowId = 1;
+  }
+
+  evaluateCountryBalances(countryName) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    const units = country.controlledUnitIds.length;
+    const bases = country.controlledBaseIds.length;
+    const oilNeed = 10 + units * 1.6 + bases * 2.2 + (country.policy?.militarySpendingLevel === 'high' ? 12 : 0);
+    const oilSupply = country.oilPerTick || 0;
+    const industryNeed = 8 + bases * 3 + units * 1.2;
+    const industrySupply = Math.max(0, (country.industrialCapacity || 0) * 0.22);
+    country.tradeBalance = {
+      oil: { supply: oilSupply, need: oilNeed, surplus: Math.max(0, oilSupply - oilNeed), deficit: Math.max(0, oilNeed - oilSupply) },
+      industry_support: { supply: industrySupply, need: industryNeed, surplus: Math.max(0, industrySupply - industryNeed), deficit: Math.max(0, industryNeed - industrySupply) }
+    };
+    return country.tradeBalance;
+  }
+
+  canTrade(exporter, importer) {
+    const relation = this.diplomacySystem.getRelation(exporter, importer);
+    if (!relation) return { ok: false, reason: 'no_relation' };
+    if (relation.status === 'war') return { ok: false, reason: 'war' };
+    const expToImp = this.diplomacySystem.getDirectionalPressure(exporter, importer);
+    const impToExp = this.diplomacySystem.getDirectionalPressure(importer, exporter);
+    if (expToImp.tradeAllowed === false || impToExp.tradeAllowed === false) return { ok: false, reason: 'trade_blocked' };
+    if (expToImp.sanctionsLevel === 'heavy' || impToExp.sanctionsLevel === 'heavy') return { ok: false, reason: 'heavy_sanctions' };
+    if (relation.status === 'hostile' && relation.relationScore < -55) return { ok: false, reason: 'hostile_relations' };
+    return { ok: true };
+  }
+
+  upsertFlow({ exporterCountryId, importerCountryId, resourceType, flowAmount, tradeValue = 0, active = true, blockedReason = null, manual = false }) {
+    const existing = this.gameState.trade.flows.find((flow) => flow.exporterCountryId === exporterCountryId
+      && flow.importerCountryId === importerCountryId
+      && flow.resourceType === resourceType
+      && flow.manual === manual);
+    if (existing) {
+      existing.flowAmount = flowAmount;
+      existing.tradeValue = tradeValue;
+      existing.active = active;
+      existing.blockedReason = blockedReason;
+      existing.updatedAt = this.gameState.currentTimeMs;
+      return existing;
+    }
+    const flow = {
+      id: this.nextFlowId++,
+      exporterCountryId,
+      importerCountryId,
+      resourceType,
+      flowAmount,
+      active,
+      startedAt: this.gameState.currentTimeMs,
+      updatedAt: this.gameState.currentTimeMs,
+      blockedReason,
+      tradeValue,
+      manual
+    };
+    this.gameState.trade.flows.push(flow);
+    return flow;
+  }
+
+  buildAutoFlows() {
+    if (!this.gameState.trade.autoEnabled) return;
+    const countryNames = Object.keys(this.gameState.countries);
+    countryNames.forEach((name) => this.evaluateCountryBalances(name));
+    TRADE_CONFIG.resources.forEach((resourceType) => {
+      const importers = countryNames
+        .map((name) => ({ name, deficit: this.gameState.countries[name].tradeBalance[resourceType].deficit }))
+        .filter((entry) => entry.deficit > 0.1)
+        .sort((a, b) => b.deficit - a.deficit);
+      const exporters = countryNames
+        .map((name) => ({ name, surplus: this.gameState.countries[name].tradeBalance[resourceType].surplus }))
+        .filter((entry) => entry.surplus > 0.1)
+        .sort((a, b) => b.surplus - a.surplus);
+
+      importers.forEach((importer) => {
+        let remaining = importer.deficit;
+        for (const exporter of exporters) {
+          if (remaining <= 0) break;
+          if (exporter.name === importer.name || exporter.surplus <= 0) continue;
+          const viability = this.canTrade(exporter.name, importer.name);
+          if (!viability.ok) {
+            this.upsertFlow({
+              exporterCountryId: exporter.name,
+              importerCountryId: importer.name,
+              resourceType,
+              flowAmount: 0,
+              tradeValue: 0,
+              active: false,
+              blockedReason: viability.reason
+            });
+            continue;
+          }
+          const flowAmount = Math.min(remaining, exporter.surplus);
+          if (flowAmount <= 0) continue;
+          exporter.surplus -= flowAmount;
+          remaining -= flowAmount;
+          this.upsertFlow({
+            exporterCountryId: exporter.name,
+            importerCountryId: importer.name,
+            resourceType,
+            flowAmount,
+            tradeValue: flowAmount * 2,
+            active: true
+          });
+        }
+      });
+    });
+  }
+
+  applyFlows() {
+    Object.values(this.gameState.countries).forEach((country) => {
+      country.tradeIncomeBonus = 0;
+      country.tradeStressRelief = 0;
+      country.tradeIndustrySupportBonus = 0;
+    });
+
+    this.gameState.trade.flows.forEach((flow) => {
+      if (!flow.active || flow.flowAmount <= 0) return;
+      const exporter = this.countrySystem.ensureCountry(flow.exporterCountryId);
+      const importer = this.countrySystem.ensureCountry(flow.importerCountryId);
+      if (!exporter || !importer) return;
+      if (flow.resourceType === 'oil') {
+        const deliverable = Math.min(flow.flowAmount, exporter.oil);
+        exporter.oil -= deliverable;
+        importer.oil += deliverable;
+        importer.tradeStressRelief += deliverable * 0.02;
+      } else if (flow.resourceType === 'industry_support') {
+        importer.tradeIndustrySupportBonus += flow.flowAmount * 0.12;
+        importer.tradeStressRelief += flow.flowAmount * 0.015;
+      }
+      exporter.tradeIncomeBonus += flow.tradeValue;
+      importer.tradeIncomeBonus += flow.tradeValue * 0.35;
+    });
+  }
+
+  createManualFlow(exporterCountryId, importerCountryId, resourceType, flowAmount) {
+    const viability = this.canTrade(exporterCountryId, importerCountryId);
+    if (!viability.ok) return { ok: false, message: `Trade blocked: ${viability.reason}` };
+    const flow = this.upsertFlow({
+      exporterCountryId,
+      importerCountryId,
+      resourceType,
+      flowAmount: Math.max(0, Number(flowAmount) || 0),
+      tradeValue: Math.max(0, Number(flowAmount) || 0) * 2,
+      active: true,
+      blockedReason: null,
+      manual: true
+    });
+    return { ok: true, flow };
+  }
+
+  processTick() {
+    this.buildAutoFlows();
+    this.applyFlows();
+    this.gameState.trade.lastTickAt = this.gameState.currentTimeMs;
+    refreshTradeHud();
+    refreshCountryHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + TRADE_CONFIG.tickMs,
+      type: 'TRADE_TICK',
       payload: {},
       handler: () => this.processTick()
     });
@@ -1168,11 +1570,12 @@ class DiplomacySystem {
 }
 
 class PolicySystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
+    this.eventSystem = eventSystem;
     this.started = false;
   }
 
@@ -1225,6 +1628,7 @@ class PolicySystem {
     const securityEffect = POLICY_CONFIG.dailyEffects.internalSecurityLevel[policy.internalSecurityLevel];
     const dailyCost = this.updateCountryPolicyCost(countryName);
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
+    const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
 
     country.treasury -= dailyCost;
     country.treasury += (industryEffect.treasuryBonus || 0);
@@ -1234,7 +1638,7 @@ class PolicySystem {
     const debtPenalty = country.treasury < 0 ? 0.2 : 0;
 
     const unrestPenaltyFactor = Math.max(0.45, 1 - (country.unrest || 0) / 170);
-    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier;
+    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier * eventModifiers.industryGrowthMultiplier;
     country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220);
     country.policyModifiers.stability += militaryEffect.stability + securityEffect.stability - warStabilityPenalty - debtPenalty;
     country.policyModifiers.readiness += militaryEffect.readiness + securityEffect.readiness;
@@ -1272,12 +1676,13 @@ class PolicySystem {
 }
 
 class DomesticStateSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, policySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.policySystem = policySystem;
+    this.eventSystem = eventSystem;
     this.started = false;
   }
 
@@ -1299,6 +1704,7 @@ class DomesticStateSystem {
     const militarySpending = policy.militarySpendingLevel || 'normal';
     const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
+    const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
     const oilShortage = country.oil < RESOURCE_CONFIG.oilShortageThreshold ? 0.18 : 0;
     const industryStrain = country.industrialCapacity < 22 ? 0.14 : 0;
     const manpowerShortage = country.manpowerPool < 1200 ? 0.12 : 0;
@@ -1310,13 +1716,15 @@ class DomesticStateSystem {
       + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0)
       + pressure.stressDrift
       + oilShortage
-      + industryStrain);
+      + industryStrain
+      + eventModifiers.economicStressDrift
+      - (country.tradeStressRelief || 0));
 
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
       + country.economicStress * 0.005
       + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity];
-    country.unrest = this.clamp(country.unrest + unrestDrift + (country.stability < 40 ? 0.15 : -0.06));
+    country.unrest = this.clamp(country.unrest + unrestDrift + (country.stability < 40 ? 0.15 : -0.06) + eventModifiers.unrestDrift);
 
     const stabilityDelta = 0.14
       + DOMESTIC_CONFIG.stabilitySecurityBonus[internalSecurity]
@@ -1325,8 +1733,10 @@ class DomesticStateSystem {
       - country.economicStress * 0.009
       - activeWars * 0.06
       - pressure.stabilityDrift
-      - manpowerShortage;
+      - manpowerShortage
+      + eventModifiers.stabilityDrift;
     country.stability = this.clamp(country.stability + stabilityDelta);
+    country.warWeariness = this.clamp(country.warWeariness + eventModifiers.warWearinessDrift);
     country.domesticOutputModifier = Math.max(
       0.65,
       Math.min(1.05, 1 - Math.max(0, (45 - country.stability) / 230) - country.unrest / 520 - country.economicStress / 680)
@@ -1369,11 +1779,12 @@ class DomesticStateSystem {
 }
 
 class EconomySystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
+    this.eventSystem = eventSystem;
   }
 
   ensureCountry(countryName) {
@@ -1427,7 +1838,8 @@ class EconomySystem {
       this.ensureCountry(city.ownerCountry);
       const country = this.countrySystem.ensureCountry(city.ownerCountry);
       const pressure = this.diplomacySystem.getEconomicPressureOnCountry(city.ownerCountry);
-      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * pressure.incomeMultiplier;
+      const eventModifiers = this.eventSystem.getModifiersForCountry(city.ownerCountry);
+      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * pressure.incomeMultiplier * eventModifiers.incomeMultiplier;
       incomeByCountry[city.ownerCountry] = (incomeByCountry[city.ownerCountry] || 0) + adjustedIncome;
     });
 
@@ -1448,7 +1860,8 @@ class EconomySystem {
       this.ensureCountry(country);
       const income = incomeByCountry[country] || 0;
       const upkeep = upkeepByCountry[country] || 0;
-      const net = income - upkeep;
+      const eventModifiers = this.eventSystem.getModifiersForCountry(country);
+      const net = income - upkeep + eventModifiers.treasuryDailyDelta + (this.countrySystem.ensureCountry(country).tradeIncomeBonus || 0);
       const countryState = this.countrySystem.ensureCountry(country);
       countryState.treasury += net;
       this.gameState.economy.treasuryByCountry[country] = countryState.treasury;
@@ -1738,6 +2151,15 @@ const gameState = {
   resources: {
     lastTickAt: null
   },
+  trade: {
+    flows: [],
+    autoEnabled: TRADE_CONFIG.autoGenerationEnabled,
+    lastTickAt: null
+  },
+  events: {
+    active: [],
+    recentLog: []
+  },
   economy: {
     treasuryByCountry: {},
     lastTickAt: null,
@@ -1754,14 +2176,16 @@ const gameClock = new GameClock({
 const scheduler = new TaskScheduler(gameState);
 const countrySystem = new CountrySystem(gameState, scheduler);
 const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem);
-const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem);
-const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem);
-const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem);
+const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
+const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
+const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem);
+const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
+const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
 const captureSystem = new CaptureSystem(gameState, scheduler, movementSystem, diplomacySystem);
-const economySystem = new EconomySystem(gameState, scheduler, countrySystem, diplomacySystem);
+const economySystem = new EconomySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const aiSystem = new AISystem(gameState, scheduler, {
   productionSystem,
   movementSystem,
@@ -1824,6 +2248,24 @@ const domesticUnrest = document.getElementById('domesticUnrest');
 const domesticWarWeariness = document.getElementById('domesticWarWeariness');
 const domesticEconomicStress = document.getElementById('domesticEconomicStress');
 const domesticTrend = document.getElementById('domesticTrend');
+const eventSummary = document.getElementById('eventSummary');
+const eventTypeSelect = document.getElementById('eventTypeSelect');
+const eventTargetCountry = document.getElementById('eventTargetCountry');
+const eventSecondaryCountry = document.getElementById('eventSecondaryCountry');
+const triggerEventBtn = document.getElementById('triggerEventBtn');
+const activeEventsList = document.getElementById('activeEventsList');
+const eventLogList = document.getElementById('eventLogList');
+const tradeSummary = document.getElementById('tradeSummary');
+const tradeBalanceSummary = document.getElementById('tradeBalanceSummary');
+const toggleAutoTradeBtn = document.getElementById('toggleAutoTradeBtn');
+const recomputeTradeBtn = document.getElementById('recomputeTradeBtn');
+const tradeExporterSelect = document.getElementById('tradeExporterSelect');
+const tradeImporterSelect = document.getElementById('tradeImporterSelect');
+const tradeResourceSelect = document.getElementById('tradeResourceSelect');
+const tradeAmountInput = document.getElementById('tradeAmountInput');
+const forceTradeBtn = document.getElementById('forceTradeBtn');
+const blockTradePairBtn = document.getElementById('blockTradePairBtn');
+const tradeFlowsList = document.getElementById('tradeFlowsList');
 const prodBaseLabel = document.getElementById('prodBaseLabel');
 const prodUnitButtons = document.getElementById('prodUnitButtons');
 const prodCurrent = document.getElementById('prodCurrent');
@@ -2086,6 +2528,95 @@ function refreshDomesticHud() {
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount}`;
 }
 
+function refreshEventHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  eventSummary.textContent = `Events: ${gameState.events.active.length} active globally`;
+  const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  const previousPrimary = eventTargetCountry.value;
+  const previousSecondary = eventSecondaryCountry.value;
+  eventTargetCountry.innerHTML = '';
+  eventSecondaryCountry.innerHTML = '<option value="">None</option>';
+  countryNames.forEach((name) => {
+    const optA = document.createElement('option');
+    optA.value = name;
+    optA.textContent = name;
+    eventTargetCountry.appendChild(optA);
+    const optB = document.createElement('option');
+    optB.value = name;
+    optB.textContent = name;
+    eventSecondaryCountry.appendChild(optB);
+  });
+  if (previousPrimary && countryNames.includes(previousPrimary)) eventTargetCountry.value = previousPrimary;
+  if (previousSecondary && countryNames.includes(previousSecondary)) eventSecondaryCountry.value = previousSecondary;
+
+  const active = focusCountry ? eventSystem.getActiveEventsForCountry(focusCountry) : [];
+  activeEventsList.innerHTML = '';
+  if (!active.length) {
+    activeEventsList.innerHTML = '<li>No active events.</li>';
+  } else {
+    active.forEach((event) => {
+      const li = document.createElement('li');
+      const remainingDays = Math.max(0, (event.endTime - gameState.currentTimeMs) / DAY_MS).toFixed(1);
+      li.textContent = `${event.title} (${remainingDays} days left)`;
+      activeEventsList.appendChild(li);
+    });
+  }
+
+  eventLogList.innerHTML = '';
+  if (!gameState.events.recentLog.length) {
+    eventLogList.innerHTML = '<li>No events logged.</li>';
+  } else {
+    gameState.events.recentLog.slice(0, 8).forEach((entry) => {
+      const li = document.createElement('li');
+      li.textContent = `${formatDateTime(entry.at)}: ${entry.message}`;
+      eventLogList.appendChild(li);
+    });
+  }
+}
+
+function refreshTradeHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  const prevExp = tradeExporterSelect.value;
+  const prevImp = tradeImporterSelect.value;
+  [tradeExporterSelect, tradeImporterSelect].forEach((select) => { select.innerHTML = ''; });
+  names.forEach((name) => {
+    const opt1 = document.createElement('option');
+    opt1.value = name;
+    opt1.textContent = name;
+    tradeExporterSelect.appendChild(opt1);
+    const opt2 = document.createElement('option');
+    opt2.value = name;
+    opt2.textContent = name;
+    tradeImporterSelect.appendChild(opt2);
+  });
+  if (prevExp && names.includes(prevExp)) tradeExporterSelect.value = prevExp;
+  if (prevImp && names.includes(prevImp)) tradeImporterSelect.value = prevImp;
+  toggleAutoTradeBtn.textContent = `Auto Trade: ${gameState.trade.autoEnabled ? 'On' : 'Off'}`;
+  tradeSummary.textContent = `Trade: ${gameState.trade.flows.filter((flow) => flow.active).length} active flows`;
+
+  if (!focusCountry) {
+    tradeBalanceSummary.textContent = 'Balance: --';
+    tradeFlowsList.innerHTML = '<li>No country selected.</li>';
+    return;
+  }
+
+  const country = countrySystem.ensureCountry(focusCountry);
+  tradeBalanceSummary.textContent = `Balance: Oil ${country.tradeBalance?.oil?.surplus?.toFixed(1) || 0}/${country.tradeBalance?.oil?.deficit?.toFixed(1) || 0} (surplus/deficit), Industry ${country.tradeBalance?.industry_support?.surplus?.toFixed(1) || 0}/${country.tradeBalance?.industry_support?.deficit?.toFixed(1) || 0}`;
+  const flows = gameState.trade.flows.filter((flow) => flow.exporterCountryId === focusCountry || flow.importerCountryId === focusCountry);
+  tradeFlowsList.innerHTML = '';
+  if (!flows.length) {
+    tradeFlowsList.innerHTML = '<li>No trade links.</li>';
+  } else {
+    flows.slice(-10).forEach((flow) => {
+      const li = document.createElement('li');
+      const dir = `${flow.exporterCountryId} → ${flow.importerCountryId}`;
+      li.textContent = `${flow.resourceType} ${flow.flowAmount.toFixed(1)} (${dir}) ${flow.active ? 'ACTIVE' : `BLOCKED:${flow.blockedReason || 'n/a'}`}`;
+      tradeFlowsList.appendChild(li);
+    });
+  }
+}
+
 function setStatus(message, isError = false) {
   statusLabel.textContent = message;
   statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
@@ -2158,8 +2689,10 @@ function setPlayerCountry(countryFeature) {
   spawnEnemyForces();
   economySystem.startEconomyLoop();
   countrySystem.start();
+  eventSystem.start();
   diplomacySystem.start();
   resourceSystem.start();
+  tradeSystem.start();
   policySystem.start();
   domesticStateSystem.start();
   countrySystem.syncOwnership();
@@ -2170,6 +2703,8 @@ function setPlayerCountry(countryFeature) {
   refreshDiplomacyHud();
   refreshPolicyHud();
   refreshDomesticHud();
+  refreshEventHud();
+  refreshTradeHud();
 }
 
 function spawnEnemyForces() {
@@ -2234,6 +2769,8 @@ function spawnEnemyForces() {
   refreshDiplomacyHud();
   refreshPolicyHud();
   refreshDomesticHud();
+  refreshEventHud();
+  refreshTradeHud();
 }
 
 function pointInsideCountry(countryFeature, lonLatPoint) {
@@ -2844,6 +3381,76 @@ function attachPolicyControls() {
   });
 }
 
+function attachEventControls() {
+  triggerEventBtn.addEventListener('click', () => {
+    const type = eventTypeSelect.value;
+    const primary = eventTargetCountry.value;
+    const secondary = eventSecondaryCountry.value;
+    if (!primary) {
+      setStatus('Select a target country for the event.', true);
+      return;
+    }
+    let created = null;
+    if (type === 'border_incident') {
+      if (!secondary || secondary === primary) {
+        setStatus('Border incident requires two different countries.', true);
+        return;
+      }
+      created = eventSystem.createEvent(type, { targetCountryIds: [primary, secondary] });
+    } else {
+      created = eventSystem.createEvent(type, { targetCountryId: primary });
+    }
+    if (!created) {
+      setStatus('Event not created (duplicate active event or invalid target).', true);
+      return;
+    }
+    refreshEventHud();
+  });
+}
+
+function attachTradeControls() {
+  toggleAutoTradeBtn.addEventListener('click', () => {
+    gameState.trade.autoEnabled = !gameState.trade.autoEnabled;
+    refreshTradeHud();
+    setStatus(`Auto trade ${gameState.trade.autoEnabled ? 'enabled' : 'disabled'}.`);
+  });
+  recomputeTradeBtn.addEventListener('click', () => {
+    tradeSystem.processTick();
+    setStatus('Trade flows recomputed.');
+  });
+  forceTradeBtn.addEventListener('click', () => {
+    const exporter = tradeExporterSelect.value;
+    const importer = tradeImporterSelect.value;
+    const resourceType = tradeResourceSelect.value;
+    const amount = Number(tradeAmountInput.value);
+    if (!exporter || !importer || exporter === importer) {
+      setStatus('Choose different exporter/importer countries.', true);
+      return;
+    }
+    const result = tradeSystem.createManualFlow(exporter, importer, resourceType, amount);
+    if (!result.ok) {
+      setStatus(result.message, true);
+      return;
+    }
+    tradeSystem.applyFlows();
+    refreshTradeHud();
+    setStatus('Manual trade flow applied.');
+  });
+  blockTradePairBtn.addEventListener('click', () => {
+    const exporter = tradeExporterSelect.value;
+    const importer = tradeImporterSelect.value;
+    if (!exporter || !importer || exporter === importer) {
+      setStatus('Choose different countries to block trade.', true);
+      return;
+    }
+    diplomacySystem.setTradeAllowed(exporter, importer, false);
+    diplomacySystem.setTradeAllowed(importer, exporter, false);
+    tradeSystem.processTick();
+    refreshDiplomacyHud();
+    setStatus(`Trade blocked between ${exporter} and ${importer}.`);
+  });
+}
+
 async function loadCountriesData() {
   const geoJsonSources = [
     'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson',
@@ -2907,6 +3514,8 @@ function startSimulationLoop() {
     refreshDiplomacyHud();
     refreshPolicyHud();
     refreshDomesticHud();
+    refreshEventHud();
+    refreshTradeHud();
     refreshProductionTicker();
     renderSelectedUnitPanel();
     renderUnits();
@@ -3059,12 +3668,16 @@ async function init() {
   attachUnitControls();
   attachDiplomacyControls();
   attachPolicyControls();
+  attachEventControls();
+  attachTradeControls();
   refreshTimeHud();
   refreshEconomyHud();
   refreshCountryHud();
   refreshDiplomacyHud();
   refreshPolicyHud();
   refreshDomesticHud();
+  refreshEventHud();
+  refreshTradeHud();
   renderSelectedUnitPanel();
 
   try {

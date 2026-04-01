@@ -132,6 +132,69 @@
     </div>
 
     <div class="card">
+      <h2>Crisis & Events</h2>
+      <p id="eventSummary">Events: --</p>
+      <div class="field">
+        <label for="eventTypeSelect">Event Type</label>
+        <select id="eventTypeSelect">
+          <option value="oil_supply_shock">Oil Supply Shock</option>
+          <option value="industrial_strike">Industrial Strike</option>
+          <option value="financial_panic">Financial Panic</option>
+          <option value="protest_wave">Protest Wave</option>
+          <option value="border_incident">Border Incident</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="eventTargetCountry">Target Country</label>
+        <select id="eventTargetCountry"></select>
+      </div>
+      <div class="field">
+        <label for="eventSecondaryCountry">Secondary Country (for border incident)</label>
+        <select id="eventSecondaryCountry"></select>
+      </div>
+      <button id="triggerEventBtn">Trigger Event</button>
+      <p><strong>Active on selected:</strong></p>
+      <ul id="activeEventsList"></ul>
+      <p><strong>Recent events:</strong></p>
+      <ul id="eventLogList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Trade Network</h2>
+      <p id="tradeSummary">Trade: --</p>
+      <p id="tradeBalanceSummary">Balance: --</p>
+      <div class="row">
+        <button id="toggleAutoTradeBtn">Auto Trade: On</button>
+        <button id="recomputeTradeBtn">Recompute Trade</button>
+      </div>
+      <div class="field">
+        <label for="tradeExporterSelect">Exporter</label>
+        <select id="tradeExporterSelect"></select>
+      </div>
+      <div class="field">
+        <label for="tradeImporterSelect">Importer</label>
+        <select id="tradeImporterSelect"></select>
+      </div>
+      <div class="field">
+        <label for="tradeResourceSelect">Resource</label>
+        <select id="tradeResourceSelect">
+          <option value="oil">Oil</option>
+          <option value="industry_support">Industry Support</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="tradeAmountInput">Flow Amount</label>
+        <input id="tradeAmountInput" type="number" min="1" value="20" />
+      </div>
+      <div class="row">
+        <button id="forceTradeBtn">Force Trade Flow</button>
+        <button id="blockTradePairBtn">Block Pair Trade</button>
+      </div>
+      <p><strong>Active flows (selected):</strong></p>
+      <ul id="tradeFlowsList"></ul>
+    </div>
+
+    <div class="card">
       <h2>Base Production</h2>
       <p id="prodBaseLabel">Select a base to manage production.</p>
       <div class="row" id="prodUnitButtons"></div>
