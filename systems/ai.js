@@ -15,6 +15,7 @@ class AISystem {
     this.chokepointSystem = systems.chokepointSystem;
     this.blocSystem = systems.blocSystem;
     this.eventSystem = systems.eventSystem;
+    this.internalResistanceSystem = systems.internalResistanceSystem || null;
     this.negotiationSystem = systems.negotiationSystem;
     this.governmentProfileSystem = systems.governmentProfileSystem || null;
     this.started = false;
@@ -206,6 +207,7 @@ class AISystem {
     const leadershipPressure = Math.max(0, 60 - (country.leaderMandate || 0)) * 0.6
       + Math.max(0, 60 - (country.leaderApproval || 0)) * 0.55
       + Math.max(0, 55 - (country.governmentContinuity || 0)) * 0.7;
+    const resistanceScore = (country.insurgencyPressure || 0) * 0.62 + (country.separatistPressure || 0) * 0.38;
     const leadershipWeak = leadershipPressure >= 35;
     const recentTurnover = (this.gameState.currentTimeMs - (country.lastTurnoverAt || 0)) <= 120 * DAY_MS;
 
@@ -244,6 +246,8 @@ class AISystem {
         strengthDelta: strengthScore - rivalStrengthScore,
         politicalWeakness: country.legitimacy < 40 || country.publicSupport < 38 || country.eliteSupport < 36,
         narrativeCrisis: country.domesticNarrativePressure > 68,
+        internalResistanceSevere: resistanceScore > 58 || (country.stateControl || 70) < 45,
+        stateControlWeak: (country.stateControl || 70) < 55,
         reputationCrisis: country.internationalReputation < -45,
         reputationStrong: country.internationalReputation > 35,
         leadershipPressure,
@@ -300,6 +304,17 @@ class AISystem {
     if (metrics.domesticStrain) {
       scores.stabilize_domestic += 45;
       reasons.stabilize_domestic = 'Domestic stability, unrest, or economic stress is elevated.';
+    }
+    if (metrics.internalResistanceSevere) {
+      scores.stabilize_domestic += 52;
+      scores.deescalate_conflict += 20;
+      scores.pressure_rival -= 20;
+      reasons.stabilize_domestic = 'Insurgency/separatist pressure is threatening state control.';
+    }
+    if (metrics.stateControlWeak) {
+      scores.stabilize_domestic += 28;
+      scores.protect_trade -= 8;
+      scores.expand_influence -= 12;
     }
     if (metrics.politicalWeakness) {
       scores.stabilize_domestic += 24;
@@ -423,7 +438,7 @@ class AISystem {
       return {
         militarySpendingLevel: country.treasury < 1500 || weakMandate ? 'low' : 'normal',
         industryInvestmentLevel: country.economicStress > 58 ? 'low' : 'normal',
-        internalSecurityLevel: domestic.securitySuppressionMult > 1.15 ? 'high' : 'normal'
+        internalSecurityLevel: (country.insurgencyPressure > 45 || country.stateControl < 58 || domestic.securitySuppressionMult > 1.15) ? 'high' : 'normal'
       };
     }
     if (goal === 'secure_resources' || goal === 'protect_trade') {

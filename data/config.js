@@ -130,6 +130,16 @@ const POLITICAL_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+const INTERNAL_RESISTANCE_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  alertCooldownMs: 2 * DAY_MS,
+  outputPenaltyMax: 0.35,
+  manpowerPenaltyMax: 0.28,
+  securityCostMax: 95
+};
+
 const LEADERSHIP_CONFIG = {
   tickMs: DAY_MS,
   clampMin: 0,

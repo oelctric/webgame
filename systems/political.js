@@ -63,6 +63,8 @@ class PoliticalSystem {
     const narrativePressure = Math.max(0, country.domesticNarrativePressure || 0) / 100;
     const severeNarrativePenalty = Math.max(0, (country.infoMetrics?.severePressureDays || 0) - 3) / 12;
     const narrativeShield = Math.max(0.35, 1 - ((country.informationControl || 50) / 130) * (profile.informationControlBase || 1));
+    const resistancePressure = ((country.insurgencyPressure || 0) * 0.6 + (country.separatistPressure || 0) * 0.4) / 100;
+    const controlWeakness = Math.max(0, 60 - (country.stateControl || 70)) / 60;
 
     const securityPenaltyBase = policy.internalSecurityLevel === 'high' ? 0.24 : (policy.internalSecurityLevel === 'normal' ? 0.08 : 0);
     const securityPenalty = securityPenaltyBase * (profile.repressionSupportPenaltyMult || 1);
@@ -82,6 +84,8 @@ class PoliticalSystem {
       - securityPenalty
       - militaryStrainPenalty
       - (narrativePressure * 1.35 * narrativeShield * (profile.narrativePressureSensitivity || 1))
+      - (resistancePressure * 0.75)
+      - (controlWeakness * 0.45)
       + supportRecovery);
 
     const legitimacyCliff = country.publicSupport < (profile.legitimacyCrisisThreshold || 24)
@@ -94,6 +98,8 @@ class PoliticalSystem {
       - (crisisCount * 0.18)
       - legitimacyCliff
       - (narrativePressure * 0.95 * narrativeShield)
+      - (resistancePressure * 0.92)
+      - (controlWeakness * 0.72)
       - (severeNarrativePenalty * 0.35)
       + legitimacyRecovery
       + industryConfidenceBoost);
