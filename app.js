@@ -151,6 +151,12 @@ const playerProfile = document.getElementById('playerProfile');
 const gameDateTime = document.getElementById('gameDateTime');
 const simSpeedLabel = document.getElementById('simSpeedLabel');
 const treasuryLabel = document.getElementById('treasuryLabel');
+const hudCurrentCountry = document.getElementById('hudCurrentCountry');
+const hudAlerts = document.getElementById('hudAlerts');
+const resetViewBtn = document.getElementById('resetViewBtn');
+const rightPanel = document.getElementById('rightPanel');
+const bottomDrawerTabs = document.getElementById('bottomDrawerTabs');
+const bottomDrawerContent = document.getElementById('bottomDrawerContent');
 const economySummary = document.getElementById('economySummary');
 const aiCountriesLabel = document.getElementById('aiCountriesLabel');
 const countryHudName = document.getElementById('countryHudName');
@@ -378,6 +384,9 @@ let basesLayer;
 let citiesLayer;
 let unitsLayer;
 let projection;
+let mapRoot;
+let mapZoomBehavior;
+let suppressMapClick = false;
 let playStep = 1;
 let lastFrameTime = performance.now();
 
@@ -438,6 +447,7 @@ function refreshCountryHud() {
     countryHudStrain.textContent = 'Resource strain: --';
     countryHudAssets.textContent = 'Cities/Bases/Units: --';
     countryHudFlow.textContent = 'Income/Upkeep/Net: --';
+    updateContextActionPanels();
     return;
   }
   const country = countrySystem.ensureCountry(countryName);
@@ -462,6 +472,7 @@ function refreshCountryHud() {
   countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}${aiReason}`;
   countryHudAssets.textContent = `Cities/Bases/Units: ${country.controlledCityIds.length}/${country.controlledBaseIds.length}/${country.controlledUnitIds.length}`;
   countryHudFlow.textContent = `Income/Upkeep/Net: +${country.incomePerTick}/-${country.upkeepPerTick}/${country.netPerTick >= 0 ? '+' : ''}${country.netPerTick}`;
+  updateContextActionPanels();
 }
 
 function getDiplomacyFocusCountry() {
@@ -999,6 +1010,85 @@ function refreshTradeHud() {
 function setStatus(message, isError = false) {
   statusLabel.textContent = message;
   statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
+  hudAlerts.textContent = `Alerts: ${message}`;
+}
+
+function getMapLonLatFromEvent(event) {
+  const [x, y] = d3.pointer(event, svg.node());
+  const transform = d3.zoomTransform(svg.node());
+  const [worldX, worldY] = transform.invert([x, y]);
+  return projection.invert([worldX, worldY]);
+}
+
+function shouldIgnoreMapClick() {
+  if (!suppressMapClick) return false;
+  suppressMapClick = false;
+  return true;
+}
+
+function organizePanels() {
+  const cards = Array.from(document.querySelectorAll('.sidebar .card'));
+  const byTitle = new Map(cards.map((card) => [card.querySelector('h2')?.textContent?.trim(), card]));
+  const leftTitles = ['Geo Command', 'Simulation', 'Build Mode', 'Country State', 'Included Major Cities', 'Legend'];
+  const rightTitles = ['Unit Orders', 'Base Production', 'Units', 'Domestic Policy', 'Government Profile', 'Diplomacy'];
+  const tabs = {
+    World: ['Blocs & Coalitions', 'Negotiated Resolution'],
+    Systems: ['Domestic State', 'Information & Narrative', 'Internal Resistance'],
+    Economy: ['Trade Network', 'Migration & Humanitarian Pressure'],
+    Crises: ['Crisis & Events'],
+    Sandbox: ['Chokepoints & Route Pressure']
+  };
+
+  cards.forEach((card) => card.classList.add('hidden-panel'));
+  leftTitles.forEach((title) => byTitle.get(title)?.classList.remove('hidden-panel'));
+  rightTitles.forEach((title) => {
+    const card = byTitle.get(title);
+    if (card) {
+      card.classList.remove('hidden-panel');
+      rightPanel.appendChild(card);
+    }
+  });
+
+  bottomDrawerTabs.innerHTML = '';
+  bottomDrawerContent.innerHTML = '';
+  Object.entries(tabs).forEach(([tabName, titles], idx) => {
+    const btn = document.createElement('button');
+    btn.textContent = tabName;
+    btn.className = idx === 0 ? 'active' : '';
+    const pane = document.createElement('div');
+    pane.className = `drawer-pane ${idx === 0 ? 'active' : ''}`;
+    const grid = document.createElement('div');
+    grid.className = 'pane-grid';
+    titles.forEach((title) => {
+      const card = byTitle.get(title);
+      if (card) {
+        card.classList.remove('hidden-panel');
+        grid.appendChild(card);
+      }
+    });
+    pane.appendChild(grid);
+    btn.addEventListener('click', () => {
+      bottomDrawerTabs.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+      bottomDrawerContent.querySelectorAll('.drawer-pane').forEach((p) => p.classList.remove('active'));
+      btn.classList.add('active');
+      pane.classList.add('active');
+    });
+    bottomDrawerTabs.appendChild(btn);
+    bottomDrawerContent.appendChild(pane);
+  });
+}
+
+function updateContextActionPanels() {
+  const unitOrdersCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Unit Orders');
+  const productionCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Base Production');
+  const diplomacyCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Diplomacy');
+  const hasUnit = Boolean(gameState.selectedUnitId);
+  const hasBase = Boolean(gameState.selectedBaseId);
+  const hasCountry = Boolean(gameState.selectedCountryForHud);
+  if (unitOrdersCard) unitOrdersCard.style.display = hasUnit ? '' : 'none';
+  if (productionCard) productionCard.style.display = hasBase ? '' : 'none';
+  if (diplomacyCard) diplomacyCard.style.display = hasCountry ? '' : 'none';
+  hudCurrentCountry.textContent = `Country: ${gameState.selectedCountryForHud || '--'}`;
 }
 
 function setOverlay(name) {
@@ -1343,6 +1433,7 @@ function renderBases() {
     })
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (shouldIgnoreMapClick()) return;
       if (gameState.attackMode && gameState.selectedUnitId) {
         const result = combatSystem.startAttack(gameState.selectedUnitId, 'base', d.id);
         if (!result.ok) {
@@ -1401,6 +1492,7 @@ function renderCities() {
     .attr('cy', (d) => projection(d.lonLat)[1])
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (shouldIgnoreMapClick()) return;
       gameState.selectedAsset = { type: 'city', id: d.id };
       gameState.selectedCountryForHud = d.ownerCountry;
       selectedAssetStatus.textContent = `Selected asset: City ${d.name} • Owner ${d.ownerCountry} • ${d.controlStatus}`;
@@ -1451,6 +1543,7 @@ function renderUnits() {
     .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
     .on('click', (event, d) => {
       event.stopPropagation();
+      if (shouldIgnoreMapClick()) return;
       if (gameState.attackMode && gameState.selectedUnitId && gameState.selectedUnitId !== d.id) {
         const result = combatSystem.startAttack(gameState.selectedUnitId, 'unit', d.id);
         if (!result.ok) {
@@ -1497,6 +1590,7 @@ function renderSelectedUnitPanel() {
   attackModeStatus.textContent = `Attack mode: ${gameState.attackMode ? 'On (click enemy unit/base)' : 'Off'}`;
   captureModeStatus.textContent = `Capture mode: ${gameState.captureMode ? 'On (click enemy city/base)' : 'Off'}`;
   if (!gameState.selectedAsset) selectedAssetStatus.textContent = 'Selected asset: none';
+  updateContextActionPanels();
 }
 
 function renderProductionPanel() {
@@ -1507,6 +1601,7 @@ function renderProductionPanel() {
   if (!base) {
     prodBaseLabel.textContent = 'Select a base to manage production.';
     prodCurrent.textContent = 'Current: --';
+    updateContextActionPanels();
     return;
   }
 
@@ -1523,6 +1618,7 @@ function renderProductionPanel() {
   } else {
     prodCurrent.textContent = 'Current: Idle';
   }
+  updateContextActionPanels();
 
   base.production.queue.forEach((unitId) => {
     const unit = gameState.units.find((entry) => entry.id === unitId);
@@ -2392,18 +2488,18 @@ async function setupMap() {
   projection = projectionFactory().fitExtent([[15, 15], [width - 15, height - 15]], { type: 'Sphere' });
   const path = d3.geoPath(projection);
 
-  const root = svg.append('g');
-  countriesLayer = root.append('g').attr('id', 'countriesLayer');
-  citiesLayer = root.append('g').attr('id', 'citiesLayer');
-  basesLayer = root.append('g').attr('id', 'basesLayer');
-  unitsLayer = root.append('g').attr('id', 'unitsLayer');
+  mapRoot = svg.append('g').attr('id', 'mapRoot');
+  countriesLayer = mapRoot.append('g').attr('id', 'countriesLayer');
+  citiesLayer = mapRoot.append('g').attr('id', 'citiesLayer');
+  basesLayer = mapRoot.append('g').attr('id', 'basesLayer');
+  unitsLayer = mapRoot.append('g').attr('id', 'unitsLayer');
 
   countries = await loadCountriesData();
   initializeCityState();
 
   function placeBaseFromEvent(event) {
-    const [x, y] = d3.pointer(event, svg.node());
-    const lonLat = projection.invert([x, y]);
+    if (shouldIgnoreMapClick()) return;
+    const lonLat = getMapLonLatFromEvent(event);
     if (!lonLat) return;
 
     if (gameState.moveMode && gameState.selectedUnitId) {
@@ -2482,6 +2578,7 @@ async function setupMap() {
     })
     .on('click', function (event, d) {
       event.stopPropagation();
+      if (shouldIgnoreMapClick()) return;
       if (!gameState.selectedPlayerCountry) {
         setStatus('Use Play in the main menu to choose your country first.', true);
         return;
@@ -2505,6 +2602,30 @@ async function setupMap() {
     placeBaseFromEvent(event);
   });
 
+  mapZoomBehavior = d3.zoom()
+    .scaleExtent([1, 8])
+    .translateExtent([[-width * 0.6, -height * 0.6], [width * 1.6, height * 1.6]])
+    .on('start', () => {
+      mapWrap.classList.add('panning');
+    })
+    .on('zoom', (event) => {
+      if (!mapRoot) return;
+      mapRoot.attr('transform', event.transform);
+      const source = event.sourceEvent;
+      if (source && (source.type === 'mousemove' || source.type === 'pointermove') && (Math.abs(source.movementX) > 2 || Math.abs(source.movementY) > 2)) {
+        suppressMapClick = true;
+      }
+    })
+    .on('end', () => {
+      mapWrap.classList.remove('panning');
+      setTimeout(() => { suppressMapClick = false; }, 0);
+    });
+
+  svg.call(mapZoomBehavior).on('dblclick.zoom', null);
+  resetViewBtn.addEventListener('click', () => {
+    svg.transition().duration(250).call(mapZoomBehavior.transform, d3.zoomIdentity);
+  });
+
   renderCityList();
   createBaseButtons();
   populateCountrySelect();
@@ -2519,6 +2640,7 @@ async function setupMap() {
 }
 
 async function init() {
+  organizePanels();
   applySettingsUI();
   attachMenuHandlers();
   attachTimeControls();
@@ -2550,6 +2672,7 @@ async function init() {
   refreshBlocHud();
   refreshTradeHud();
   renderSelectedUnitPanel();
+  hudAlerts.textContent = 'Alerts: Ready';
 
   try {
     await setupMap();
