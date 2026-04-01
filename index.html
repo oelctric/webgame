@@ -705,7 +705,14 @@
   </main>
   <aside id="rightPanel"></aside>
   </div>
-  <section id="bottomDrawer">
+  <section id="bottomDrawer" class="collapsed" aria-label="Advanced systems drawer">
+    <div class="drawer-header">
+      <div class="drawer-title-wrap">
+        <strong>Advanced Systems</strong>
+        <span>Diplomacy, economy, crises, blocs, and sandbox tools</span>
+      </div>
+      <button id="toggleDrawerBtn" type="button" aria-expanded="false" aria-controls="bottomDrawerContent">Open Drawer</button>
+    </div>
     <div id="bottomDrawerTabs"></div>
     <div id="bottomDrawerContent"></div>
   </section>
