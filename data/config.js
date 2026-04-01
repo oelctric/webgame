@@ -238,6 +238,53 @@ const INFLUENCE_CONFIG = {
   }
 };
 
+const PROXY_CONFLICT_CONFIG = {
+  tickMs: DAY_MS,
+  effectBasePerDay: 1,
+  defaultDurationDays: 30,
+  minDurationDays: 7,
+  maxDurationDays: 180,
+  minStrength: 0.5,
+  maxStrength: 2.5,
+  minAttributionRisk: 0.05,
+  maxAttributionRisk: 0.9,
+  defaultAttributionRisk: 0.28,
+  exposureCheckPerDay: 0.2,
+  maxActiveOpsPerCountry: 3,
+  cooldownMs: 12 * DAY_MS,
+  maxIncidentLog: 12,
+  types: {
+    insurgent_support: {
+      label: 'Insurgent Support',
+      prefersHotspotTarget: true,
+      baseUpfrontCost: 240,
+      dailyCost: 34,
+      effectProfile: { insurgencyPressure: 1, stateControlErosion: 1 }
+    },
+    separatist_support: {
+      label: 'Separatist Support',
+      prefersHotspotTarget: true,
+      baseUpfrontCost: 260,
+      dailyCost: 36,
+      effectProfile: { separatistPressure: 1, legitimacyPressure: 1 }
+    },
+    faction_support: {
+      label: 'Faction Support',
+      prefersHotspotTarget: false,
+      baseUpfrontCost: 180,
+      dailyCost: 28,
+      effectProfile: { factionSkew: 1, narrativePressure: 1 }
+    },
+    hotspot_destabilization: {
+      label: 'Hotspot Destabilization',
+      prefersHotspotTarget: true,
+      baseUpfrontCost: 220,
+      dailyCost: 32,
+      effectProfile: { localUnrest: 1, localControl: -1 }
+    }
+  }
+};
+
 const RESOURCE_CONFIG = {
   tickMs: DAY_MS,
   defaultOil: 220,
