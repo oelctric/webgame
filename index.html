@@ -200,6 +200,33 @@
       <p id="domesticTrend">Domestic trend: --</p>
     </div>
 
+
+    <div class="card">
+      <h2>Information & Narrative</h2>
+      <p id="infoFocusCountry">Information state for: --</p>
+      <p id="infoNarrativePressure">Domestic narrative pressure: --</p>
+      <p id="infoReputation">International reputation: --</p>
+      <p id="infoControl">Information control: --</p>
+      <p id="infoLabel">Narrative status: --</p>
+      <p id="reputationLabel">Reputation status: --</p>
+      <div class="row">
+        <button id="raiseNarrativePressureBtn">Narrative +8</button>
+        <button id="lowerNarrativePressureBtn">Narrative -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseReputationBtn">Reputation +8</button>
+        <button id="lowerReputationBtn">Reputation -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseInfoControlBtn">Control +6</button>
+        <button id="lowerInfoControlBtn">Control -6</button>
+      </div>
+      <div class="row">
+        <button id="triggerInfoSuccessBtn">Propaganda Success</button>
+        <button id="triggerInfoScandalBtn">Info Scandal</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2>Migration & Humanitarian Pressure</h2>
       <p id="migrationFocusCountry">Migration focus: --</p>
@@ -474,6 +501,7 @@
   <script src="systems/policy.js" defer></script>
   <script src="systems/domestic-state.js" defer></script>
   <script src="systems/political.js" defer></script>
+  <script src="systems/information.js" defer></script>
   <script src="systems/migration.js" defer></script>
   <script src="systems/events.js" defer></script>
   <script src="systems/sanctions.js" defer></script>

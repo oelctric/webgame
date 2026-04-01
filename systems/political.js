@@ -47,7 +47,9 @@ class PoliticalSystem {
         repressionSupportPenaltyMult: 1,
         legitimacyRecoveryMult: 1,
         legitimacyCrisisThreshold: 24,
-        legitimacyCollapseMult: 1
+        legitimacyCollapseMult: 1,
+        informationControlBase: 1,
+        narrativePressureSensitivity: 1
       };
 
     const crisisCount = events.length;
@@ -58,6 +60,9 @@ class PoliticalSystem {
     const warPain = Math.max(0, country.warWeariness - 20) / 80 * (profile.warWearinessDriftMult || 1);
     const unrestPain = Math.max(0, country.unrest - 20) / 80;
     const sanctionsPain = Math.min(1, pressure.incomingCount / 4);
+    const narrativePressure = Math.max(0, country.domesticNarrativePressure || 0) / 100;
+    const severeNarrativePenalty = Math.max(0, (country.infoMetrics?.severePressureDays || 0) - 3) / 12;
+    const narrativeShield = Math.max(0.35, 1 - ((country.informationControl || 50) / 130) * (profile.informationControlBase || 1));
 
     const securityPenaltyBase = policy.internalSecurityLevel === 'high' ? 0.24 : (policy.internalSecurityLevel === 'normal' ? 0.08 : 0);
     const securityPenalty = securityPenaltyBase * (profile.repressionSupportPenaltyMult || 1);
@@ -76,6 +81,7 @@ class PoliticalSystem {
       - (borderIncidentCount * 0.08)
       - securityPenalty
       - militaryStrainPenalty
+      - (narrativePressure * 1.35 * narrativeShield * (profile.narrativePressureSensitivity || 1))
       + supportRecovery);
 
     const legitimacyCliff = country.publicSupport < (profile.legitimacyCrisisThreshold || 24)
@@ -87,6 +93,8 @@ class PoliticalSystem {
       - (warPain * 0.75)
       - (crisisCount * 0.18)
       - legitimacyCliff
+      - (narrativePressure * 0.95 * narrativeShield)
+      - (severeNarrativePenalty * 0.35)
       + legitimacyRecovery
       + industryConfidenceBoost);
 
@@ -95,12 +103,14 @@ class PoliticalSystem {
       - (country.treasury < 0 ? 0.22 : 0)
       - (country.legitimacy < 35 ? 0.2 : 0)
       - (country.unrest > 60 ? 0.12 : 0)
+      - (country.domesticNarrativePressure > 72 ? 0.14 : 0)
       + (country.stability > 60 ? 0.12 : 0));
 
     const lowLegitimacyPenalty = country.legitimacy < 35 ? -0.24 : (country.legitimacy > 70 ? 0.1 : 0);
     const lowPublicPenalty = country.publicSupport < 38 ? 0.24 : (country.publicSupport > 68 ? -0.1 : 0);
     const elitePenalty = country.eliteSupport < 35 ? 0.82 : (country.eliteSupport > 66 ? 1.08 : 1);
-    const crisisResilience = country.eliteSupport < 35 ? 0.9 : (country.legitimacy > 65 ? 1.08 : 1);
+    const crisisResilience = (country.eliteSupport < 35 ? 0.9 : (country.legitimacy > 65 ? 1.08 : 1))
+      * (country.infoMetrics?.severePressureDays > 8 ? 0.92 : 1);
 
     country.politicalEffects = {
       stabilityDrift: lowLegitimacyPenalty,

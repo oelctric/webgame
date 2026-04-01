@@ -61,7 +61,9 @@ class GovernmentProfileSystem {
         legitimacyRecoveryMult: 1.1,
         legitimacyCrisisThreshold: 28,
         legitimacyCollapseMult: 0.9,
-        migrationShockMult: 1.12
+        migrationShockMult: 1.12,
+        informationControlBase: 0.9,
+        narrativePressureSensitivity: 1.22
       },
       hybrid: {
         warWearinessDriftMult: 1,
@@ -71,7 +73,9 @@ class GovernmentProfileSystem {
         legitimacyRecoveryMult: 1,
         legitimacyCrisisThreshold: 24,
         legitimacyCollapseMult: 1.05,
-        migrationShockMult: 1
+        migrationShockMult: 1,
+        informationControlBase: 1,
+        narrativePressureSensitivity: 1
       },
       authoritarian: {
         warWearinessDriftMult: 0.72,
@@ -81,7 +85,9 @@ class GovernmentProfileSystem {
         legitimacyRecoveryMult: 0.82,
         legitimacyCrisisThreshold: 22,
         legitimacyCollapseMult: 1.45,
-        migrationShockMult: 0.9
+        migrationShockMult: 0.9,
+        informationControlBase: 1.28,
+        narrativePressureSensitivity: 0.82
       }
     };
     return byRegime[profile.regimeType] || byRegime.hybrid;
@@ -130,7 +136,9 @@ class GovernmentProfileSystem {
         sanctionsBias: 0.72,
         blocAffinity: 1.18,
         tradePreservationBias: 1.24,
-        hostilityPersistence: 0.85
+        hostilityPersistence: 0.85,
+        reputationSensitivity: 1.22,
+        reputationTolerance: 0.92
       },
       pragmatic: {
         escalationBias: 0,
@@ -138,7 +146,9 @@ class GovernmentProfileSystem {
         sanctionsBias: 1,
         blocAffinity: 1,
         tradePreservationBias: 1,
-        hostilityPersistence: 1
+        hostilityPersistence: 1,
+        reputationSensitivity: 1,
+        reputationTolerance: 1
       },
       aggressive: {
         escalationBias: 1,
@@ -146,7 +156,9 @@ class GovernmentProfileSystem {
         sanctionsBias: 1.32,
         blocAffinity: 0.9,
         tradePreservationBias: 0.78,
-        hostilityPersistence: 1.24
+        hostilityPersistence: 1.24,
+        reputationSensitivity: 0.78,
+        reputationTolerance: 1.35
       }
     };
     return byStyle[profile.foreignPolicyStyle] || byStyle.pragmatic;
