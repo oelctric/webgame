@@ -336,19 +336,32 @@ const selectedAssetStatus = document.getElementById('selectedAssetStatus');
 const overlays = {
   mainMenu: document.getElementById('mainMenu'),
   playFlow: document.getElementById('playFlow'),
-  settingsPanel: document.getElementById('settingsPanel')
+  loadPanel: document.getElementById('loadPanel'),
+  sandboxPanel: document.getElementById('sandboxPanel'),
+  settingsPanel: document.getElementById('settingsPanel'),
+  creditsPanel: document.getElementById('creditsPanel')
 };
 
 const playTitle = document.getElementById('playTitle');
+const playStepIndicator = document.getElementById('playStepIndicator');
 const playStepCountry = document.getElementById('playStepCountry');
 const playStepLeader = document.getElementById('playStepLeader');
+const playStepScenario = document.getElementById('playStepScenario');
+const playStepConfirm = document.getElementById('playStepConfirm');
 const countrySelect = document.getElementById('countrySelect');
 const countryWarning = document.getElementById('countryWarning');
 const leaderNameInput = document.getElementById('leaderName');
+const scenarioTypeSelect = document.getElementById('scenarioType');
+const simulationModeSelect = document.getElementById('simulationMode');
+const launchSummary = document.getElementById('launchSummary');
 const timeControlButtons = document.getElementById('timeControlButtons');
 const skipDayBtn = document.getElementById('skipDayBtn');
 const skipWeekBtn = document.getElementById('skipWeekBtn');
 const skipMonthBtn = document.getElementById('skipMonthBtn');
+const menuPreviewLabel = document.getElementById('menuPreviewLabel');
+const menuPreviewTitle = document.getElementById('menuPreviewTitle');
+const menuPreviewDescription = document.getElementById('menuPreviewDescription');
+const menuPreviewBullets = document.getElementById('menuPreviewBullets');
 
 const baseTypes = [
   { key: 'ground', label: 'Ground', color: 'var(--base-ground)' },
@@ -1099,6 +1112,85 @@ function hideOverlays() {
   Object.values(overlays).forEach((el) => el.classList.add('hidden'));
 }
 
+const menuPreviewData = {
+  continue: {
+    label: 'Operational Resume',
+    title: 'Continue',
+    description: 'Return to your active command theater with current geopolitical conditions and system state.',
+    bullets: ['Best for long-form campaigns.', 'Disabled until a simulation is initialized.']
+  },
+  newSimulation: {
+    label: 'Simulation Setup',
+    title: 'New Simulation',
+    description: 'Launch a structured setup flow: country, leader profile, start conditions, and simulation mode.',
+    bullets: ['Four-step launch sequence.', 'Designed for expansion with future scenario logic.']
+  },
+  loadScenario: {
+    label: 'Archive & Scenario Deck',
+    title: 'Load / Scenario Browser',
+    description: 'Browse recent sessions and scenario templates with clear placeholders for save integration.',
+    bullets: ['Continue last session entrypoint.', 'Scenario cards prepared for future content packs.']
+  },
+  sandbox: {
+    label: 'Sandbox Command Deck',
+    title: 'Sandbox',
+    description: 'Start fast with preset world options and a dedicated freeform experimentation path.',
+    bullets: ['Quick-start sandbox action.', 'Custom world hooks prepared as placeholders.']
+  },
+  settings: {
+    label: 'Systems Configuration',
+    title: 'Settings',
+    description: 'Adjust audio, interface scale, and simulation-facing defaults in a structured control layout.',
+    bullets: ['Persistent browser-stored audio levels.', 'UI and graphics/simulation placeholders ready.']
+  },
+  tutorial: {
+    label: 'Learning Path',
+    title: 'Tutorial / How to Play',
+    description: 'Step-by-step onboarding is scaffolded for future instructional content.',
+    bullets: ['Will include diplomacy and economy primers.', 'Current build uses in-menu placeholders.']
+  },
+  credits: {
+    label: 'Project Information',
+    title: 'Credits',
+    description: 'View project identity, simulator framing, and version details.',
+    bullets: ['Geo Command browser prototype.', 'Focused on geopolitical systems simulation.']
+  },
+  exit: {
+    label: 'Exit',
+    title: 'Exit / Quit',
+    description: 'Web builds cannot fully close themselves; this prompts a graceful browser-level fallback.',
+    bullets: ['Shows a clear, intentional web message.', 'No abrupt behavior changes.']
+  }
+};
+
+function setMainMenuPreview(key) {
+  const preview = menuPreviewData[key] || menuPreviewData.newSimulation;
+  menuPreviewLabel.textContent = preview.label;
+  menuPreviewTitle.textContent = preview.title;
+  menuPreviewDescription.textContent = preview.description;
+  menuPreviewBullets.innerHTML = '';
+  preview.bullets.forEach((line) => {
+    const li = document.createElement('li');
+    li.textContent = line;
+    menuPreviewBullets.appendChild(li);
+  });
+}
+
+function updatePlayFlowUI() {
+  playStepIndicator.textContent = String(playStep);
+  const stepViews = [
+    { title: 'New Simulation Setup · Country Selection', element: playStepCountry },
+    { title: 'New Simulation Setup · Leader Profile', element: playStepLeader },
+    { title: 'New Simulation Setup · Start Conditions', element: playStepScenario },
+    { title: 'New Simulation Setup · Confirmation', element: playStepConfirm }
+  ];
+  stepViews.forEach((step, idx) => {
+    step.element.classList.toggle('hidden', idx !== playStep - 1);
+  });
+  playTitle.textContent = stepViews[playStep - 1]?.title || 'New Simulation Setup';
+  document.getElementById('playNextBtn').textContent = playStep === 4 ? 'Launch Simulation' : 'Next';
+}
+
 function renderCityList(countryName) {
   cityList.innerHTML = '';
   const sourceCities = gameState.cities.length ? gameState.cities : majorCities.map((c) => ({ name: c.name, ownerCountry: c.country }));
@@ -1680,28 +1772,67 @@ function refreshProductionTicker() {
 }
 
 function attachMenuHandlers() {
-  document.getElementById('playBtn').addEventListener('click', () => {
+  const menuButtons = Array.from(document.querySelectorAll('.menu-nav-btn'));
+  menuButtons.forEach((btn) => {
+    const previewKey = btn.dataset.preview;
+    btn.addEventListener('mouseenter', () => {
+      menuButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === btn));
+      if (previewKey) setMainMenuPreview(previewKey);
+    });
+    btn.addEventListener('focus', () => {
+      menuButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === btn));
+      if (previewKey) setMainMenuPreview(previewKey);
+    });
+  });
+  setMainMenuPreview('newSimulation');
+
+  document.getElementById('newSimulationBtn').addEventListener('click', () => {
     playStep = 1;
-    playTitle.textContent = 'Choose Your Country';
-    playStepCountry.classList.remove('hidden');
-    playStepLeader.classList.add('hidden');
+    updatePlayFlowUI();
     countryWarning.textContent = '';
     leaderNameInput.value = '';
+    scenarioTypeSelect.value = 'modern';
+    simulationModeSelect.value = simulationModeSelect.value || 'standard';
+    launchSummary.textContent = 'Review your setup before deployment.';
     setOverlay('playFlow');
   });
 
+  document.getElementById('continueBtn').addEventListener('click', () => {
+    if (!gameState.selectedPlayerCountry) {
+      setStatus('No active session found. Start a new simulation first.', true);
+      return;
+    }
+    hideOverlays();
+    setStatus(`Resuming command of ${gameState.selectedPlayerCountry.properties.name}.`);
+  });
+  document.getElementById('loadScenarioBtn').addEventListener('click', () => setOverlay('loadPanel'));
+  document.getElementById('sandboxBtn').addEventListener('click', () => setOverlay('sandboxPanel'));
   document.getElementById('settingsBtn').addEventListener('click', () => setOverlay('settingsPanel'));
+  document.getElementById('creditsBtn').addEventListener('click', () => setOverlay('creditsPanel'));
+  document.getElementById('tutorialBtn').addEventListener('click', () => {
+    setStatus('Tutorial content is planned for a future update. Start with New Simulation.');
+  });
+  document.getElementById('exitBtn').addEventListener('click', () => {
+    setStatus('Web build cannot quit directly. Close this browser tab to exit.');
+  });
+
   document.getElementById('settingsBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
+  document.getElementById('loadBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
+  document.getElementById('sandboxBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
+  document.getElementById('creditsBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
+  document.getElementById('loadContinueBtn').addEventListener('click', () => document.getElementById('continueBtn').click());
+  document.getElementById('sandboxQuickStartBtn').addEventListener('click', () => {
+    simulationModeSelect.value = 'sandbox';
+    document.getElementById('newSimulationBtn').click();
+  });
 
   document.getElementById('playBackBtn').addEventListener('click', () => {
     if (playStep === 1) {
       setOverlay('mainMenu');
       return;
     }
-    playStep = 1;
-    playTitle.textContent = 'Choose Your Country';
-    playStepCountry.classList.remove('hidden');
-    playStepLeader.classList.add('hidden');
+    playStep -= 1;
+    updatePlayFlowUI();
   });
 
   document.getElementById('playNextBtn').addEventListener('click', () => {
@@ -1711,31 +1842,43 @@ function attachMenuHandlers() {
         countryWarning.textContent = 'Please choose a country to continue.';
         return;
       }
-
       const chosenFeature = countries.find((c) => c.properties.name === chosen);
       if (!chosenFeature) {
         countryWarning.textContent = 'Country data unavailable. Choose another country.';
         return;
       }
-
       countryWarning.textContent = '';
       setPlayerCountry(chosenFeature);
       playStep = 2;
-      playTitle.textContent = `Create Leader for ${chosen}`;
-      playStepCountry.classList.add('hidden');
-      playStepLeader.classList.remove('hidden');
+      updatePlayFlowUI();
+      return;
+    }
+
+    if (playStep === 2) {
+      const leaderName = leaderNameInput.value.trim();
+      if (!leaderName) {
+        alert('Please enter a leader name.');
+        return;
+      }
+      playStep = 3;
+      updatePlayFlowUI();
+      return;
+    }
+
+    if (playStep === 3) {
+      const scenarioLabel = scenarioTypeSelect.options[scenarioTypeSelect.selectedIndex]?.textContent || 'Modern Baseline';
+      const modeLabel = simulationModeSelect.options[simulationModeSelect.selectedIndex]?.textContent || 'Standard Simulation';
+      launchSummary.textContent = `Country: ${gameState.selectedPlayerCountry.properties.name} · Leader: ${leaderNameInput.value.trim()} · Scenario: ${scenarioLabel} · Mode: ${modeLabel}`;
+      playStep = 4;
+      updatePlayFlowUI();
       return;
     }
 
     const leaderName = leaderNameInput.value.trim();
-    if (!leaderName) {
-      alert('Please enter a leader name.');
-      return;
-    }
-
     const playerCountryState = countrySystem.ensureCountry(gameState.selectedPlayerCountry.properties.name);
-    playerProfile.textContent = `Leader ${leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)})`;
-    setStatus(`Commander ${leaderName}, place bases and run time to complete construction.`);
+    const modeLabel = simulationModeSelect.value === 'sandbox' ? 'Sandbox' : 'Standard';
+    playerProfile.textContent = `Leader ${leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)}) · Mode: ${modeLabel}`;
+    setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode. Place bases and advance time to complete construction.`);
     hideOverlays();
   });
 }
