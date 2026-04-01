@@ -73,6 +73,20 @@ class CountrySystem {
         domesticNarrativePressure: 22,
         internationalReputation: 8,
         informationControl: 50,
+        insurgencyPressure: 8,
+        separatistPressure: 6,
+        stateControl: 78,
+        foreignBackedPressure: 0,
+        resistanceEffects: {
+          outputPenalty: 0,
+          manpowerPenalty: 0,
+          securityCost: 0,
+          legitimacyDrift: 0,
+          publicSupportDrift: 0
+        },
+        resistanceHotspots: [],
+        resistanceAlertBucket: 'low',
+        lastResistanceAlertAt: 0,
         informationAlertBucket: 'stable',
         lastInformationAlertAt: 0,
         infoMetrics: {
@@ -137,6 +151,25 @@ class CountrySystem {
     if (typeof country.domesticNarrativePressure !== 'number') country.domesticNarrativePressure = 22;
     if (typeof country.internationalReputation !== 'number') country.internationalReputation = 8;
     if (typeof country.informationControl !== 'number') country.informationControl = 50;
+    if (typeof country.insurgencyPressure !== 'number') country.insurgencyPressure = 8;
+    if (typeof country.separatistPressure !== 'number') country.separatistPressure = 6;
+    if (typeof country.stateControl !== 'number') country.stateControl = 78;
+    if (typeof country.foreignBackedPressure !== 'number') country.foreignBackedPressure = 0;
+    country.resistanceEffects = country.resistanceEffects || {
+      outputPenalty: 0,
+      manpowerPenalty: 0,
+      securityCost: 0,
+      legitimacyDrift: 0,
+      publicSupportDrift: 0
+    };
+    if (typeof country.resistanceEffects.outputPenalty !== 'number') country.resistanceEffects.outputPenalty = 0;
+    if (typeof country.resistanceEffects.manpowerPenalty !== 'number') country.resistanceEffects.manpowerPenalty = 0;
+    if (typeof country.resistanceEffects.securityCost !== 'number') country.resistanceEffects.securityCost = 0;
+    if (typeof country.resistanceEffects.legitimacyDrift !== 'number') country.resistanceEffects.legitimacyDrift = 0;
+    if (typeof country.resistanceEffects.publicSupportDrift !== 'number') country.resistanceEffects.publicSupportDrift = 0;
+    if (!Array.isArray(country.resistanceHotspots)) country.resistanceHotspots = [];
+    if (!country.resistanceAlertBucket) country.resistanceAlertBucket = 'low';
+    if (typeof country.lastResistanceAlertAt !== 'number') country.lastResistanceAlertAt = 0;
     if (!country.informationAlertBucket) country.informationAlertBucket = 'stable';
     if (typeof country.lastInformationAlertAt !== 'number') country.lastInformationAlertAt = 0;
     country.infoMetrics = country.infoMetrics || {
@@ -190,7 +223,8 @@ class CountrySystem {
       if (city.status === 'destroyed') return;
       const country = this.ensureCountry(city.ownerCountry);
       country.controlledCityIds.push(city.id);
-      country.incomePerTick += ECONOMY_CONFIG.cityIncomePerDay;
+      const resistanceOutputMod = Math.max(0.45, 1 - (country.resistanceEffects?.outputPenalty || 0));
+      country.incomePerTick += ECONOMY_CONFIG.cityIncomePerDay * resistanceOutputMod;
     });
 
     this.gameState.bases.forEach((base) => {
@@ -208,6 +242,7 @@ class CountrySystem {
     });
 
     Object.values(this.gameState.countries).forEach((country) => {
+      country.upkeepPerTick += country.resistanceEffects?.securityCost || 0;
       country.netPerTick = country.incomePerTick - country.upkeepPerTick;
       const basePopulation = COUNTRY_CONFIG.basePopulation + country.controlledCityIds.length * COUNTRY_CONFIG.cityPopulation;
       const baseIndustry = 20 + country.controlledCityIds.length * COUNTRY_CONFIG.cityIndustry + country.controlledBaseIds.length * COUNTRY_CONFIG.baseIndustry;

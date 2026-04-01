@@ -45,6 +45,10 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No political updates yet.'
   },
+  internalResistance: {
+    lastTickAt: null,
+    lastSummary: 'No internal resistance updates yet.'
+  },
   leadership: {
     lastTickAt: null,
     lastSummary: 'No leadership cycle updates yet.'
@@ -109,6 +113,7 @@ const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countr
 const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
@@ -129,6 +134,7 @@ const aiSystem = new AISystem(gameState, scheduler, {
   chokepointSystem,
   blocSystem,
   eventSystem,
+  internalResistanceSystem,
   negotiationSystem,
   governmentProfileSystem
 });
@@ -212,6 +218,23 @@ const domesticGovernmentContinuity = document.getElementById('domesticGovernment
 const domesticElectionDate = document.getElementById('domesticElectionDate');
 const domesticLeadershipLabel = document.getElementById('domesticLeadershipLabel');
 const domesticLeadershipSummary = document.getElementById('domesticLeadershipSummary');
+const resistanceFocusCountry = document.getElementById('resistanceFocusCountry');
+const resistanceInsurgency = document.getElementById('resistanceInsurgency');
+const resistanceSeparatist = document.getElementById('resistanceSeparatist');
+const resistanceControl = document.getElementById('resistanceControl');
+const resistanceForeign = document.getElementById('resistanceForeign');
+const resistanceStatus = document.getElementById('resistanceStatus');
+const resistanceImpact = document.getElementById('resistanceImpact');
+const resistanceHotspots = document.getElementById('resistanceHotspots');
+const raiseInsurgencyBtn = document.getElementById('raiseInsurgencyBtn');
+const lowerInsurgencyBtn = document.getElementById('lowerInsurgencyBtn');
+const raiseSeparatistBtn = document.getElementById('raiseSeparatistBtn');
+const lowerSeparatistBtn = document.getElementById('lowerSeparatistBtn');
+const raiseStateControlBtn = document.getElementById('raiseStateControlBtn');
+const lowerStateControlBtn = document.getElementById('lowerStateControlBtn');
+const raiseForeignPressureBtn = document.getElementById('raiseForeignPressureBtn');
+const lowerForeignPressureBtn = document.getElementById('lowerForeignPressureBtn');
+const triggerResistanceHotspotBtn = document.getElementById('triggerResistanceHotspotBtn');
 const leaderApprovalUpBtn = document.getElementById('leaderApprovalUpBtn');
 const leaderApprovalDownBtn = document.getElementById('leaderApprovalDownBtn');
 const leaderMandateUpBtn = document.getElementById('leaderMandateUpBtn');
@@ -433,6 +456,8 @@ function refreshCountryHud() {
   if (country.oil < RESOURCE_CONFIG.oilShortageThreshold) strainFlags.push('oil shortage');
   if (country.manpowerPool < 1200) strainFlags.push('manpower shortage');
   if (country.industrialCapacity < 22) strainFlags.push('industrial strain');
+  if (country.stateControl < 55) strainFlags.push('state control weakening');
+  if (country.insurgencyPressure > 50) strainFlags.push('insurgency rising');
   const aiReason = country.aiControlled && aiState?.strategicReason ? ` • AI rationale: ${aiState.strategicReason}` : '';
   countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}${aiReason}`;
   countryHudAssets.textContent = `Cities/Bases/Units: ${country.controlledCityIds.length}/${country.controlledBaseIds.length}/${country.controlledUnitIds.length}`;
@@ -652,6 +677,35 @@ function refreshDomesticHud() {
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
   const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
+}
+
+function refreshResistanceHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  if (!focusCountry) {
+    resistanceFocusCountry.textContent = 'Internal resistance for: --';
+    resistanceInsurgency.textContent = 'Insurgency pressure: --';
+    resistanceSeparatist.textContent = 'Separatist pressure: --';
+    resistanceControl.textContent = 'State control: --';
+    resistanceForeign.textContent = 'Foreign-backed pressure: --';
+    resistanceStatus.textContent = 'Resistance status: --';
+    resistanceImpact.textContent = 'Resistance effects: --';
+    resistanceHotspots.textContent = 'Hotspots: --';
+    return;
+  }
+  const country = countrySystem.ensureCountry(focusCountry);
+  const effects = country.resistanceEffects || {};
+  resistanceFocusCountry.textContent = `Internal resistance for: ${focusCountry}`;
+  resistanceInsurgency.textContent = `Insurgency pressure: ${country.insurgencyPressure.toFixed(1)} / 100`;
+  resistanceSeparatist.textContent = `Separatist pressure: ${country.separatistPressure.toFixed(1)} / 100`;
+  resistanceControl.textContent = `State control: ${country.stateControl.toFixed(1)} / 100`;
+  resistanceForeign.textContent = `Foreign-backed pressure: ${(country.foreignBackedPressure || 0).toFixed(1)} / 100`;
+  resistanceStatus.textContent = `Resistance status: ${internalResistanceSystem.getResistanceLabel(country)} • ${gameState.internalResistance.lastSummary}`;
+  resistanceImpact.textContent = `Resistance effects: output -${((effects.outputPenalty || 0) * 100).toFixed(1)}% • manpower -${((effects.manpowerPenalty || 0) * 100).toFixed(1)}% • security cost +${Math.round(effects.securityCost || 0)}/day`;
+  const hotspotLabel = (country.resistanceHotspots || [])
+    .slice(0, 2)
+    .map((hotspot) => `${hotspot.label} (ins ${hotspot.insurgencyPressure.toFixed(0)}, sep ${hotspot.separatistPressure.toFixed(0)}, ctrl ${hotspot.stateControl.toFixed(0)})`)
+    .join(' • ');
+  resistanceHotspots.textContent = `Hotspots: ${hotspotLabel || 'none'}`;
 }
 
 
@@ -1028,6 +1082,7 @@ function setPlayerCountry(countryFeature) {
   leadershipSystem.start();
   informationSystem.start();
   migrationSystem.start();
+  internalResistanceSystem.start();
   countrySystem.syncOwnership();
   renderProductionPanel();
   renderSelectedUnitPanel();
@@ -1038,6 +1093,7 @@ function setPlayerCountry(countryFeature) {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshResistanceHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -1109,6 +1165,7 @@ function spawnEnemyForces() {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshResistanceHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -1889,6 +1946,51 @@ function attachInformationControls() {
   }, 'Information scandal spread.'));
 }
 
+function attachResistanceControls() {
+  const mutateResistance = (mutator, message) => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const country = countrySystem.ensureCountry(focusCountry);
+    mutator(country, focusCountry);
+    refreshResistanceHud();
+    refreshDomesticHud();
+    refreshCountryHud();
+    refreshEconomyHud();
+    setStatus(message);
+  };
+
+  raiseInsurgencyBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.insurgencyPressure = internalResistanceSystem.clamp(country.insurgencyPressure + 8);
+  }, 'Insurgency pressure increased.'));
+  lowerInsurgencyBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.insurgencyPressure = internalResistanceSystem.clamp(country.insurgencyPressure - 8);
+  }, 'Insurgency pressure reduced.'));
+  raiseSeparatistBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.separatistPressure = internalResistanceSystem.clamp(country.separatistPressure + 8);
+  }, 'Separatist pressure increased.'));
+  lowerSeparatistBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.separatistPressure = internalResistanceSystem.clamp(country.separatistPressure - 8);
+  }, 'Separatist pressure reduced.'));
+  raiseStateControlBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.stateControl = internalResistanceSystem.clamp(country.stateControl + 8);
+  }, 'State control strengthened.'));
+  lowerStateControlBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.stateControl = internalResistanceSystem.clamp(country.stateControl - 8);
+  }, 'State control weakened.'));
+  raiseForeignPressureBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.foreignBackedPressure = internalResistanceSystem.clamp((country.foreignBackedPressure || 0) + 6);
+  }, 'Foreign-backed pressure increased.'));
+  lowerForeignPressureBtn.addEventListener('click', () => mutateResistance((country) => {
+    country.foreignBackedPressure = internalResistanceSystem.clamp((country.foreignBackedPressure || 0) - 6);
+  }, 'Foreign-backed pressure reduced.'));
+  triggerResistanceHotspotBtn.addEventListener('click', () => mutateResistance((country) => {
+    internalResistanceSystem.ensureHotspot(country, `Unstable zone ${Date.now().toString().slice(-3)}`);
+  }, 'Internal resistance hotspot created.'));
+}
+
 function attachLeadershipControls() {
   const mutateLeadership = (mutator, message) => {
     const focusCountry = getDiplomacyFocusCountry();
@@ -2264,6 +2366,7 @@ function startSimulationLoop() {
     refreshPolicyHud();
     refreshGovernmentProfileHud();
     refreshDomesticHud();
+    refreshResistanceHud();
     refreshInformationHud();
     refreshMigrationHud();
     refreshEventHud();
@@ -2426,6 +2529,7 @@ async function init() {
   attachGovernmentProfileControls();
   attachLeadershipControls();
   attachInformationControls();
+  attachResistanceControls();
   attachMigrationControls();
   attachEventControls();
   attachChokepointControls();
@@ -2438,6 +2542,7 @@ async function init() {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshResistanceHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();

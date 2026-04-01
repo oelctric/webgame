@@ -48,6 +48,8 @@ class DomesticStateSystem {
     const oilShortage = country.oil < RESOURCE_CONFIG.oilShortageThreshold ? 0.18 : 0;
     const industryStrain = country.industrialCapacity < 22 ? 0.14 : 0;
     const manpowerShortage = country.manpowerPool < 1200 ? 0.12 : 0;
+    const resistanceEffects = country.resistanceEffects || {};
+    const hotspotUnrest = (country.resistanceHotspots || []).reduce((sum, hotspot) => sum + (hotspot.unrestDrift || 0), 0);
 
     country.warWeariness = this.clamp(country.warWeariness + ((activeWars > 0 ? 0.4 + activeWars * 0.2 : -0.3) + (militarySpending === 'high' ? 0.08 : 0)) * (profile.warWearinessDriftMult || 1));
     country.economicStress = this.clamp(country.economicStress
@@ -55,6 +57,7 @@ class DomesticStateSystem {
       + (country.netPerTick < 0 ? 0.25 : -0.1)
       + (policy.industryInvestmentLevel === 'high' && country.treasury < 1000 ? 0.1 : 0)
       + pressure.stressDrift
+      + Math.max(0, 58 - (country.stateControl || 70)) * 0.006
       + Math.max(0, (country.humanitarianBurden || 0) - 10) * 0.01 * (profile.migrationShockMult || 1)
       + oilShortage
       + industryStrain
@@ -64,6 +67,8 @@ class DomesticStateSystem {
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
       + country.economicStress * 0.005
+      + Math.max(0, 60 - (country.stateControl || 70)) * 0.004
+      + hotspotUnrest
       + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity] * (internalSecurity === 'high' ? securitySuppression : 1)
       + (politicalEffects.unrestDrift || 0);
 
@@ -74,6 +79,7 @@ class DomesticStateSystem {
       - country.unrest * 0.01
       - country.warWeariness * 0.008
       - country.economicStress * 0.009
+      - Math.max(0, 55 - (country.stateControl || 70)) * 0.006
       - activeWars * 0.06
       - pressure.stabilityDrift
       - manpowerShortage
@@ -83,8 +89,11 @@ class DomesticStateSystem {
     country.warWeariness = this.clamp(country.warWeariness + eventModifiers.warWearinessDrift);
     country.domesticOutputModifier = Math.max(
       0.65,
-      Math.min(1.05, 1 - Math.max(0, (45 - country.stability) / 230) - country.unrest / 520 - country.economicStress / 680)
+      Math.min(1.05, 1 - Math.max(0, (45 - country.stability) / 230) - country.unrest / 520 - country.economicStress / 680 - (resistanceEffects.outputPenalty || 0) * 0.55)
     );
+    if (resistanceEffects.manpowerPenalty > 0) {
+      country.manpowerPool = Math.max(0, country.manpowerPool * (1 - resistanceEffects.manpowerPenalty * 0.08));
+    }
     country.domesticLastTickAt = this.gameState.currentTimeMs;
 
     const bucket = this.getStabilityBucket(country.stability);

@@ -249,6 +249,34 @@
         <button id="triggerInfoScandalBtn">Info Scandal</button>
       </div>
     </div>
+    <div class="card">
+      <h2>Internal Resistance</h2>
+      <p id="resistanceFocusCountry">Internal resistance for: --</p>
+      <p id="resistanceInsurgency">Insurgency pressure: --</p>
+      <p id="resistanceSeparatist">Separatist pressure: --</p>
+      <p id="resistanceControl">State control: --</p>
+      <p id="resistanceForeign">Foreign-backed pressure: --</p>
+      <p id="resistanceStatus">Resistance status: --</p>
+      <p id="resistanceImpact">Resistance effects: --</p>
+      <p id="resistanceHotspots">Hotspots: --</p>
+      <div class="row">
+        <button id="raiseInsurgencyBtn">Insurgency +8</button>
+        <button id="lowerInsurgencyBtn">Insurgency -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseSeparatistBtn">Separatist +8</button>
+        <button id="lowerSeparatistBtn">Separatist -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseStateControlBtn">Control +8</button>
+        <button id="lowerStateControlBtn">Control -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseForeignPressureBtn">Foreign support +6</button>
+        <button id="lowerForeignPressureBtn">Foreign support -6</button>
+      </div>
+      <button id="triggerResistanceHotspotBtn">Trigger Hotspot</button>
+    </div>
 
     <div class="card">
       <h2>Migration & Humanitarian Pressure</h2>
@@ -524,6 +552,7 @@
   <script src="systems/policy.js" defer></script>
   <script src="systems/domestic-state.js" defer></script>
   <script src="systems/political.js" defer></script>
+  <script src="systems/internal-resistance.js" defer></script>
   <script src="systems/leadership.js" defer></script>
   <script src="systems/information.js" defer></script>
   <script src="systems/migration.js" defer></script>

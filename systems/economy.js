@@ -59,7 +59,8 @@ class EconomySystem {
       const country = this.countrySystem.ensureCountry(city.ownerCountry);
       const pressure = this.diplomacySystem.getEconomicPressureOnCountry(city.ownerCountry);
       const eventModifiers = this.eventSystem.getModifiersForCountry(city.ownerCountry);
-      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * pressure.incomeMultiplier * eventModifiers.incomeMultiplier;
+      const resistanceOutputMod = Math.max(0.45, 1 - (country.resistanceEffects?.outputPenalty || 0));
+      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * resistanceOutputMod * pressure.incomeMultiplier * eventModifiers.incomeMultiplier;
       incomeByCountry[city.ownerCountry] = (incomeByCountry[city.ownerCountry] || 0) + adjustedIncome;
     });
 
@@ -79,7 +80,8 @@ class EconomySystem {
     countries.forEach((country) => {
       this.ensureCountry(country);
       const income = incomeByCountry[country] || 0;
-      const upkeep = upkeepByCountry[country] || 0;
+      const resistanceSecurityCost = this.countrySystem.ensureCountry(country).resistanceEffects?.securityCost || 0;
+      const upkeep = (upkeepByCountry[country] || 0) + resistanceSecurityCost;
       const eventModifiers = this.eventSystem.getModifiersForCountry(country);
       const net = income - upkeep + eventModifiers.treasuryDailyDelta + (this.countrySystem.ensureCountry(country).tradeIncomeBonus || 0);
       const countryState = this.countrySystem.ensureCountry(country);
