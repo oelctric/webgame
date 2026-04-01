@@ -169,6 +169,41 @@
     </div>
 
     <div class="card">
+      <h2>Migration & Humanitarian Pressure</h2>
+      <p id="migrationFocusCountry">Migration focus: --</p>
+      <p id="migrationSummary">Migration: --</p>
+      <p id="migrationInflowLabel">Inflow pressure: --</p>
+      <p id="migrationOutflowLabel">Outflow pressure: --</p>
+      <p id="migrationHumanitarianLabel">Humanitarian burden: --</p>
+      <div class="field">
+        <label for="migrationOriginSelect">Manual Origin</label>
+        <select id="migrationOriginSelect"></select>
+      </div>
+      <div class="field">
+        <label for="migrationDestinationSelect">Manual Destination</label>
+        <select id="migrationDestinationSelect"></select>
+      </div>
+      <div class="field">
+        <label for="migrationAmountInput">Pressure Amount</label>
+        <input id="migrationAmountInput" type="number" min="1" value="12" />
+      </div>
+      <div class="row">
+        <button id="triggerRefugeeFlowBtn">Trigger Refugee Flow</button>
+        <button id="triggerEconomicMigrationBtn">Trigger Economic Migration</button>
+      </div>
+      <div class="field">
+        <label for="migrationFlowSelect">Active Flow</label>
+        <select id="migrationFlowSelect"></select>
+      </div>
+      <div class="row">
+        <button id="easeSelectedFlowBtn">Reduce / Clear Flow</button>
+        <button id="recomputeMigrationBtn">Recompute Migration</button>
+      </div>
+      <p><strong>Active flows (selected):</strong></p>
+      <ul id="migrationFlowList"></ul>
+    </div>
+
+    <div class="card">
       <h2>Crisis & Events</h2>
       <p id="eventSummary">Events: --</p>
       <div class="field">
@@ -406,6 +441,7 @@
   <script src="systems/policy.js" defer></script>
   <script src="systems/domestic-state.js" defer></script>
   <script src="systems/political.js" defer></script>
+  <script src="systems/migration.js" defer></script>
   <script src="systems/events.js" defer></script>
   <script src="systems/sanctions.js" defer></script>
   <script src="systems/trade.js" defer></script>

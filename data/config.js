@@ -231,3 +231,14 @@ const BLOC_CONFIG = {
   sanctionDiscourage: true,
   aggressionResponseDelta: -8
 };
+
+const MIGRATION_CONFIG = {
+  tickMs: DAY_MS,
+  minPressureToFlow: 8,
+  maxDestinationsPerType: 2,
+  manualFlowDurationMs: 14 * DAY_MS,
+  flowFadeRate: 0.78,
+  flowEasingThreshold: 5,
+  humanitarianDecayPerTick: 0.9,
+  statusCooldownMs: 2 * DAY_MS
+};
