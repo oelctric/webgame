@@ -57,14 +57,35 @@ class DiplomacySystem {
     relation.status = this.deriveStatusFromScore(relation.relationScore);
   }
 
+  recordCountryBehavior(countryName, { aggressive = 0, cooperative = 0, agreementBreach = 0 } = {}) {
+    const country = this.countrySystem.ensureCountry(countryName);
+    if (!country?.infoMetrics) return;
+    country.infoMetrics.aggressiveActions = Math.max(0, (country.infoMetrics.aggressiveActions || 0) + aggressive);
+    country.infoMetrics.cooperativeActions = Math.max(0, (country.infoMetrics.cooperativeActions || 0) + cooperative);
+    country.infoMetrics.agreementBreaches = Math.max(0, (country.infoMetrics.agreementBreaches || 0) + agreementBreach);
+  }
+
+  getCooperationModifier(sourceCountry) {
+    const source = this.countrySystem.ensureCountry(sourceCountry);
+    if (!source) return 1;
+    const reputation = source.internationalReputation || 0;
+    const breaches = source.infoMetrics?.agreementBreaches || 0;
+    const base = 1 + (reputation / 220);
+    const breachPenalty = Math.min(0.35, breaches * 0.03);
+    return Math.max(0.55, Math.min(1.3, base - breachPenalty));
+  }
+
   adjustRelationScore(countryA, countryB, delta, reason = 'Relation changed', markConflict = false) {
     const relation = this.ensureRelation(countryA, countryB);
     if (!relation) return null;
-    relation.relationScore = this.clampScore(relation.relationScore + delta);
+    const adjustedDelta = delta > 0 ? delta * this.getCooperationModifier(countryA) : delta;
+    relation.relationScore = this.clampScore(relation.relationScore + adjustedDelta);
     relation.lastChangedAt = this.gameState.currentTimeMs;
     if (markConflict) relation.lastConflictAt = this.gameState.currentTimeMs;
     this.updateStatusFromScore(relation, true);
     this.gameState.diplomacy.lastSummary = `${relation.countryA} ↔ ${relation.countryB}: ${reason} (${relation.relationScore})`;
+    if (delta > 0) this.recordCountryBehavior(countryA, { cooperative: 0.2 });
+    if (delta < 0 && markConflict) this.recordCountryBehavior(countryA, { aggressive: 0.2 });
     return relation;
   }
 
@@ -79,6 +100,8 @@ class DiplomacySystem {
   }
 
   declareWar(countryA, countryB, reason = 'War declared') {
+    const relationBefore = this.ensureRelation(countryA, countryB);
+    const preWarStatus = relationBefore ? relationBefore.status : null;
     const relation = this.setStatus(countryA, countryB, 'war', reason);
     if (!relation) return null;
     relation.relationScore = this.clampScore(Math.min(relation.relationScore, -70));
@@ -94,6 +117,11 @@ class DiplomacySystem {
       tradeAllowed: false,
       startedAt: relation.sanctionsBySource[countryB]?.startedAt || null
     };
+    const brokeAgreement = preWarStatus === 'ceasefire'
+      || (preWarStatus === 'friendly' && relation.relationScore > 20)
+      || Boolean(negotiationSystem?.hasTemporaryTradeRestoration?.(countryA, countryB));
+    this.recordCountryBehavior(countryA, { aggressive: 1.2, agreementBreach: brokeAgreement ? 1 : 0 });
+    this.recordCountryBehavior(countryB, { aggressive: 0.25 });
     return relation;
   }
 
@@ -106,6 +134,8 @@ class DiplomacySystem {
     relation.lastChangedAt = this.gameState.currentTimeMs;
     relation.status = this.deriveStatusFromScore(relation.relationScore);
     this.gameState.diplomacy.lastSummary = `${relation.countryA} ↔ ${relation.countryB}: ${reason}`;
+    this.recordCountryBehavior(countryA, { cooperative: 1 });
+    this.recordCountryBehavior(countryB, { cooperative: 1 });
     return relation;
   }
 
@@ -168,6 +198,7 @@ class DiplomacySystem {
     relation.sanctionsStartedAt = this.gameState.currentTimeMs;
     relation.lastChangedAt = this.gameState.currentTimeMs;
     this.gameState.diplomacy.lastSummary = `${sourceCountry} imposed ${requestedLevel} sanctions on ${targetCountry}.`;
+    this.recordCountryBehavior(sourceCountry, { aggressive: requestedLevel === 'heavy' ? 0.7 : 0.45 });
     return relation;
   }
 
@@ -189,6 +220,7 @@ class DiplomacySystem {
     if (!stillSanctioned) relation.sanctionsSourceCountry = null;
     relation.lastChangedAt = this.gameState.currentTimeMs;
     this.gameState.diplomacy.lastSummary = `${sourceCountry} lifted sanctions on ${targetCountry}.`;
+    this.recordCountryBehavior(sourceCountry, { cooperative: 0.7 });
     return relation;
   }
 
@@ -200,6 +232,7 @@ class DiplomacySystem {
     relation.sanctionsBySource[sourceCountry] = { ...existing, tradeAllowed: Boolean(allowed) };
     relation.lastChangedAt = this.gameState.currentTimeMs;
     this.gameState.diplomacy.lastSummary = `${sourceCountry} ${allowed ? 'allowed' : 'blocked'} trade with ${targetCountry}.`;
+    this.recordCountryBehavior(sourceCountry, allowed ? { cooperative: 0.45 } : { aggressive: 0.35 });
     return relation;
   }
 

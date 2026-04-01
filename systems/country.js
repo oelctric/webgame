@@ -63,6 +63,20 @@ class CountrySystem {
         },
         politicalLastTickAt: null,
         politicalAlertBucket: 'stable',
+        domesticNarrativePressure: 22,
+        internationalReputation: 8,
+        informationControl: 50,
+        informationAlertBucket: 'stable',
+        lastInformationAlertAt: 0,
+        infoMetrics: {
+          aggressiveActions: 0,
+          cooperativeActions: 0,
+          agreementBreaches: 0,
+          severePressureDays: 0,
+          lastAggressiveActions: 0,
+          lastCooperativeActions: 0,
+          lastAgreementBreaches: 0
+        },
         humanitarianBurden: 0,
         controlledCityIds: [],
         controlledBaseIds: [],
@@ -106,6 +120,27 @@ class CountrySystem {
     };
     if (country.politicalLastTickAt == null) country.politicalLastTickAt = null;
     if (!country.politicalAlertBucket) country.politicalAlertBucket = 'stable';
+    if (typeof country.domesticNarrativePressure !== 'number') country.domesticNarrativePressure = 22;
+    if (typeof country.internationalReputation !== 'number') country.internationalReputation = 8;
+    if (typeof country.informationControl !== 'number') country.informationControl = 50;
+    if (!country.informationAlertBucket) country.informationAlertBucket = 'stable';
+    if (typeof country.lastInformationAlertAt !== 'number') country.lastInformationAlertAt = 0;
+    country.infoMetrics = country.infoMetrics || {
+      aggressiveActions: 0,
+      cooperativeActions: 0,
+      agreementBreaches: 0,
+      severePressureDays: 0,
+      lastAggressiveActions: 0,
+      lastCooperativeActions: 0,
+      lastAgreementBreaches: 0
+    };
+    if (typeof country.infoMetrics.aggressiveActions !== 'number') country.infoMetrics.aggressiveActions = 0;
+    if (typeof country.infoMetrics.cooperativeActions !== 'number') country.infoMetrics.cooperativeActions = 0;
+    if (typeof country.infoMetrics.agreementBreaches !== 'number') country.infoMetrics.agreementBreaches = 0;
+    if (typeof country.infoMetrics.severePressureDays !== 'number') country.infoMetrics.severePressureDays = 0;
+    if (typeof country.infoMetrics.lastAggressiveActions !== 'number') country.infoMetrics.lastAggressiveActions = 0;
+    if (typeof country.infoMetrics.lastCooperativeActions !== 'number') country.infoMetrics.lastCooperativeActions = 0;
+    if (typeof country.infoMetrics.lastAgreementBreaches !== 'number') country.infoMetrics.lastAgreementBreaches = 0;
     if (typeof country.humanitarianBurden !== 'number') country.humanitarianBurden = 0;
     if (typeof country.oil !== 'number') country.oil = RESOURCE_CONFIG.defaultOil;
     if (typeof country.maxOil !== 'number') country.maxOil = RESOURCE_CONFIG.defaultMaxOil;

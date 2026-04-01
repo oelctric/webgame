@@ -45,6 +45,10 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No political updates yet.'
   },
+  information: {
+    lastTickAt: null,
+    lastSummary: 'No information updates yet.'
+  },
   migration: {
     flows: [],
     nextFlowId: 1,
@@ -100,6 +104,7 @@ const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplo
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem, governmentProfileSystem);
 const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
@@ -195,6 +200,20 @@ const domesticPublicSupport = document.getElementById('domesticPublicSupport');
 const domesticEliteSupport = document.getElementById('domesticEliteSupport');
 const domesticPoliticalLabel = document.getElementById('domesticPoliticalLabel');
 const domesticTrend = document.getElementById('domesticTrend');
+const infoFocusCountry = document.getElementById('infoFocusCountry');
+const infoNarrativePressure = document.getElementById('infoNarrativePressure');
+const infoReputation = document.getElementById('infoReputation');
+const infoControl = document.getElementById('infoControl');
+const infoLabel = document.getElementById('infoLabel');
+const reputationLabel = document.getElementById('reputationLabel');
+const raiseNarrativePressureBtn = document.getElementById('raiseNarrativePressureBtn');
+const lowerNarrativePressureBtn = document.getElementById('lowerNarrativePressureBtn');
+const raiseReputationBtn = document.getElementById('raiseReputationBtn');
+const lowerReputationBtn = document.getElementById('lowerReputationBtn');
+const raiseInfoControlBtn = document.getElementById('raiseInfoControlBtn');
+const lowerInfoControlBtn = document.getElementById('lowerInfoControlBtn');
+const triggerInfoSuccessBtn = document.getElementById('triggerInfoSuccessBtn');
+const triggerInfoScandalBtn = document.getElementById('triggerInfoScandalBtn');
 const migrationFocusCountry = document.getElementById('migrationFocusCountry');
 const migrationSummary = document.getElementById('migrationSummary');
 const migrationInflowLabel = document.getElementById('migrationInflowLabel');
@@ -600,6 +619,28 @@ function refreshDomesticHud() {
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
 }
 
+
+function refreshInformationHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  if (!focusCountry) {
+    infoFocusCountry.textContent = 'Information state for: --';
+    infoNarrativePressure.textContent = 'Domestic narrative pressure: --';
+    infoReputation.textContent = 'International reputation: --';
+    infoControl.textContent = 'Information control: --';
+    infoLabel.textContent = 'Narrative status: --';
+    reputationLabel.textContent = 'Reputation status: --';
+    return;
+  }
+
+  const country = countrySystem.ensureCountry(focusCountry);
+  infoFocusCountry.textContent = `Information state for: ${focusCountry}`;
+  infoNarrativePressure.textContent = `Domestic narrative pressure: ${country.domesticNarrativePressure.toFixed(1)} / 100`;
+  infoReputation.textContent = `International reputation: ${country.internationalReputation.toFixed(1)} / 100`;
+  infoControl.textContent = `Information control: ${country.informationControl.toFixed(1)} / 100`;
+  infoLabel.textContent = `Narrative status: ${informationSystem.getNarrativeLabel(country)}`;
+  reputationLabel.textContent = `Reputation status: ${informationSystem.getReputationLabel(country)}`;
+}
+
 function refreshMigrationHud() {
   const focusCountry = getDiplomacyFocusCountry();
   migrationSummary.textContent = gameState.migration?.lastSummary
@@ -949,6 +990,7 @@ function setPlayerCountry(countryFeature) {
   policySystem.start();
   domesticStateSystem.start();
   politicalSystem.start();
+  informationSystem.start();
   migrationSystem.start();
   countrySystem.syncOwnership();
   renderProductionPanel();
@@ -960,6 +1002,7 @@ function setPlayerCountry(countryFeature) {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
   refreshChokepointHud();
@@ -1030,6 +1073,7 @@ function spawnEnemyForces() {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
   refreshTradeHud();
@@ -1761,6 +1805,52 @@ function attachGovernmentProfileControls() {
   });
 }
 
+
+function attachInformationControls() {
+  const mutate = (mutator, message) => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const country = countrySystem.ensureCountry(focusCountry);
+    mutator(country);
+    refreshInformationHud();
+    refreshDomesticHud();
+    refreshDiplomacyHud();
+    setStatus(message);
+  };
+
+  raiseNarrativePressureBtn.addEventListener('click', () => mutate((country) => {
+    country.domesticNarrativePressure = Math.min(100, country.domesticNarrativePressure + 8);
+  }, 'Domestic narrative pressure increased.'));
+  lowerNarrativePressureBtn.addEventListener('click', () => mutate((country) => {
+    country.domesticNarrativePressure = Math.max(0, country.domesticNarrativePressure - 8);
+  }, 'Domestic narrative pressure reduced.'));
+  raiseReputationBtn.addEventListener('click', () => mutate((country) => {
+    country.internationalReputation = Math.min(100, country.internationalReputation + 8);
+  }, 'International reputation improved.'));
+  lowerReputationBtn.addEventListener('click', () => mutate((country) => {
+    country.internationalReputation = Math.max(-100, country.internationalReputation - 8);
+  }, 'International reputation damaged.'));
+  raiseInfoControlBtn.addEventListener('click', () => mutate((country) => {
+    country.informationControl = Math.min(100, country.informationControl + 6);
+  }, 'Information control strengthened.'));
+  lowerInfoControlBtn.addEventListener('click', () => mutate((country) => {
+    country.informationControl = Math.max(0, country.informationControl - 6);
+  }, 'Information control weakened.'));
+  triggerInfoSuccessBtn.addEventListener('click', () => mutate((country) => {
+    country.domesticNarrativePressure = Math.max(0, country.domesticNarrativePressure - 10);
+    country.internationalReputation = Math.min(100, country.internationalReputation + 4);
+    country.infoMetrics.cooperativeActions += 0.6;
+  }, 'Information campaign succeeded.'));
+  triggerInfoScandalBtn.addEventListener('click', () => mutate((country) => {
+    country.domesticNarrativePressure = Math.min(100, country.domesticNarrativePressure + 12);
+    country.internationalReputation = Math.max(-100, country.internationalReputation - 7);
+    country.infoMetrics.aggressiveActions += 0.4;
+  }, 'Information scandal spread.'));
+}
+
 function attachMigrationControls() {
   triggerRefugeeFlowBtn.addEventListener('click', () => {
     const origin = migrationOriginSelect.value;
@@ -2059,6 +2149,7 @@ function startSimulationLoop() {
     refreshPolicyHud();
     refreshGovernmentProfileHud();
     refreshDomesticHud();
+    refreshInformationHud();
     refreshMigrationHud();
     refreshEventHud();
     refreshChokepointHud();
@@ -2218,6 +2309,7 @@ async function init() {
   attachNegotiationControls();
   attachPolicyControls();
   attachGovernmentProfileControls();
+  attachInformationControls();
   attachMigrationControls();
   attachEventControls();
   attachChokepointControls();
@@ -2230,6 +2322,7 @@ async function init() {
   refreshPolicyHud();
   refreshGovernmentProfileHud();
   refreshDomesticHud();
+  refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
   refreshChokepointHud();

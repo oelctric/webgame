@@ -228,7 +228,10 @@ class AISystem {
         rivalBlocSize,
         rivalCrisisPressure,
         strengthDelta: strengthScore - rivalStrengthScore,
-        politicalWeakness: country.legitimacy < 40 || country.publicSupport < 38 || country.eliteSupport < 36
+        politicalWeakness: country.legitimacy < 40 || country.publicSupport < 38 || country.eliteSupport < 36,
+        narrativeCrisis: country.domesticNarrativePressure > 68,
+        reputationCrisis: country.internationalReputation < -45,
+        reputationStrong: country.internationalReputation > 35
       },
       profile: {
         foreign: foreignProfile,
@@ -258,6 +261,25 @@ class AISystem {
     scores.pressure_rival += profile.foreign.escalationBias * 20;
     scores.isolate_rival += (profile.foreign.sanctionsBias - 1) * 18;
 
+
+    if (metrics.narrativeCrisis) {
+      scores.stabilize_domestic += 34;
+      scores.deescalate_conflict += 22;
+      scores.pressure_rival -= 18;
+      reasons.stabilize_domestic = 'Domestic narrative pressure is severe and politically costly.';
+    }
+    if (metrics.reputationCrisis) {
+      scores.join_or_strengthen_bloc -= 16;
+      scores.expand_influence -= 18;
+      scores.pressure_rival += profile.foreign.escalationBias > 0 ? 4 : -6;
+      scores.deescalate_conflict += 16;
+      scores.secure_resources += 8;
+    }
+    if (metrics.reputationStrong) {
+      scores.join_or_strengthen_bloc += 14;
+      scores.deescalate_conflict += 10;
+      scores.expand_influence += 10;
+    }
     if (metrics.domesticStrain) {
       scores.stabilize_domestic += 45;
       reasons.stabilize_domestic = 'Domestic stability, unrest, or economic stress is elevated.';

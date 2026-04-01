@@ -130,6 +130,19 @@ const POLITICAL_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+
+const INFORMATION_CONFIG = {
+  tickMs: DAY_MS,
+  pressureMin: 0,
+  pressureMax: 100,
+  reputationMin: -100,
+  reputationMax: 100,
+  controlMin: 0,
+  controlMax: 100,
+  severePressureThreshold: 70,
+  alertCooldownMs: 2 * DAY_MS
+};
+
 const RESOURCE_CONFIG = {
   tickMs: DAY_MS,
   defaultOil: 220,
