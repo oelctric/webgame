@@ -52,11 +52,16 @@ const ECONOMY_CONFIG = {
 
 const AI_CONFIG = {
   tickMs: 12 * 60 * 60 * 1000,
+  strategicTickMs: 2 * DAY_MS,
   baseThreshold: 2,
   baseExpansionTreasury: 2500,
   postureCooldownMs: 2 * DAY_MS,
+  strategicGoalMinDurationMs: 4 * DAY_MS,
+  strategicGoalShiftMargin: 18,
   policyCooldownMs: 3 * DAY_MS,
-  diplomacyCooldownMs: 2 * DAY_MS
+  diplomacyCooldownMs: 2 * DAY_MS,
+  strategicActionCooldownMs: 2 * DAY_MS,
+  strategicAnnouncementCooldownMs: 2 * DAY_MS
 };
 
 const COUNTRY_CONFIG = {

@@ -100,7 +100,12 @@ const aiSystem = new AISystem(gameState, scheduler, {
   policySystem,
   diplomacySystem,
   resourceSystem,
-  countrySystem
+  countrySystem,
+  tradeSystem,
+  chokepointSystem,
+  blocSystem,
+  eventSystem,
+  negotiationSystem
 });
 
 const svg = d3.select('#map');
@@ -334,8 +339,10 @@ function refreshCountryHud() {
     return;
   }
   const country = countrySystem.ensureCountry(countryName);
-  const aiPosture = gameState.aiStateByCountry[countryName]?.posture;
-  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${aiPosture ? `: ${aiPosture}` : ''})` : ''}`;
+  const aiState = gameState.aiStateByCountry[countryName];
+  const aiPosture = aiState?.posture;
+  const strategicGoal = aiState?.strategicGoal;
+  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${strategicGoal ? `: ${strategicGoal}` : ''}${aiPosture ? ` / ${aiPosture}` : ''})` : ''}`;
   countryHudTreasury.textContent = `Treasury: ${Math.round(country.treasury).toLocaleString()}`;
   countryHudPop.textContent = `Population: ${Math.round(country.population).toLocaleString()}`;
   countryHudStability.textContent = `Stability: ${country.stability.toFixed(1)}`;
@@ -346,7 +353,8 @@ function refreshCountryHud() {
   if (country.oil < RESOURCE_CONFIG.oilShortageThreshold) strainFlags.push('oil shortage');
   if (country.manpowerPool < 1200) strainFlags.push('manpower shortage');
   if (country.industrialCapacity < 22) strainFlags.push('industrial strain');
-  countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}`;
+  const aiReason = country.aiControlled && aiState?.strategicReason ? ` • AI rationale: ${aiState.strategicReason}` : '';
+  countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}${aiReason}`;
   countryHudAssets.textContent = `Cities/Bases/Units: ${country.controlledCityIds.length}/${country.controlledBaseIds.length}/${country.controlledUnitIds.length}`;
   countryHudFlow.textContent = `Income/Upkeep/Net: +${country.incomePerTick}/-${country.upkeepPerTick}/${country.netPerTick >= 0 ? '+' : ''}${country.netPerTick}`;
 }
