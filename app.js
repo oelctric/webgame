@@ -45,6 +45,10 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No political updates yet.'
   },
+  leadership: {
+    lastTickAt: null,
+    lastSummary: 'No leadership cycle updates yet.'
+  },
   information: {
     lastTickAt: null,
     lastSummary: 'No information updates yet.'
@@ -103,6 +107,7 @@ const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacyS
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem, governmentProfileSystem);
 const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
@@ -127,6 +132,7 @@ const aiSystem = new AISystem(gameState, scheduler, {
   negotiationSystem,
   governmentProfileSystem
 });
+leadershipSystem.aiSystem = aiSystem;
 
 const svg = d3.select('#map');
 const mapWrap = document.getElementById('mapWrap');
@@ -200,6 +206,20 @@ const domesticPublicSupport = document.getElementById('domesticPublicSupport');
 const domesticEliteSupport = document.getElementById('domesticEliteSupport');
 const domesticPoliticalLabel = document.getElementById('domesticPoliticalLabel');
 const domesticTrend = document.getElementById('domesticTrend');
+const domesticLeaderApproval = document.getElementById('domesticLeaderApproval');
+const domesticLeaderMandate = document.getElementById('domesticLeaderMandate');
+const domesticGovernmentContinuity = document.getElementById('domesticGovernmentContinuity');
+const domesticElectionDate = document.getElementById('domesticElectionDate');
+const domesticLeadershipLabel = document.getElementById('domesticLeadershipLabel');
+const domesticLeadershipSummary = document.getElementById('domesticLeadershipSummary');
+const leaderApprovalUpBtn = document.getElementById('leaderApprovalUpBtn');
+const leaderApprovalDownBtn = document.getElementById('leaderApprovalDownBtn');
+const leaderMandateUpBtn = document.getElementById('leaderMandateUpBtn');
+const leaderMandateDownBtn = document.getElementById('leaderMandateDownBtn');
+const triggerElectionCheckBtn = document.getElementById('triggerElectionCheckBtn');
+const triggerTurnoverBtn = document.getElementById('triggerTurnoverBtn');
+const electionOffsetDaysInput = document.getElementById('electionOffsetDaysInput');
+const applyElectionOffsetBtn = document.getElementById('applyElectionOffsetBtn');
 const infoFocusCountry = document.getElementById('infoFocusCountry');
 const infoNarrativePressure = document.getElementById('infoNarrativePressure');
 const infoReputation = document.getElementById('infoReputation');
@@ -602,9 +622,16 @@ function refreshDomesticHud() {
     domesticEliteSupport.textContent = 'Elite support: --';
     domesticPoliticalLabel.textContent = 'Political pressure: --';
     domesticTrend.textContent = 'Domestic trend: --';
+    domesticLeaderApproval.textContent = 'Leader approval: --';
+    domesticLeaderMandate.textContent = 'Leader mandate: --';
+    domesticGovernmentContinuity.textContent = 'Government continuity: --';
+    domesticElectionDate.textContent = 'Next election: --';
+    domesticLeadershipLabel.textContent = 'Leadership status: --';
+    domesticLeadershipSummary.textContent = 'Leadership cycle: --';
     return;
   }
   const country = countrySystem.ensureCountry(focusCountry);
+  leadershipSystem.ensureLeadershipFields(country);
   domesticFocusCountry.textContent = `Domestic state for: ${focusCountry}`;
   domesticStability.textContent = `Stability: ${country.stability.toFixed(1)} / 100`;
   domesticUnrest.textContent = `Unrest: ${country.unrest.toFixed(1)} / 100`;
@@ -614,6 +641,14 @@ function refreshDomesticHud() {
   domesticPublicSupport.textContent = `Public support: ${country.publicSupport.toFixed(1)} / 100`;
   domesticEliteSupport.textContent = `Elite support: ${country.eliteSupport.toFixed(1)} / 100`;
   domesticPoliticalLabel.textContent = `Political pressure: ${politicalSystem.getPoliticalLabel(country)}`;
+  domesticLeaderApproval.textContent = `Leader approval: ${country.leaderApproval.toFixed(1)} / 100`;
+  domesticLeaderMandate.textContent = `Leader mandate: ${country.leaderMandate.toFixed(1)} / 100`;
+  domesticGovernmentContinuity.textContent = `Government continuity: ${country.governmentContinuity.toFixed(1)} / 100`;
+  domesticElectionDate.textContent = leadershipSystem.usesElectionCycle(country) && country.nextElectionAt
+    ? `Next election: ${formatDateTime(country.nextElectionAt)}`
+    : 'Next election: n/a for current regime';
+  domesticLeadershipLabel.textContent = `Leadership status: ${leadershipSystem.getLeadershipLabel(country)}`;
+  domesticLeadershipSummary.textContent = `Leadership cycle: ${gameState.leadership.lastSummary}`;
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
   const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
@@ -990,6 +1025,7 @@ function setPlayerCountry(countryFeature) {
   policySystem.start();
   domesticStateSystem.start();
   politicalSystem.start();
+  leadershipSystem.start();
   informationSystem.start();
   migrationSystem.start();
   countrySystem.syncOwnership();
@@ -1793,6 +1829,8 @@ function attachGovernmentProfileControls() {
       economicOrientation: economicOrientationSelect.value,
       foreignPolicyStyle: foreignPolicyStyleSelect.value
     });
+    leadershipSystem.ensureLeadershipFields(country);
+    leadershipSystem.scheduleNextElection(country);
     gameState.policy.lastSummary = `${focusCountry} profile set to ${governmentProfileSystem.getProfileSummary(country)}.`;
     setStatus(`Government profile updated for ${focusCountry}.`);
     refreshGovernmentProfileHud();
@@ -1849,6 +1887,83 @@ function attachInformationControls() {
     country.internationalReputation = Math.max(-100, country.internationalReputation - 7);
     country.infoMetrics.aggressiveActions += 0.4;
   }, 'Information scandal spread.'));
+}
+
+function attachLeadershipControls() {
+  const mutateLeadership = (mutator, message) => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const country = countrySystem.ensureCountry(focusCountry);
+    leadershipSystem.ensureLeadershipFields(country);
+    mutator(country, focusCountry);
+    refreshDomesticHud();
+    refreshCountryHud();
+    setStatus(message);
+  };
+
+  leaderApprovalUpBtn.addEventListener('click', () => mutateLeadership((country) => {
+    country.leaderApproval = Math.min(100, country.leaderApproval + 8);
+  }, 'Leader approval increased.'));
+  leaderApprovalDownBtn.addEventListener('click', () => mutateLeadership((country) => {
+    country.leaderApproval = Math.max(0, country.leaderApproval - 8);
+  }, 'Leader approval reduced.'));
+  leaderMandateUpBtn.addEventListener('click', () => mutateLeadership((country) => {
+    country.leaderMandate = Math.min(100, country.leaderMandate + 8);
+  }, 'Leader mandate increased.'));
+  leaderMandateDownBtn.addEventListener('click', () => mutateLeadership((country) => {
+    country.leaderMandate = Math.max(0, country.leaderMandate - 8);
+  }, 'Leader mandate reduced.'));
+
+  triggerElectionCheckBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const result = leadershipSystem.evaluateElection(focusCountry, 'manual');
+    if (!result || result.ok === false) {
+      setStatus('Election check skipped: regime does not run standard elections.', true);
+      return;
+    }
+    setStatus(result.type === 'turnover'
+      ? `${focusCountry} election triggered turnover.`
+      : `${focusCountry} election renewed mandate.`);
+    refreshDomesticHud();
+    refreshCountryHud();
+  });
+
+  triggerTurnoverBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    leadershipSystem.applyGovernmentTurnover(focusCountry, 'manual_override');
+    setStatus(`Manual government turnover applied for ${focusCountry}.`);
+    refreshDomesticHud();
+    refreshCountryHud();
+    refreshDiplomacyHud();
+    refreshPolicyHud();
+  });
+
+  applyElectionOffsetBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const days = Math.max(1, Number(electionOffsetDaysInput.value) || 30);
+    const changed = leadershipSystem.setElectionOffsetDays(focusCountry, days);
+    if (!changed) {
+      setStatus('Election timing update not available for this regime.', true);
+      return;
+    }
+    setStatus(`Election timing moved to ${days} days from now for ${focusCountry}.`);
+    refreshDomesticHud();
+  });
 }
 
 function attachMigrationControls() {
@@ -2309,6 +2424,7 @@ async function init() {
   attachNegotiationControls();
   attachPolicyControls();
   attachGovernmentProfileControls();
+  attachLeadershipControls();
   attachInformationControls();
   attachMigrationControls();
   attachEventControls();
