@@ -53,6 +53,15 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No internal resistance updates yet.'
   },
+  localInstability: {
+    hotspotsById: {},
+    hotspotIdsByCountry: {},
+    selectedHotspotId: null,
+    nextHotspotId: 1,
+    lastTickAt: null,
+    lastSummary: 'No local hotspot activity yet.',
+    lastStatusAt: null
+  },
   leadership: {
     lastTickAt: null,
     lastSummary: 'No leadership cycle updates yet.'
@@ -126,6 +135,7 @@ const factionSystem = new FactionSystem(gameState, scheduler, countrySystem, dip
 const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem, null, factionSystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem);
+const localInstabilitySystem = new LocalInstabilitySystem(gameState, scheduler, countrySystem, migrationSystem, eventSystem, internalResistanceSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const influenceSystem = new InfluenceSystem(gameState, scheduler, countrySystem, diplomacySystem, governmentProfileSystem);
 policySystem.factionSystem = factionSystem;
@@ -268,6 +278,22 @@ const lowerStateControlBtn = document.getElementById('lowerStateControlBtn');
 const raiseForeignPressureBtn = document.getElementById('raiseForeignPressureBtn');
 const lowerForeignPressureBtn = document.getElementById('lowerForeignPressureBtn');
 const triggerResistanceHotspotBtn = document.getElementById('triggerResistanceHotspotBtn');
+const localHotspotFocusCountry = document.getElementById('localHotspotFocusCountry');
+const localHotspotSummary = document.getElementById('localHotspotSummary');
+const localHotspotSelect = document.getElementById('localHotspotSelect');
+const localHotspotMetrics = document.getElementById('localHotspotMetrics');
+const localHotspotTags = document.getElementById('localHotspotTags');
+const localHotspotPressure = document.getElementById('localHotspotPressure');
+const localHotspotTagSelect = document.getElementById('localHotspotTagSelect');
+const localHotspotList = document.getElementById('localHotspotList');
+const raiseLocalUnrestBtn = document.getElementById('raiseLocalUnrestBtn');
+const lowerLocalUnrestBtn = document.getElementById('lowerLocalUnrestBtn');
+const raiseLocalControlBtn = document.getElementById('raiseLocalControlBtn');
+const lowerLocalControlBtn = document.getElementById('lowerLocalControlBtn');
+const raiseLocalStabilityBtn = document.getElementById('raiseLocalStabilityBtn');
+const lowerLocalStabilityBtn = document.getElementById('lowerLocalStabilityBtn');
+const createManualHotspotBtn = document.getElementById('createManualHotspotBtn');
+const clearManualHotspotBtn = document.getElementById('clearManualHotspotBtn');
 const leaderApprovalUpBtn = document.getElementById('leaderApprovalUpBtn');
 const leaderApprovalDownBtn = document.getElementById('leaderApprovalDownBtn');
 const leaderMandateUpBtn = document.getElementById('leaderMandateUpBtn');
@@ -782,6 +808,57 @@ function refreshResistanceHud() {
   resistanceHotspots.textContent = `Hotspots: ${hotspotLabel || 'none'}`;
 }
 
+
+
+function refreshLocalHotspotHud() {
+  const focusCountry = getDiplomacyFocusCountry();
+  localHotspotSummary.textContent = gameState.localInstability?.lastSummary || 'Local instability: --';
+  if (!focusCountry) {
+    localHotspotFocusCountry.textContent = 'Hotspots for: --';
+    localHotspotMetrics.textContent = 'Local stability/unrest/control: --';
+    localHotspotTags.textContent = 'Hotspot tags: --';
+    localHotspotPressure.textContent = 'Local pressures: --';
+    localHotspotSelect.innerHTML = '<option value="">No hotspots</option>';
+    localHotspotList.innerHTML = '<li>No local hotspots.</li>';
+    return;
+  }
+  localInstabilitySystem.ensureHotspots();
+  const hotspots = localInstabilitySystem.getCountryHotspots(focusCountry);
+  localHotspotFocusCountry.textContent = `Hotspots for: ${focusCountry}`;
+  const previousSelection = gameState.localInstability.selectedHotspotId;
+  localHotspotSelect.innerHTML = '';
+  hotspots.forEach((hotspot) => {
+    const option = document.createElement('option');
+    option.value = hotspot.id;
+    option.textContent = `${hotspot.name} (${hotspot.severityLabel}, ${hotspot.severity.toFixed(0)})`;
+    localHotspotSelect.appendChild(option);
+  });
+  if (!hotspots.length) {
+    localHotspotSelect.innerHTML = '<option value="">No hotspots</option>';
+    localHotspotMetrics.textContent = 'Local stability/unrest/control: --';
+    localHotspotTags.textContent = 'Hotspot tags: --';
+    localHotspotPressure.textContent = 'Local pressures: --';
+    localHotspotList.innerHTML = '<li>No local hotspots.</li>';
+    return;
+  }
+  if (previousSelection && hotspots.some((hotspot) => hotspot.id === previousSelection)) {
+    localHotspotSelect.value = previousSelection;
+  } else {
+    localHotspotSelect.value = hotspots[0].id;
+  }
+  gameState.localInstability.selectedHotspotId = localHotspotSelect.value;
+  const selected = hotspots.find((hotspot) => hotspot.id === localHotspotSelect.value) || hotspots[0];
+  localHotspotMetrics.textContent = `Local stability/unrest/control: ${selected.localStability.toFixed(1)} / ${selected.localUnrest.toFixed(1)} / ${selected.localStateControl.toFixed(1)}`;
+  localHotspotTags.textContent = `Hotspot tags: ${(selected.hotspotTags || []).join(', ') || 'none'}`;
+  localHotspotPressure.textContent = `Local pressures: migration ${(selected.activePressures?.migration || 0).toFixed(1)} • insurgency ${(selected.activePressures?.insurgency || 0).toFixed(1)} • crisis ${(selected.activePressures?.crisis || 0).toFixed(1)}`;
+
+  localHotspotList.innerHTML = '';
+  hotspots.slice(0, 6).forEach((hotspot) => {
+    const li = document.createElement('li');
+    li.textContent = `${hotspot.name}: ${hotspot.severityLabel} (${hotspot.severity.toFixed(0)}) • tags ${hotspot.hotspotTags?.join(', ') || 'none'}`;
+    localHotspotList.appendChild(li);
+  });
+}
 
 function refreshInformationHud() {
   const focusCountry = getDiplomacyFocusCountry();
@@ -1384,6 +1461,7 @@ function setPlayerCountry(countryFeature) {
   influenceSystem.start();
   migrationSystem.start();
   internalResistanceSystem.start();
+  localInstabilitySystem.start();
   countrySystem.syncOwnership();
   renderProductionPanel();
   renderSelectedUnitPanel();
@@ -1395,6 +1473,7 @@ function setPlayerCountry(countryFeature) {
   refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshResistanceHud();
+  refreshLocalHotspotHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -1467,6 +1546,7 @@ function spawnEnemyForces() {
   refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshResistanceHud();
+  refreshLocalHotspotHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
@@ -1698,7 +1778,11 @@ function renderCities() {
 
   points
     .merge(enter)
-    .attr('class', (d) => `city city-point ${d.controlStatus}`)
+    .attr('class', (d) => {
+      const severity = Number(d.hotspotSeverity || 0);
+      const hotspotClass = severity >= 70 ? 'local-hotspot-critical' : (severity >= 45 ? 'local-hotspot-active' : '');
+      return `city city-point ${d.controlStatus} ${hotspotClass}`.trim();
+    })
     .attr('cx', (d) => projection(d.lonLat)[0])
     .attr('cy', (d) => projection(d.lonLat)[1])
     .on('click', (event, d) => {
@@ -1721,7 +1805,7 @@ function renderCities() {
       }
     })
     .select('title')
-    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${ECONOMY_CONFIG.cityIncomePerDay}/day`);
+    .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${Math.round(ECONOMY_CONFIG.cityIncomePerDay * (1 - (d.localEconomicPenalty || 0)))}/day - Local unrest ${(d.localUnrest || 0).toFixed(0)} - Local control ${(d.localStateControl || 0).toFixed(0)}`);
 
   points.exit().remove();
 }
@@ -2421,6 +2505,61 @@ function attachResistanceControls() {
   }, 'Internal resistance hotspot created.'));
 }
 
+
+function attachLocalHotspotControls() {
+  const mutateLocal = (mutator, message) => {
+    const hotspotId = localHotspotSelect.value || gameState.localInstability.selectedHotspotId;
+    if (!hotspotId) {
+      setStatus('Select a local hotspot first.', true);
+      return;
+    }
+    mutator(hotspotId);
+    refreshLocalHotspotHud();
+    refreshResistanceHud();
+    refreshDomesticHud();
+    refreshCountryHud();
+    refreshEconomyHud();
+    renderCities();
+    setStatus(message);
+  };
+
+  localHotspotSelect.addEventListener('change', () => {
+    gameState.localInstability.selectedHotspotId = localHotspotSelect.value;
+    refreshLocalHotspotHud();
+  });
+  raiseLocalUnrestBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localUnrest', 8), 'Local unrest increased.'));
+  lowerLocalUnrestBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localUnrest', -8), 'Local unrest reduced.'));
+  raiseLocalControlBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStateControl', 8), 'Local state control increased.'));
+  lowerLocalControlBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStateControl', -8), 'Local state control reduced.'));
+  raiseLocalStabilityBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStability', 8), 'Local stability increased.'));
+  lowerLocalStabilityBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStability', -8), 'Local stability reduced.'));
+  createManualHotspotBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const hotspots = localInstabilitySystem.getCountryHotspots(focusCountry);
+    const pick = hotspots[0];
+    if (!pick) {
+      setStatus('No city hotspots available for this country.', true);
+      return;
+    }
+    localInstabilitySystem.createManualHotspot(focusCountry, pick.linkedCityId, localHotspotTagSelect.value || 'unrest hotspot');
+    refreshLocalHotspotHud();
+    renderCities();
+    setStatus('Manual local hotspot created.');
+  });
+  clearManualHotspotBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.clearHotspot(id), 'Local hotspot cleared.'));
+  localHotspotTagSelect.addEventListener('change', () => {
+    const hotspotId = localHotspotSelect.value || gameState.localInstability.selectedHotspotId;
+    if (!hotspotId) return;
+    localInstabilitySystem.setHotspotTag(hotspotId, localHotspotTagSelect.value);
+    refreshLocalHotspotHud();
+    renderCities();
+  });
+}
+
 function attachLeadershipControls() {
   const mutateLeadership = (mutator, message) => {
     const focusCountry = getDiplomacyFocusCountry();
@@ -3036,6 +3175,7 @@ async function init() {
   attachLeadershipControls();
   attachInformationControls();
   attachResistanceControls();
+  attachLocalHotspotControls();
   attachFactionControls();
   attachMigrationControls();
   attachEventControls();
@@ -3050,6 +3190,7 @@ async function init() {
   refreshGovernmentProfileHud();
   refreshDomesticHud();
   refreshResistanceHud();
+  refreshLocalHotspotHud();
   refreshInformationHud();
   refreshMigrationHud();
   refreshEventHud();
