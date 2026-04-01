@@ -252,6 +252,36 @@
       </div>
       <button id="applyElectionOffsetBtn">Apply Election Timing</button>
     </div>
+    <div class="card">
+      <h2>State Structure</h2>
+      <p id="stateStructureFocusCountry">Structure for: --</p>
+      <p id="stateStructureSummary">State structure: --</p>
+      <p id="stateAutonomyLabel">Regional autonomy: --</p>
+      <p id="stateGovernanceLabel">Local governance capacity: --</p>
+      <p id="stateEmergencyLabel">Emergency powers: --</p>
+      <p id="stateTensionLabel">Center-region tension: --</p>
+      <div class="field">
+        <label for="stateStructureSelect">State structure model</label>
+        <select id="stateStructureSelect">
+          <option value="centralized">Centralized</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="federal">Federal</option>
+        </select>
+      </div>
+      <div class="row">
+        <button id="autonomyUpBtn">Autonomy +8</button>
+        <button id="autonomyDownBtn">Autonomy -8</button>
+      </div>
+      <div class="row">
+        <button id="governanceUpBtn">Governance +8</button>
+        <button id="governanceDownBtn">Governance -8</button>
+      </div>
+      <div class="row">
+        <button id="tensionUpBtn">Tension +8</button>
+        <button id="tensionDownBtn">Tension -8</button>
+      </div>
+      <button id="toggleEmergencyPowersBtn">Toggle Emergency Powers</button>
+    </div>
 
 
     <div class="card">
@@ -871,6 +901,7 @@
   <script src="core/taskScheduler.js" defer></script>
   <script src="systems/government-profile.js" defer></script>
   <script src="systems/country.js" defer></script>
+  <script src="systems/state-structure.js" defer></script>
   <script src="systems/economy.js" defer></script>
   <script src="systems/resources.js" defer></script>
   <script src="systems/diplomacy.js" defer></script>

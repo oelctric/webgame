@@ -156,6 +156,18 @@ const LOCAL_INSTABILITY_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+const STATE_STRUCTURE_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  emergencyToggleCooldownMs: 5 * DAY_MS,
+  structures: {
+    centralized: { defaultAutonomy: 28, defaultGovernance: 52, defaultTension: 22 },
+    hybrid: { defaultAutonomy: 52, defaultGovernance: 60, defaultTension: 16 },
+    federal: { defaultAutonomy: 74, defaultGovernance: 68, defaultTension: 14 }
+  }
+};
+
 const LEADERSHIP_CONFIG = {
   tickMs: DAY_MS,
   clampMin: 0,

@@ -94,8 +94,11 @@ class ProxyConflictSystem {
       + Math.max(0, (target.domesticNarrativePressure || 0) - 55) / 170;
     const hotspotAmplifier = hotspot ? 1 + Math.max(0, hotspot.severity - 45) / 120 : 1;
     const sourcePosture = source.foreignPolicyStyle === 'aggressive' ? 1.12 : (source.foreignPolicyStyle === 'cooperative' ? 0.9 : 1);
+    const governanceShield = 1 + Math.max(0, ((target.localGovernanceCapacity || 50) - 50) / 120);
+    const emergencyShield = target.emergencyPowersActive ? 1.08 : 1;
+    const autonomyExposure = 1 + Math.max(0, ((target.regionalAutonomy || 50) - 50) / 180);
 
-    const combined = (weaknessBoost * hotspotAmplifier * sourcePosture) / (targetSecurity * legitimacyShield * controlShield);
+    const combined = (weaknessBoost * hotspotAmplifier * sourcePosture * autonomyExposure) / (targetSecurity * legitimacyShield * controlShield * governanceShield * emergencyShield);
     return Math.max(0.5, Math.min(1.8, combined));
   }
 
