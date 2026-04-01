@@ -159,6 +159,12 @@ const TRADE_CONFIG = {
   resources: ['oil', 'industry_support']
 };
 
+const NEGOTIATION_CONFIG = {
+  ceasefireDefaultDays: 30,
+  temporaryTradeDefaultDays: 60,
+  tickMs: DAY_MS
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -1147,7 +1153,10 @@ class TradeSystem {
     if (relation.status === 'war') return { ok: false, reason: 'war' };
     const expToImp = this.diplomacySystem.getDirectionalPressure(exporter, importer);
     const impToExp = this.diplomacySystem.getDirectionalPressure(importer, exporter);
-    if (expToImp.tradeAllowed === false || impToExp.tradeAllowed === false) return { ok: false, reason: 'trade_blocked' };
+    const temporaryRestore = negotiationSystem?.hasTemporaryTradeRestoration(exporter, importer);
+    if (!temporaryRestore && (expToImp.tradeAllowed === false || impToExp.tradeAllowed === false)) {
+      return { ok: false, reason: 'trade_blocked' };
+    }
     if (expToImp.sanctionsLevel === 'heavy' || impToExp.sanctionsLevel === 'heavy') return { ok: false, reason: 'heavy_sanctions' };
     if (relation.status === 'hostile' && relation.relationScore < -55) return { ok: false, reason: 'hostile_relations' };
     return { ok: true };
@@ -1412,6 +1421,9 @@ class DiplomacySystem {
   canStartOffensiveAction(attackerCountry, targetCountry) {
     if (!attackerCountry || !targetCountry) return { ok: false, message: 'Missing country context.' };
     if (attackerCountry === targetCountry) return { ok: false, message: 'Offensive actions against own country are blocked.' };
+    if (negotiationSystem?.isOffensiveBlocked(attackerCountry, targetCountry)) {
+      return { ok: false, message: `Offensive action blocked by active ceasefire between ${attackerCountry} and ${targetCountry}.` };
+    }
     const relation = this.ensureRelation(attackerCountry, targetCountry);
     if (relation.status === 'war') return { ok: true, relation, autoDeclaredWar: false };
     const declared = this.declareWar(attackerCountry, targetCountry, `${attackerCountry} initiated military action against ${targetCountry}.`);
@@ -1559,6 +1571,196 @@ class DiplomacySystem {
       type: 'DIPLOMACY_TICK',
       payload: {},
       handler: () => this.tick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
+  }
+}
+
+class NegotiationSystem {
+  constructor(gameState, scheduler, diplomacySystem, tradeSystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.diplomacySystem = diplomacySystem;
+    this.tradeSystem = tradeSystem;
+    this.started = false;
+  }
+
+  pairKey(countryA, countryB) {
+    const [a, b] = [countryA, countryB].sort((x, y) => x.localeCompare(y));
+    return `${a}::${b}`;
+  }
+
+  createAgreementId(prefix) {
+    this.gameState.negotiation.nextAgreementId += 1;
+    return `${prefix}-${this.gameState.negotiation.nextAgreementId}`;
+  }
+
+  getActiveAgreement(collection, countryA, countryB) {
+    const key = this.pairKey(countryA, countryB);
+    const agreement = collection[key];
+    if (!agreement) return null;
+    if (agreement.expiresAt && agreement.expiresAt <= this.gameState.currentTimeMs) return null;
+    return agreement;
+  }
+
+  isOffensiveBlocked(countryA, countryB) {
+    return Boolean(this.getActiveAgreement(this.gameState.negotiation.ceasefiresByPair, countryA, countryB));
+  }
+
+  hasTemporaryTradeRestoration(countryA, countryB) {
+    return Boolean(this.getActiveAgreement(this.gameState.negotiation.tradeRestorationByPair, countryA, countryB));
+  }
+
+  formatDaysLeft(expiresAt) {
+    if (!expiresAt) return 'indefinite';
+    const days = Math.max(0, (expiresAt - this.gameState.currentTimeMs) / DAY_MS);
+    return `${days.toFixed(1)}d`;
+  }
+
+  cancelHostileIntent(countryA, countryB) {
+    this.gameState.units.forEach((unit) => {
+      if (unit.status === 'destroyed') return;
+      if (unit.combatStatus !== 'attacking') return;
+      const targetCountry = unit.targetType === 'unit'
+        ? this.gameState.units.find((u) => u.id === unit.currentTargetId)?.ownerCountry
+        : this.gameState.bases.find((b) => b.id === unit.currentTargetId)?.ownerCountry;
+      if (!targetCountry) return;
+      const matching = (unit.ownerCountry === countryA && targetCountry === countryB)
+        || (unit.ownerCountry === countryB && targetCountry === countryA);
+      if (matching) combatSystem.clearUnitCombat(unit);
+    });
+
+    const assets = [...this.gameState.bases, ...this.gameState.cities];
+    assets.forEach((asset) => {
+      if (!asset.captureState) return;
+      const unit = this.gameState.units.find((u) => u.id === asset.captureState.captorUnitId);
+      if (!unit) return;
+      const matching = (unit.ownerCountry === countryA && asset.ownerCountry === countryB)
+        || (unit.ownerCountry === countryB && asset.ownerCountry === countryA);
+      if (matching) {
+        asset.captureState = null;
+        asset.controlStatus = 'normal';
+        unit.captureTarget = null;
+      }
+    });
+  }
+
+  setCeasefire(countryA, countryB, durationDays = NEGOTIATION_CONFIG.ceasefireDefaultDays) {
+    const relation = this.diplomacySystem.getRelation(countryA, countryB);
+    if (!relation) return null;
+    const key = this.pairKey(countryA, countryB);
+    const expiresAt = durationDays > 0 ? this.gameState.currentTimeMs + durationDays * DAY_MS : null;
+    this.gameState.negotiation.ceasefiresByPair[key] = {
+      id: this.createAgreementId('ceasefire'),
+      countryA: relation.countryA,
+      countryB: relation.countryB,
+      startedAt: this.gameState.currentTimeMs,
+      expiresAt,
+      previousStatus: relation.status
+    };
+    relation.status = 'ceasefire';
+    relation.relationScore = this.diplomacySystem.clampScore(Math.max(relation.relationScore, -45));
+    relation.lastChangedAt = this.gameState.currentTimeMs;
+    this.cancelHostileIntent(countryA, countryB);
+    this.diplomacySystem.adjustRelationScore(countryA, countryB, 6, 'Ceasefire signed');
+    this.gameState.negotiation.lastSummary = `Ceasefire: ${countryA} ↔ ${countryB} (${this.formatDaysLeft(expiresAt)}).`;
+    return this.gameState.negotiation.ceasefiresByPair[key];
+  }
+
+  signPeaceDeal(countryA, countryB) {
+    delete this.gameState.negotiation.ceasefiresByPair[this.pairKey(countryA, countryB)];
+    this.cancelHostileIntent(countryA, countryB);
+    const relation = this.diplomacySystem.makePeace(countryA, countryB, `${countryA} and ${countryB} signed a peace deal.`);
+    if (!relation) return null;
+    this.diplomacySystem.adjustRelationScore(countryA, countryB, 12, 'Peace deal normalization');
+    this.gameState.negotiation.lastSummary = `Peace deal signed: ${countryA} ↔ ${countryB}.`;
+    return relation;
+  }
+
+  applySanctionsRelief(sourceCountry, targetCountry) {
+    const relation = this.diplomacySystem.liftSanctions(sourceCountry, targetCountry);
+    if (!relation) return null;
+    const source = countrySystem.ensureCountry(sourceCountry);
+    const target = countrySystem.ensureCountry(targetCountry);
+    source.economicStress = Math.max(0, source.economicStress - 1);
+    target.economicStress = Math.max(0, target.economicStress - 4);
+    target.unrest = Math.max(0, target.unrest - 1.5);
+    this.diplomacySystem.adjustRelationScore(sourceCountry, targetCountry, 5, 'Sanctions relief');
+    this.gameState.negotiation.lastSummary = `${sourceCountry} granted sanctions relief to ${targetCountry}.`;
+    return relation;
+  }
+
+  applyBorderDeEscalation(countryA, countryB) {
+    const relation = this.diplomacySystem.getRelation(countryA, countryB);
+    if (!relation) return null;
+    this.diplomacySystem.adjustRelationScore(countryA, countryB, 8, 'Border de-escalation');
+    relation.lastConflictAt = null;
+    const countryOne = countrySystem.ensureCountry(countryA);
+    const countryTwo = countrySystem.ensureCountry(countryB);
+    [countryOne, countryTwo].forEach((country) => {
+      country.unrest = Math.max(0, country.unrest - 1.2);
+      country.warWeariness = Math.max(0, country.warWeariness - 1.8);
+    });
+    this.gameState.negotiation.lastSummary = `Border de-escalation: ${countryA} ↔ ${countryB}.`;
+    return relation;
+  }
+
+  restoreTemporaryTrade(countryA, countryB, durationDays = NEGOTIATION_CONFIG.temporaryTradeDefaultDays) {
+    const relation = this.diplomacySystem.getRelation(countryA, countryB);
+    if (!relation) return null;
+    const key = this.pairKey(countryA, countryB);
+    const expiresAt = durationDays > 0 ? this.gameState.currentTimeMs + durationDays * DAY_MS : null;
+    this.gameState.negotiation.tradeRestorationByPair[key] = {
+      id: this.createAgreementId('trade'),
+      countryA: relation.countryA,
+      countryB: relation.countryB,
+      startedAt: this.gameState.currentTimeMs,
+      expiresAt
+    };
+    this.diplomacySystem.setTradeAllowed(countryA, countryB, true);
+    this.diplomacySystem.setTradeAllowed(countryB, countryA, true);
+    this.diplomacySystem.adjustRelationScore(countryA, countryB, 4, 'Temporary trade restoration');
+    this.tradeSystem.processTick();
+    this.gameState.negotiation.lastSummary = `Temporary trade restored: ${countryA} ↔ ${countryB} (${this.formatDaysLeft(expiresAt)}).`;
+    return this.gameState.negotiation.tradeRestorationByPair[key];
+  }
+
+  processExpiries() {
+    const now = this.gameState.currentTimeMs;
+    Object.entries(this.gameState.negotiation.ceasefiresByPair).forEach(([key, ceasefire]) => {
+      if (!ceasefire.expiresAt || ceasefire.expiresAt > now) return;
+      delete this.gameState.negotiation.ceasefiresByPair[key];
+      const relation = this.diplomacySystem.getRelation(ceasefire.countryA, ceasefire.countryB);
+      if (relation && relation.status === 'ceasefire') {
+        relation.status = this.diplomacySystem.deriveStatusFromScore(relation.relationScore);
+        relation.lastChangedAt = now;
+      }
+      this.gameState.negotiation.lastSummary = `Ceasefire expired: ${ceasefire.countryA} ↔ ${ceasefire.countryB}.`;
+    });
+    Object.entries(this.gameState.negotiation.tradeRestorationByPair).forEach(([key, agreement]) => {
+      if (!agreement.expiresAt || agreement.expiresAt > now) return;
+      delete this.gameState.negotiation.tradeRestorationByPair[key];
+      this.gameState.negotiation.lastSummary = `Temporary trade restoration expired: ${agreement.countryA} ↔ ${agreement.countryB}.`;
+    });
+  }
+
+  processTick() {
+    this.processExpiries();
+    refreshNegotiationHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + NEGOTIATION_CONFIG.tickMs,
+      type: 'NEGOTIATION_TICK',
+      payload: {},
+      handler: () => this.processTick()
     });
   }
 
@@ -2140,6 +2342,12 @@ const gameState = {
     relationsByPair: {},
     lastSummary: 'No diplomacy events yet.'
   },
+  negotiation: {
+    ceasefiresByPair: {},
+    tradeRestorationByPair: {},
+    nextAgreementId: 0,
+    lastSummary: 'No negotiated resolutions yet.'
+  },
   policy: {
     lastTickAt: null,
     lastSummary: 'No policy changes yet.'
@@ -2179,6 +2387,7 @@ const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem)
 const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem);
+const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacySystem, tradeSystem);
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
@@ -2235,6 +2444,17 @@ const sanctionLightBtn = document.getElementById('sanctionLightBtn');
 const sanctionHeavyBtn = document.getElementById('sanctionHeavyBtn');
 const liftSanctionsBtn = document.getElementById('liftSanctionsBtn');
 const toggleTradeBtn = document.getElementById('toggleTradeBtn');
+const negotiationSummary = document.getElementById('negotiationSummary');
+const negotiationCountryA = document.getElementById('negotiationCountryA');
+const negotiationCountryB = document.getElementById('negotiationCountryB');
+const ceasefireDaysInput = document.getElementById('ceasefireDaysInput');
+const tradeRestoreDaysInput = document.getElementById('tradeRestoreDaysInput');
+const declareCeasefireBtn = document.getElementById('declareCeasefireBtn');
+const signPeaceDealBtn = document.getElementById('signPeaceDealBtn');
+const grantSanctionsReliefBtn = document.getElementById('grantSanctionsReliefBtn');
+const borderDeEscalationBtn = document.getElementById('borderDeEscalationBtn');
+const restoreTradeBtn = document.getElementById('restoreTradeBtn');
+const negotiationStateList = document.getElementById('negotiationStateList');
 const policyFocusCountry = document.getElementById('policyFocusCountry');
 const policySummary = document.getElementById('policySummary');
 const militaryPolicySelect = document.getElementById('militaryPolicySelect');
@@ -2482,6 +2702,59 @@ function refreshDiplomacyHud() {
   }
 }
 
+function refreshNegotiationHud() {
+  const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  const previousA = negotiationCountryA.value;
+  const previousB = negotiationCountryB.value;
+  [negotiationCountryA, negotiationCountryB].forEach((select) => { select.innerHTML = ''; });
+  names.forEach((name) => {
+    const optA = document.createElement('option');
+    optA.value = name;
+    optA.textContent = name;
+    negotiationCountryA.appendChild(optA);
+    const optB = document.createElement('option');
+    optB.value = name;
+    optB.textContent = name;
+    negotiationCountryB.appendChild(optB);
+  });
+  if (previousA && names.includes(previousA)) negotiationCountryA.value = previousA;
+  if (previousB && names.includes(previousB)) negotiationCountryB.value = previousB;
+  if (!negotiationCountryA.value && names.length) negotiationCountryA.value = names[0];
+  if (!negotiationCountryB.value && names.length > 1) negotiationCountryB.value = names[1];
+
+  const hasCountries = names.length >= 2;
+  [
+    declareCeasefireBtn,
+    signPeaceDealBtn,
+    grantSanctionsReliefBtn,
+    borderDeEscalationBtn,
+    restoreTradeBtn,
+    negotiationCountryA,
+    negotiationCountryB,
+    ceasefireDaysInput,
+    tradeRestoreDaysInput
+  ].forEach((el) => { el.disabled = !hasCountries; });
+
+  negotiationSummary.textContent = `Negotiation: ${gameState.negotiation.lastSummary}`;
+  negotiationStateList.innerHTML = '';
+  const ceasefires = Object.values(gameState.negotiation.ceasefiresByPair);
+  const tradeDeals = Object.values(gameState.negotiation.tradeRestorationByPair);
+  if (!ceasefires.length && !tradeDeals.length) {
+    negotiationStateList.innerHTML = '<li>No active negotiated agreements.</li>';
+    return;
+  }
+  ceasefires.forEach((agreement) => {
+    const li = document.createElement('li');
+    li.textContent = `Ceasefire ${agreement.countryA} ↔ ${agreement.countryB} (${negotiationSystem.formatDaysLeft(agreement.expiresAt)})`;
+    negotiationStateList.appendChild(li);
+  });
+  tradeDeals.forEach((agreement) => {
+    const li = document.createElement('li');
+    li.textContent = `Temporary trade ${agreement.countryA} ↔ ${agreement.countryB} (${negotiationSystem.formatDaysLeft(agreement.expiresAt)})`;
+    negotiationStateList.appendChild(li);
+  });
+}
+
 function refreshPolicyHud() {
   const focusCountry = getDiplomacyFocusCountry();
   if (!focusCountry) {
@@ -2693,6 +2966,7 @@ function setPlayerCountry(countryFeature) {
   diplomacySystem.start();
   resourceSystem.start();
   tradeSystem.start();
+  negotiationSystem.start();
   policySystem.start();
   domesticStateSystem.start();
   countrySystem.syncOwnership();
@@ -2701,6 +2975,7 @@ function setPlayerCountry(countryFeature) {
   refreshEconomyHud();
   refreshCountryHud();
   refreshDiplomacyHud();
+  refreshNegotiationHud();
   refreshPolicyHud();
   refreshDomesticHud();
   refreshEventHud();
@@ -3361,6 +3636,96 @@ function attachDiplomacyControls() {
   diplomacyTargetCountry.addEventListener('change', () => refreshDiplomacyHud());
 }
 
+function attachNegotiationControls() {
+  const getPair = () => {
+    const countryA = negotiationCountryA.value;
+    const countryB = negotiationCountryB.value;
+    if (!countryA || !countryB) {
+      setStatus('Select two countries for negotiation.', true);
+      return null;
+    }
+    if (countryA === countryB) {
+      setStatus('Negotiation requires two different countries.', true);
+      return null;
+    }
+    return { countryA, countryB };
+  };
+
+  declareCeasefireBtn.addEventListener('click', () => {
+    const pair = getPair();
+    if (!pair) return;
+    const days = Math.max(0, Number(ceasefireDaysInput.value) || NEGOTIATION_CONFIG.ceasefireDefaultDays);
+    const result = negotiationSystem.setCeasefire(pair.countryA, pair.countryB, days);
+    if (!result) {
+      setStatus('Failed to set ceasefire.', true);
+      return;
+    }
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshTradeHud();
+    setStatus(`Ceasefire declared between ${pair.countryA} and ${pair.countryB}.`);
+  });
+
+  signPeaceDealBtn.addEventListener('click', () => {
+    const pair = getPair();
+    if (!pair) return;
+    const result = negotiationSystem.signPeaceDeal(pair.countryA, pair.countryB);
+    if (!result) {
+      setStatus('Failed to sign peace deal.', true);
+      return;
+    }
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshTradeHud();
+    setStatus(`Peace deal signed between ${pair.countryA} and ${pair.countryB}.`);
+  });
+
+  grantSanctionsReliefBtn.addEventListener('click', () => {
+    const pair = getPair();
+    if (!pair) return;
+    const result = negotiationSystem.applySanctionsRelief(pair.countryA, pair.countryB);
+    if (!result) {
+      setStatus('Failed to apply sanctions relief.', true);
+      return;
+    }
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshDomesticHud();
+    refreshTradeHud();
+    setStatus(`${pair.countryA} granted sanctions relief to ${pair.countryB}.`);
+  });
+
+  borderDeEscalationBtn.addEventListener('click', () => {
+    const pair = getPair();
+    if (!pair) return;
+    const result = negotiationSystem.applyBorderDeEscalation(pair.countryA, pair.countryB);
+    if (!result) {
+      setStatus('Failed to apply border de-escalation.', true);
+      return;
+    }
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshDomesticHud();
+    setStatus(`Border de-escalation applied between ${pair.countryA} and ${pair.countryB}.`);
+  });
+
+  restoreTradeBtn.addEventListener('click', () => {
+    const pair = getPair();
+    if (!pair) return;
+    const days = Math.max(0, Number(tradeRestoreDaysInput.value) || NEGOTIATION_CONFIG.temporaryTradeDefaultDays);
+    const result = negotiationSystem.restoreTemporaryTrade(pair.countryA, pair.countryB, days);
+    if (!result) {
+      setStatus('Failed to restore temporary trade.', true);
+      return;
+    }
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshTradeHud();
+    refreshDomesticHud();
+    setStatus(`Temporary trade restored between ${pair.countryA} and ${pair.countryB}.`);
+  });
+}
+
 function attachPolicyControls() {
   applyPolicyBtn.addEventListener('click', () => {
     const focusCountry = getDiplomacyFocusCountry();
@@ -3512,6 +3877,7 @@ function startSimulationLoop() {
     refreshEconomyHud();
     refreshCountryHud();
     refreshDiplomacyHud();
+    refreshNegotiationHud();
     refreshPolicyHud();
     refreshDomesticHud();
     refreshEventHud();
@@ -3667,6 +4033,7 @@ async function init() {
   attachTimeControls();
   attachUnitControls();
   attachDiplomacyControls();
+  attachNegotiationControls();
   attachPolicyControls();
   attachEventControls();
   attachTradeControls();

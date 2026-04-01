@@ -195,31 +195,36 @@
     </div>
 
     <div class="card">
-      <h2>Treaties & Pacts</h2>
-      <p id="treatySummary">Treaties: --</p>
+      <h2>Negotiated Resolution</h2>
+      <p id="negotiationSummary">Negotiation: --</p>
       <div class="field">
-        <label for="treatyTypeSelect">Agreement Type</label>
-        <select id="treatyTypeSelect">
-          <option value="defense_pact">Defense Pact</option>
-          <option value="non_aggression_pact">Non-Aggression Pact</option>
-          <option value="trade_agreement">Trade Agreement</option>
-        </select>
+        <label for="negotiationCountryA">Country A</label>
+        <select id="negotiationCountryA"></select>
       </div>
       <div class="field">
-        <label for="treatyCountryA">Country A</label>
-        <select id="treatyCountryA"></select>
+        <label for="negotiationCountryB">Country B</label>
+        <select id="negotiationCountryB"></select>
       </div>
       <div class="field">
-        <label for="treatyCountryB">Country B</label>
-        <select id="treatyCountryB"></select>
+        <label for="ceasefireDaysInput">Ceasefire Days</label>
+        <input id="ceasefireDaysInput" type="number" min="0" value="30" />
       </div>
-      <button id="createTreatyBtn">Create Agreement</button>
       <div class="field">
-        <label for="breakTreatySelect">Active Agreement</label>
-        <select id="breakTreatySelect"></select>
+        <label for="tradeRestoreDaysInput">Trade Restoration Days</label>
+        <input id="tradeRestoreDaysInput" type="number" min="0" value="60" />
       </div>
-      <button id="breakTreatyBtn">Break Agreement</button>
-      <ul id="treatyList"></ul>
+      <div class="row">
+        <button id="declareCeasefireBtn">Declare Ceasefire</button>
+        <button id="signPeaceDealBtn">Sign Peace Deal</button>
+      </div>
+      <div class="row">
+        <button id="grantSanctionsReliefBtn">Grant Sanctions Relief</button>
+      </div>
+      <div class="row">
+        <button id="borderDeEscalationBtn">Border De-escalation</button>
+        <button id="restoreTradeBtn">Restore Trade</button>
+      </div>
+      <ul id="negotiationStateList"></ul>
     </div>
 
     <div class="card">
