@@ -28,6 +28,13 @@ class DomesticStateSystem {
     const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
     const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
+    const politicalEffects = country.politicalEffects || {
+      stabilityDrift: 0,
+      unrestDrift: 0,
+      policyEffectiveness: 1,
+      crisisResilience: 1
+    };
+    const crisisStressFactor = 1 / Math.max(0.8, Math.min(1.2, politicalEffects.crisisResilience || 1));
     const oilShortage = country.oil < RESOURCE_CONFIG.oilShortageThreshold ? 0.18 : 0;
     const industryStrain = country.industrialCapacity < 22 ? 0.14 : 0;
     const manpowerShortage = country.manpowerPool < 1200 ? 0.12 : 0;
@@ -40,14 +47,15 @@ class DomesticStateSystem {
       + pressure.stressDrift
       + oilShortage
       + industryStrain
-      + eventModifiers.economicStressDrift
+      + eventModifiers.economicStressDrift * crisisStressFactor
       - (country.tradeStressRelief || 0));
 
     const unrestDrift = 0.06
       + country.warWeariness * 0.004
       + country.economicStress * 0.005
-      + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity];
-    country.unrest = this.clamp(country.unrest + unrestDrift + (country.stability < 40 ? 0.15 : -0.06) + eventModifiers.unrestDrift);
+      + DOMESTIC_CONFIG.unrestSecurityDrift[internalSecurity]
+      + (politicalEffects.unrestDrift || 0);
+    country.unrest = this.clamp(country.unrest + unrestDrift + (country.stability < 40 ? 0.15 : -0.06) + eventModifiers.unrestDrift * crisisStressFactor);
 
     const stabilityDelta = 0.14
       + DOMESTIC_CONFIG.stabilitySecurityBonus[internalSecurity]
@@ -57,7 +65,8 @@ class DomesticStateSystem {
       - activeWars * 0.06
       - pressure.stabilityDrift
       - manpowerShortage
-      + eventModifiers.stabilityDrift;
+      + eventModifiers.stabilityDrift * crisisStressFactor
+      + (politicalEffects.stabilityDrift || 0);
     country.stability = this.clamp(country.stability + stabilityDelta);
     country.warWeariness = this.clamp(country.warWeariness + eventModifiers.warWearinessDrift);
     country.domesticOutputModifier = Math.max(

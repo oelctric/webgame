@@ -206,12 +206,13 @@ class AISystem {
         vulnerableImportFlowCount: vulnerableImportFlows.length,
         activeCrisisCount: activeEvents.length,
         treasuryLow: country.treasury < 1100,
-        domesticStrain: country.stability < 42 || country.unrest > 58 || country.economicStress > 60,
-        severeWarFatigue: country.warWeariness > 62 || (country.warWeariness > 48 && country.economicStress > 55),
+        domesticStrain: country.stability < 42 || country.unrest > 58 || country.economicStress > 60 || country.legitimacy < 45 || country.publicSupport < 43,
+        severeWarFatigue: country.warWeariness > 62 || (country.warWeariness > 48 && country.economicStress > 55) || country.publicSupport < 35,
         isolated: blocs.length === 0,
         rivalBlocSize,
         rivalCrisisPressure,
-        strengthDelta: strengthScore - rivalStrengthScore
+        strengthDelta: strengthScore - rivalStrengthScore,
+        politicalWeakness: country.legitimacy < 40 || country.publicSupport < 38 || country.eliteSupport < 36
       }
     };
   }
@@ -234,6 +235,11 @@ class AISystem {
     if (metrics.domesticStrain) {
       scores.stabilize_domestic += 45;
       reasons.stabilize_domestic = 'Domestic stability, unrest, or economic stress is elevated.';
+    }
+    if (metrics.politicalWeakness) {
+      scores.stabilize_domestic += 24;
+      scores.deescalate_conflict += 18;
+      reasons.stabilize_domestic = 'Domestic political legitimacy/support is weak.';
     }
     if (metrics.severeWarFatigue) {
       scores.deescalate_conflict += 55;

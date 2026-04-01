@@ -123,6 +123,13 @@ const DOMESTIC_CONFIG = {
   stabilitySecurityBonus: { low: -0.08, normal: 0.04, high: 0.12 }
 };
 
+const POLITICAL_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  alertCooldownMs: 2 * DAY_MS
+};
+
 const RESOURCE_CONFIG = {
   tickMs: DAY_MS,
   defaultOil: 220,

@@ -58,6 +58,8 @@ class PolicySystem {
     const dailyCost = this.updateCountryPolicyCost(countryName);
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
     const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
+    const politicalEffects = country.politicalEffects || { policyEffectiveness: 1 };
+    const policyEffectiveness = Math.max(0.7, Math.min(1.15, politicalEffects.policyEffectiveness || 1));
 
     country.treasury -= dailyCost;
     country.treasury += (industryEffect.treasuryBonus || 0);
@@ -67,10 +69,10 @@ class PolicySystem {
     const debtPenalty = country.treasury < 0 ? 0.2 : 0;
 
     const unrestPenaltyFactor = Math.max(0.45, 1 - (country.unrest || 0) / 170);
-    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier * eventModifiers.industryGrowthMultiplier;
-    country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220);
-    country.policyModifiers.stability += militaryEffect.stability + securityEffect.stability - warStabilityPenalty - debtPenalty;
-    country.policyModifiers.readiness += militaryEffect.readiness + securityEffect.readiness;
+    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier * eventModifiers.industryGrowthMultiplier * policyEffectiveness;
+    country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220) * policyEffectiveness;
+    country.policyModifiers.stability += (militaryEffect.stability + securityEffect.stability) * policyEffectiveness - warStabilityPenalty - debtPenalty;
+    country.policyModifiers.readiness += (militaryEffect.readiness + securityEffect.readiness) * policyEffectiveness;
     country.policyModifiers.stability = Math.max(-40, Math.min(40, country.policyModifiers.stability));
     country.policyModifiers.industrialCapacity = Math.max(-20, Math.min(180, country.policyModifiers.industrialCapacity));
     country.policyModifiers.manpower = Math.max(-5000, Math.min(40_000, country.policyModifiers.manpower));
