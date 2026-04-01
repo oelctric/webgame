@@ -130,6 +130,33 @@ const POLITICAL_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+const LEADERSHIP_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  defaultMandate: 58,
+  defaultApproval: 56,
+  defaultContinuity: 64,
+  electionCycleYears: {
+    democracy: 4,
+    hybrid: 6
+  },
+  electionApproachingMs: 120 * DAY_MS,
+  turnoverThresholds: {
+    democracy: {
+      approval: 45,
+      mandate: 44,
+      legitimacy: 42,
+      continuity: 40
+    },
+    nondemocratic: {
+      continuity: 28,
+      legitimacy: 35,
+      elite: 36
+    }
+  }
+};
+
 
 const INFORMATION_CONFIG = {
   tickMs: DAY_MS,

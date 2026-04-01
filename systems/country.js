@@ -55,6 +55,13 @@ class CountrySystem {
         legitimacy: 62,
         publicSupport: 60,
         eliteSupport: 58,
+        leaderMandate: LEADERSHIP_CONFIG.defaultMandate,
+        leaderApproval: LEADERSHIP_CONFIG.defaultApproval,
+        governmentContinuity: LEADERSHIP_CONFIG.defaultContinuity,
+        electionCycleLengthMs: null,
+        nextElectionAt: null,
+        lastLeadershipReviewAt: null,
+        lastTurnoverAt: 0,
         politicalEffects: {
           stabilityDrift: 0,
           unrestDrift: 0,
@@ -112,6 +119,13 @@ class CountrySystem {
     if (typeof country.legitimacy !== 'number') country.legitimacy = 62;
     if (typeof country.publicSupport !== 'number') country.publicSupport = 60;
     if (typeof country.eliteSupport !== 'number') country.eliteSupport = 58;
+    if (typeof country.leaderMandate !== 'number') country.leaderMandate = LEADERSHIP_CONFIG.defaultMandate;
+    if (typeof country.leaderApproval !== 'number') country.leaderApproval = LEADERSHIP_CONFIG.defaultApproval;
+    if (typeof country.governmentContinuity !== 'number') country.governmentContinuity = LEADERSHIP_CONFIG.defaultContinuity;
+    if (typeof country.electionCycleLengthMs !== 'number') country.electionCycleLengthMs = null;
+    if (country.nextElectionAt == null) country.nextElectionAt = null;
+    if (country.lastLeadershipReviewAt == null) country.lastLeadershipReviewAt = null;
+    if (typeof country.lastTurnoverAt !== 'number') country.lastTurnoverAt = 0;
     country.politicalEffects = country.politicalEffects || {
       stabilityDrift: 0,
       unrestDrift: 0,
