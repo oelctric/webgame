@@ -155,8 +155,10 @@ const hudCurrentCountry = document.getElementById('hudCurrentCountry');
 const hudAlerts = document.getElementById('hudAlerts');
 const resetViewBtn = document.getElementById('resetViewBtn');
 const rightPanel = document.getElementById('rightPanel');
+const bottomDrawer = document.getElementById('bottomDrawer');
 const bottomDrawerTabs = document.getElementById('bottomDrawerTabs');
 const bottomDrawerContent = document.getElementById('bottomDrawerContent');
+const toggleDrawerBtn = document.getElementById('toggleDrawerBtn');
 const economySummary = document.getElementById('economySummary');
 const aiCountriesLabel = document.getElementById('aiCountriesLabel');
 const countryHudName = document.getElementById('countryHudName');
@@ -1088,6 +1090,22 @@ function organizePanels() {
     });
     bottomDrawerTabs.appendChild(btn);
     bottomDrawerContent.appendChild(pane);
+  });
+}
+
+function setDrawerCollapsed(collapsed) {
+  if (!bottomDrawer || !toggleDrawerBtn) return;
+  bottomDrawer.classList.toggle('collapsed', collapsed);
+  toggleDrawerBtn.textContent = collapsed ? 'Open Drawer' : 'Close Drawer';
+  toggleDrawerBtn.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function attachDrawerControls() {
+  if (!toggleDrawerBtn) return;
+  setDrawerCollapsed(true);
+  toggleDrawerBtn.addEventListener('click', () => {
+    const collapsed = bottomDrawer.classList.contains('collapsed');
+    setDrawerCollapsed(!collapsed);
   });
 }
 
@@ -2784,6 +2802,7 @@ async function setupMap() {
 
 async function init() {
   organizePanels();
+  attachDrawerControls();
   applySettingsUI();
   attachMenuHandlers();
   attachTimeControls();
