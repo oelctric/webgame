@@ -7,7 +7,34 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <aside class="sidebar">
+  <header class="top-hud">
+    <div class="hud-block">
+      <strong id="hudCurrentCountry">Country: --</strong>
+      <span id="hudAlerts">Alerts: --</span>
+    </div>
+    <div class="hud-block">
+      <strong id="gameDateTime">Date: --</strong>
+      <strong id="simSpeedLabel">Speed: --</strong>
+      <strong id="treasuryLabel">Treasury: --</strong>
+    </div>
+    <div class="hud-actions">
+      <div class="row" id="timeControlButtons">
+        <button data-speed="0">Pause</button>
+        <button data-speed="1">1x</button>
+        <button data-speed="5">5x</button>
+        <button data-speed="20">20x</button>
+      </div>
+      <div class="row">
+        <button id="skipDayBtn">+1 Day</button>
+        <button id="skipWeekBtn">+1 Week</button>
+        <button id="skipMonthBtn">+1 Month</button>
+      </div>
+      <button id="resetViewBtn">Reset View</button>
+    </div>
+  </header>
+
+  <div class="sim-layout">
+  <aside class="sidebar" id="leftSidebar">
     <div class="card">
       <h1>Geo Command</h1>
       <p>Robinson projection world map with real country borders.</p>
@@ -23,22 +50,8 @@
 
     <div class="card">
       <h2>Simulation</h2>
-      <p><strong id="gameDateTime">Date: --</strong></p>
-      <p><strong id="simSpeedLabel">Speed: --</strong></p>
-      <p><strong id="treasuryLabel">Treasury: --</strong></p>
       <p id="aiCountriesLabel">AI Countries: --</p>
       <p id="economySummary">Economy: --</p>
-      <div class="row" id="timeControlButtons">
-        <button data-speed="0">Pause</button>
-        <button data-speed="1">1x</button>
-        <button data-speed="5">5x</button>
-        <button data-speed="20">20x</button>
-      </div>
-      <div class="row">
-        <button id="skipDayBtn">+1 Day</button>
-        <button id="skipWeekBtn">+1 Week</button>
-        <button id="skipMonthBtn">+1 Month</button>
-      </div>
     </div>
 
     <div class="card">
@@ -537,6 +550,12 @@
       </div>
     </section>
   </main>
+  <aside id="rightPanel"></aside>
+  </div>
+  <section id="bottomDrawer">
+    <div id="bottomDrawerTabs"></div>
+    <div id="bottomDrawerContent"></div>
+  </section>
 
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-geo-projection@4"></script>
