@@ -1,11 +1,12 @@
 class PolicySystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem = null) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem = null, factionSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.eventSystem = eventSystem;
     this.governmentProfileSystem = governmentProfileSystem;
+    this.factionSystem = factionSystem;
     this.started = false;
   }
 
@@ -61,6 +62,9 @@ class PolicySystem {
     const eventModifiers = this.eventSystem.getModifiersForCountry(countryName);
     const politicalEffects = country.politicalEffects || { policyEffectiveness: 1 };
     const policyEffectiveness = Math.max(0.7, Math.min(1.15, politicalEffects.policyEffectiveness || 1));
+    if (this.factionSystem) this.factionSystem.ensureCountryFactions(country);
+    const factionEffects = country.factionEffects || {};
+    const actionCosts = factionEffects.politicalCostByAction || {};
     const profilePolicy = this.governmentProfileSystem
       ? this.governmentProfileSystem.getPolicyModifiers(country)
       : {
@@ -72,7 +76,13 @@ class PolicySystem {
         policyCostMultiplier: 1
       };
 
-    country.treasury -= dailyCost * (profilePolicy.policyCostMultiplier || 1);
+    const securityCostFactor = policy.internalSecurityLevel === 'high'
+      ? (actionCosts.raise_internal_security || 1)
+      : 1;
+    const militaryCostFactor = policy.militarySpendingLevel === 'high'
+      ? (actionCosts.raise_military_spending || 1)
+      : 1;
+    country.treasury -= dailyCost * (profilePolicy.policyCostMultiplier || 1) * (factionEffects.policyCostMultiplier || 1) * securityCostFactor * militaryCostFactor;
     country.treasury += (industryEffect.treasuryBonus || 0);
 
     const activeWars = this.diplomacySystem.getRelationsForCountry(countryName).filter((relation) => relation.status === 'war').length;
@@ -80,10 +90,11 @@ class PolicySystem {
     const debtPenalty = country.treasury < 0 ? 0.2 : 0;
 
     const unrestPenaltyFactor = Math.max(0.45, 1 - (country.unrest || 0) / 170);
-    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier * eventModifiers.industryGrowthMultiplier * policyEffectiveness * (profilePolicy.industryPolicyEffectiveness || 1);
-    country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220) * policyEffectiveness * (profilePolicy.militaryPreference || 1);
-    country.policyModifiers.stability += (militaryEffect.stability + securityEffect.stability * (profilePolicy.internalSecurityEffectiveness || 1)) * policyEffectiveness - warStabilityPenalty - debtPenalty;
-    country.policyModifiers.readiness += (militaryEffect.readiness * (profilePolicy.militaryReadinessEffectiveness || 1) + securityEffect.readiness) * policyEffectiveness;
+    const factionEffectiveness = factionEffects.policyEffectivenessMultiplier || 1;
+    country.policyModifiers.industrialCapacity += industryEffect.industrialCapacity * unrestPenaltyFactor * pressure.industryMultiplier * eventModifiers.industryGrowthMultiplier * policyEffectiveness * factionEffectiveness * (profilePolicy.industryPolicyEffectiveness || 1);
+    country.policyModifiers.manpower += militaryEffect.manpower * Math.max(0.55, 1 - (country.warWeariness || 0) / 220) * policyEffectiveness * factionEffectiveness * (profilePolicy.militaryPreference || 1);
+    country.policyModifiers.stability += (militaryEffect.stability + securityEffect.stability * (profilePolicy.internalSecurityEffectiveness || 1)) * policyEffectiveness * factionEffectiveness - warStabilityPenalty - debtPenalty;
+    country.policyModifiers.readiness += (militaryEffect.readiness * (profilePolicy.militaryReadinessEffectiveness || 1) + securityEffect.readiness) * policyEffectiveness * factionEffectiveness;
     country.policyModifiers.stability = Math.max(-40, Math.min(40, country.policyModifiers.stability));
     country.policyModifiers.industrialCapacity = Math.max(-20, Math.min(180, country.policyModifiers.industrialCapacity));
     country.policyModifiers.manpower = Math.max(-5000, Math.min(40_000, country.policyModifiers.manpower));

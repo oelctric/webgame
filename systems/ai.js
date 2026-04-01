@@ -8,6 +8,7 @@ class AISystem {
     this.captureSystem = systems.captureSystem;
     this.economySystem = systems.economySystem;
     this.policySystem = systems.policySystem;
+    this.factionSystem = systems.factionSystem || null;
     this.diplomacySystem = systems.diplomacySystem;
     this.resourceSystem = systems.resourceSystem;
     this.countrySystem = systems.countrySystem;
@@ -210,6 +211,8 @@ class AISystem {
     const resistanceScore = (country.insurgencyPressure || 0) * 0.62 + (country.separatistPressure || 0) * 0.38;
     const leadershipWeak = leadershipPressure >= 35;
     const recentTurnover = (this.gameState.currentTimeMs - (country.lastTurnoverAt || 0)) <= 120 * DAY_MS;
+    if (this.factionSystem) this.factionSystem.ensureCountryFactions(country);
+    const faction = country.factionEffects || {};
 
     const rivalStrengthScore = rivalCountry
       ? (rivalCountry.stability + rivalCountry.industrialCapacity + (rivalCountry.treasury / 120) + (rivalCountry.manpowerPool / 220) - rivalCountry.economicStress)
@@ -252,7 +255,12 @@ class AISystem {
         reputationStrong: country.internationalReputation > 35,
         leadershipPressure,
         leadershipWeak,
-        recentTurnover
+        recentTurnover,
+        factionWarTolerance: faction.warToleranceBias || 0,
+        factionDeescalation: faction.deescalationBias || 0,
+        factionTradeBias: faction.tradeRestorationBias || 0,
+        factionSecurityBias: faction.internalSecurityBias || 0,
+        factionHardlineBias: faction.hardlinePostureBias || 0
       },
       profile: {
         foreign: foreignProfile,
@@ -281,6 +289,12 @@ class AISystem {
     scores.deescalate_conflict += (profile.foreign.deescalationBias - 1) * 26;
     scores.pressure_rival += profile.foreign.escalationBias * 20;
     scores.isolate_rival += (profile.foreign.sanctionsBias - 1) * 18;
+    scores.deescalate_conflict += metrics.factionDeescalation * 28;
+    scores.protect_trade += metrics.factionTradeBias * 24;
+    scores.secure_resources += metrics.factionTradeBias * 18;
+    scores.stabilize_domestic += metrics.factionSecurityBias > 0.4 ? 18 : 0;
+    scores.pressure_rival += metrics.factionHardlineBias * 24;
+    scores.isolate_rival += metrics.factionHardlineBias * 18;
 
 
     if (metrics.narrativeCrisis) {
@@ -434,11 +448,12 @@ class AISystem {
     const foreign = this.governmentProfileSystem ? this.governmentProfileSystem.getForeignPolicyBias(country) : { escalationBias: 0 };
     const domestic = this.governmentProfileSystem ? this.governmentProfileSystem.getDomesticModifiers(country) : { securitySuppressionMult: 1 };
     const weakMandate = country.leaderMandate < 42 || country.leaderApproval < 44 || country.governmentContinuity < 40;
+    const faction = country.factionEffects || {};
     if (goal === 'deescalate_conflict' || goal === 'stabilize_domestic') {
       return {
         militarySpendingLevel: country.treasury < 1500 || weakMandate ? 'low' : 'normal',
         industryInvestmentLevel: country.economicStress > 58 ? 'low' : 'normal',
-        internalSecurityLevel: (country.insurgencyPressure > 45 || country.stateControl < 58 || domestic.securitySuppressionMult > 1.15) ? 'high' : 'normal'
+        internalSecurityLevel: (country.insurgencyPressure > 45 || country.stateControl < 58 || domestic.securitySuppressionMult > 1.15 || (faction.internalSecurityBias || 0) > 0.45) ? 'high' : 'normal'
       };
     }
     if (goal === 'secure_resources' || goal === 'protect_trade') {
@@ -457,9 +472,9 @@ class AISystem {
     }
     if (goal === 'pressure_rival' || goal === 'isolate_rival' || goal === 'defend_chokepoints') {
       return {
-        militarySpendingLevel: weakMandate ? 'normal' : (foreign.escalationBias > 0 ? 'high' : 'normal'),
+        militarySpendingLevel: weakMandate ? 'normal' : ((foreign.escalationBias > 0 || (faction.warToleranceBias || 0) > 0.4) ? 'high' : 'normal'),
         industryInvestmentLevel: country.treasury > 2600 ? 'high' : 'normal',
-        internalSecurityLevel: weakMandate ? 'high' : 'normal'
+        internalSecurityLevel: weakMandate || (faction.internalSecurityBias || 0) > 0.3 ? 'high' : 'normal'
       };
     }
     if (goal === 'expand_influence') {

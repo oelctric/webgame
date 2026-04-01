@@ -70,6 +70,23 @@ class CountrySystem {
         },
         politicalLastTickAt: null,
         politicalAlertBucket: 'stable',
+        factions: null,
+        factionEffects: {
+          policyCostMultiplier: 1,
+          policyEffectivenessMultiplier: 1,
+          mandateDrift: 0,
+          continuityDrift: 0,
+          warToleranceBias: 0,
+          deescalationBias: 0,
+          tradeRestorationBias: 0,
+          internalSecurityBias: 0,
+          hardlinePostureBias: 0,
+          politicalCostByAction: {},
+          interpretation: 'Faction pressure balanced.'
+        },
+        factionLastTickAt: null,
+        lastFactionInterpretation: '',
+        lastFactionAlertAt: 0,
         domesticNarrativePressure: 22,
         internationalReputation: 8,
         informationControl: 50,
@@ -148,6 +165,23 @@ class CountrySystem {
     };
     if (country.politicalLastTickAt == null) country.politicalLastTickAt = null;
     if (!country.politicalAlertBucket) country.politicalAlertBucket = 'stable';
+    if (!country.factions) country.factions = null;
+    country.factionEffects = country.factionEffects || {
+      policyCostMultiplier: 1,
+      policyEffectivenessMultiplier: 1,
+      mandateDrift: 0,
+      continuityDrift: 0,
+      warToleranceBias: 0,
+      deescalationBias: 0,
+      tradeRestorationBias: 0,
+      internalSecurityBias: 0,
+      hardlinePostureBias: 0,
+      politicalCostByAction: {},
+      interpretation: 'Faction pressure balanced.'
+    };
+    if (country.factionLastTickAt == null) country.factionLastTickAt = null;
+    if (typeof country.lastFactionInterpretation !== 'string') country.lastFactionInterpretation = '';
+    if (typeof country.lastFactionAlertAt !== 'number') country.lastFactionAlertAt = 0;
     if (typeof country.domesticNarrativePressure !== 'number') country.domesticNarrativePressure = 22;
     if (typeof country.internationalReputation !== 'number') country.internationalReputation = 8;
     if (typeof country.informationControl !== 'number') country.informationControl = 50;

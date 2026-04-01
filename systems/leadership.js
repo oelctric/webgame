@@ -1,5 +1,5 @@
 class LeadershipSystem {
-  constructor(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem, aiSystem = null) {
+  constructor(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem, aiSystem = null, factionSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
@@ -7,6 +7,7 @@ class LeadershipSystem {
     this.policySystem = policySystem;
     this.diplomacySystem = diplomacySystem;
     this.aiSystem = aiSystem;
+    this.factionSystem = factionSystem;
     this.started = false;
   }
 
@@ -60,6 +61,8 @@ class LeadershipSystem {
     const profile = this.governmentProfileSystem
       ? this.governmentProfileSystem.getDomesticModifiers(country)
       : { narrativePressureSensitivity: 1 };
+    if (this.factionSystem) this.factionSystem.ensureCountryFactions(country);
+    const factionEffects = country.factionEffects || {};
 
     const publicPain = Math.max(0, 50 - country.publicSupport) / 50;
     const legitimacyPain = Math.max(0, 50 - country.legitimacy) / 50;
@@ -98,9 +101,9 @@ class LeadershipSystem {
       - (narrativePain * 0.28)
       + (country.stability > 60 ? 0.18 : 0);
 
-    country.leaderApproval = this.clamp(country.leaderApproval + approvalDelta);
-    country.leaderMandate = this.clamp(country.leaderMandate + mandateDelta);
-    country.governmentContinuity = this.clamp(country.governmentContinuity + continuityDelta);
+    country.leaderApproval = this.clamp(country.leaderApproval + approvalDelta + ((factionEffects.mandateDrift || 0) * 0.7));
+    country.leaderMandate = this.clamp(country.leaderMandate + mandateDelta + (factionEffects.mandateDrift || 0));
+    country.governmentContinuity = this.clamp(country.governmentContinuity + continuityDelta + (factionEffects.continuityDrift || 0));
     country.lastLeadershipReviewAt = this.gameState.currentTimeMs;
   }
 
@@ -124,6 +127,7 @@ class LeadershipSystem {
     country.leaderApproval = this.clamp(country.leaderApproval + 6);
     country.governmentContinuity = this.clamp(country.governmentContinuity + 8);
     this.scheduleNextElection(country);
+    if (this.factionSystem?.onLeadershipTurnover) this.factionSystem.onLeadershipTurnover(countryName);
     this.gameState.leadership.lastSummary = `${countryName} renewed its governing mandate.`;
     return { ok: true, type: 'renewal' };
   }
