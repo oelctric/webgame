@@ -130,6 +130,14 @@ const POLITICAL_CONFIG = {
   alertCooldownMs: 2 * DAY_MS
 };
 
+
+const FACTION_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  alertCooldownMs: 2 * DAY_MS
+};
+
 const INTERNAL_RESISTANCE_CONFIG = {
   tickMs: DAY_MS,
   clampMin: 0,

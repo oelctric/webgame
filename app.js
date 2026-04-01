@@ -45,6 +45,10 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No political updates yet.'
   },
+  factions: {
+    lastTickAt: null,
+    lastSummary: 'No faction updates yet.'
+  },
   internalResistance: {
     lastTickAt: null,
     lastSummary: 'No internal resistance updates yet.'
@@ -118,11 +122,13 @@ const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacyS
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem, governmentProfileSystem);
 const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
-const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem);
+const factionSystem = new FactionSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
+const leadershipSystem = new LeadershipSystem(gameState, scheduler, countrySystem, governmentProfileSystem, policySystem, diplomacySystem, null, factionSystem);
 const migrationSystem = new MigrationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, governmentProfileSystem);
 const internalResistanceSystem = new InternalResistanceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem);
 const informationSystem = new InformationSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem, migrationSystem, governmentProfileSystem);
 const influenceSystem = new InfluenceSystem(gameState, scheduler, countrySystem, diplomacySystem, governmentProfileSystem);
+policySystem.factionSystem = factionSystem;
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
@@ -135,6 +141,7 @@ const aiSystem = new AISystem(gameState, scheduler, {
   captureSystem,
   economySystem,
   policySystem,
+  factionSystem,
   diplomacySystem,
   resourceSystem,
   countrySystem,
@@ -235,6 +242,15 @@ const domesticGovernmentContinuity = document.getElementById('domesticGovernment
 const domesticElectionDate = document.getElementById('domesticElectionDate');
 const domesticLeadershipLabel = document.getElementById('domesticLeadershipLabel');
 const domesticLeadershipSummary = document.getElementById('domesticLeadershipSummary');
+const domesticFactionSummary = document.getElementById('domesticFactionSummary');
+const domesticFactionBias = document.getElementById('domesticFactionBias');
+const domesticFactionsList = document.getElementById('domesticFactionsList');
+const factionInfluenceUpBtn = document.getElementById('factionInfluenceUpBtn');
+const factionInfluenceDownBtn = document.getElementById('factionInfluenceDownBtn');
+const factionSatisfactionUpBtn = document.getElementById('factionSatisfactionUpBtn');
+const factionSatisfactionDownBtn = document.getElementById('factionSatisfactionDownBtn');
+const triggerFactionShiftBtn = document.getElementById('triggerFactionShiftBtn');
+const resetFactionStateBtn = document.getElementById('resetFactionStateBtn');
 const resistanceFocusCountry = document.getElementById('resistanceFocusCountry');
 const resistanceInsurgency = document.getElementById('resistanceInsurgency');
 const resistanceSeparatist = document.getElementById('resistanceSeparatist');
@@ -698,6 +714,9 @@ function refreshDomesticHud() {
     domesticElectionDate.textContent = 'Next election: --';
     domesticLeadershipLabel.textContent = 'Leadership status: --';
     domesticLeadershipSummary.textContent = 'Leadership cycle: --';
+    domesticFactionSummary.textContent = 'Faction pressure: --';
+    domesticFactionBias.textContent = 'Faction policy bias: --';
+    domesticFactionsList.innerHTML = '<li>No faction data.</li>';
     return;
   }
   const country = countrySystem.ensureCountry(focusCountry);
@@ -719,6 +738,16 @@ function refreshDomesticHud() {
     : 'Next election: n/a for current regime';
   domesticLeadershipLabel.textContent = `Leadership status: ${leadershipSystem.getLeadershipLabel(country)}`;
   domesticLeadershipSummary.textContent = `Leadership cycle: ${gameState.leadership.lastSummary}`;
+  factionSystem.ensureCountryFactions(country);
+  const factionEffects = country.factionEffects || {};
+  domesticFactionSummary.textContent = `Faction pressure: ${factionEffects.interpretation || 'balanced'}`;
+  domesticFactionBias.textContent = `Faction policy bias: security ${((factionEffects.internalSecurityBias || 0) * 100).toFixed(0)} • war ${((factionEffects.warToleranceBias || 0) * 100).toFixed(0)} • de-escalation ${((factionEffects.deescalationBias || 0) * 100).toFixed(0)} • trade ${((factionEffects.tradeRestorationBias || 0) * 100).toFixed(0)}`;
+  domesticFactionsList.innerHTML = '';
+  Object.values(country.factions || {}).forEach((faction) => {
+    const li = document.createElement('li');
+    li.textContent = `${faction.id.replace(/_/g, ' ')} | influence ${faction.influence.toFixed(1)} | support ${faction.satisfaction.toFixed(1)} | direction ${faction.pressureDirection}`;
+    domesticFactionsList.appendChild(li);
+  });
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
   const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
   domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
@@ -1349,6 +1378,7 @@ function setPlayerCountry(countryFeature) {
   policySystem.start();
   domesticStateSystem.start();
   politicalSystem.start();
+  factionSystem.start();
   leadershipSystem.start();
   informationSystem.start();
   influenceSystem.start();
@@ -2468,6 +2498,55 @@ function attachLeadershipControls() {
   });
 }
 
+function attachFactionControls() {
+  const mutateFaction = (mutator, message) => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const country = countrySystem.ensureCountry(focusCountry);
+    factionSystem.ensureCountryFactions(country);
+    mutator(country, focusCountry);
+    country.factionEffects = factionSystem.computePressure(country);
+    refreshDomesticHud();
+    setStatus(message);
+  };
+
+  factionInfluenceUpBtn.addEventListener('click', () => mutateFaction((country) => {
+    country.factions.security_elite.influence = factionSystem.clamp(country.factions.security_elite.influence + 8);
+  }, 'Security-elite influence increased.'));
+  factionInfluenceDownBtn.addEventListener('click', () => mutateFaction((country) => {
+    country.factions.security_elite.influence = factionSystem.clamp(country.factions.security_elite.influence - 8);
+  }, 'Security-elite influence reduced.'));
+  factionSatisfactionUpBtn.addEventListener('click', () => mutateFaction((country) => {
+    country.factions.public_civic_pressure.satisfaction = factionSystem.clamp(country.factions.public_civic_pressure.satisfaction + 8);
+  }, 'Public/civic support increased.'));
+  factionSatisfactionDownBtn.addEventListener('click', () => mutateFaction((country) => {
+    country.factions.public_civic_pressure.satisfaction = factionSystem.clamp(country.factions.public_civic_pressure.satisfaction - 8);
+  }, 'Public/civic support reduced.'));
+  triggerFactionShiftBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    factionSystem.triggerPressureShift(focusCountry);
+    refreshDomesticHud();
+    setStatus(`Faction pressure shift triggered for ${focusCountry}.`);
+  });
+  resetFactionStateBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    factionSystem.resetCountryFactions(focusCountry);
+    refreshDomesticHud();
+    setStatus(`Faction state reset for ${focusCountry}.`);
+  });
+}
+
 function attachMigrationControls() {
   triggerRefugeeFlowBtn.addEventListener('click', () => {
     const origin = migrationOriginSelect.value;
@@ -2957,6 +3036,7 @@ async function init() {
   attachLeadershipControls();
   attachInformationControls();
   attachResistanceControls();
+  attachFactionControls();
   attachMigrationControls();
   attachEventControls();
   attachChokepointControls();

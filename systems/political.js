@@ -111,6 +111,10 @@ class PoliticalSystem {
       - (country.unrest > 60 ? 0.12 : 0)
       - (country.domesticNarrativePressure > 72 ? 0.14 : 0)
       + (country.stability > 60 ? 0.12 : 0));
+    const factionEffects = country.factionEffects || {};
+    country.publicSupport = this.clamp(country.publicSupport + (factionEffects.deescalationBias || 0) * 0.26);
+    country.eliteSupport = this.clamp(country.eliteSupport + ((factionEffects.internalSecurityBias || 0) + (factionEffects.tradeRestorationBias || 0)) * 0.18);
+    country.legitimacy = this.clamp(country.legitimacy + (factionEffects.mandateDrift || 0) * 0.1);
 
     const lowLegitimacyPenalty = country.legitimacy < 35 ? -0.24 : (country.legitimacy > 70 ? 0.1 : 0);
     const lowPublicPenalty = country.publicSupport < 38 ? 0.24 : (country.publicSupport > 68 ? -0.1 : 0);

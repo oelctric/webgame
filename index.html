@@ -217,6 +217,23 @@
       <p id="domesticLeadershipLabel">Leadership status: --</p>
       <p id="domesticTrend">Domestic trend: --</p>
       <p id="domesticLeadershipSummary">Leadership cycle: --</p>
+      <p id="domesticFactionSummary">Faction pressure: --</p>
+      <p id="domesticFactionBias">Faction policy bias: --</p>
+      <ul id="domesticFactionsList">
+        <li>No faction data.</li>
+      </ul>
+      <div class="row">
+        <button id="factionInfluenceUpBtn">Security Influence +8</button>
+        <button id="factionInfluenceDownBtn">Security Influence -8</button>
+      </div>
+      <div class="row">
+        <button id="factionSatisfactionUpBtn">Public Support +8</button>
+        <button id="factionSatisfactionDownBtn">Public Support -8</button>
+      </div>
+      <div class="row">
+        <button id="triggerFactionShiftBtn">Trigger Faction Shift</button>
+        <button id="resetFactionStateBtn">Reset Factions</button>
+      </div>
       <div class="row">
         <button id="leaderApprovalUpBtn">Approval +8</button>
         <button id="leaderApprovalDownBtn">Approval -8</button>
@@ -767,6 +784,7 @@
   <script src="systems/policy.js" defer></script>
   <script src="systems/domestic-state.js" defer></script>
   <script src="systems/political.js" defer></script>
+  <script src="systems/factions.js" defer></script>
   <script src="systems/internal-resistance.js" defer></script>
   <script src="systems/leadership.js" defer></script>
   <script src="systems/information.js" defer></script>
