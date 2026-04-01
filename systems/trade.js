@@ -1,11 +1,12 @@
 class TradeSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem, governmentProfileSystem = null) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.chokepointSystem = chokepointSystem;
     this.blocSystem = blocSystem;
+    this.governmentProfileSystem = governmentProfileSystem;
     this.started = false;
     this.nextFlowId = 1;
   }
@@ -142,6 +143,8 @@ class TradeSystem {
       const importer = this.countrySystem.ensureCountry(flow.importerCountryId);
       if (!exporter || !importer) return;
       const route = this.chokepointSystem.getRouteEfficiency(flow);
+      const exporterEco = this.governmentProfileSystem ? this.governmentProfileSystem.getEconomicModifiers(exporter) : { tradeIncomeMult: 1 };
+      const importerEco = this.governmentProfileSystem ? this.governmentProfileSystem.getEconomicModifiers(importer) : { tradeIncomeMult: 1, tradeStressReliefMult: 1 };
       flow.routeEfficiency = route.efficiency;
       const blocMultiplier = this.blocSystem.getTradePreferenceMultiplier(flow.exporterCountryId, flow.importerCountryId);
       if (route.reason?.startsWith('chokepoint_blocked')) {
@@ -155,14 +158,14 @@ class TradeSystem {
         const deliverable = Math.min(effectiveFlow, exporter.oil);
         exporter.oil -= deliverable;
         importer.oil += deliverable;
-        importer.tradeStressRelief += deliverable * 0.02;
+        importer.tradeStressRelief += deliverable * 0.02 * (importerEco.tradeStressReliefMult || 1);
       } else if (flow.resourceType === 'industry_support') {
         importer.tradeIndustrySupportBonus += effectiveFlow * 0.12;
-        importer.tradeStressRelief += effectiveFlow * 0.015;
+        importer.tradeStressRelief += effectiveFlow * 0.015 * (importerEco.tradeStressReliefMult || 1);
       }
       const effectiveTradeValue = flow.tradeValue * Math.max(0, route.efficiency) * blocMultiplier;
-      exporter.tradeIncomeBonus += effectiveTradeValue;
-      importer.tradeIncomeBonus += effectiveTradeValue * 0.35;
+      exporter.tradeIncomeBonus += effectiveTradeValue * (exporterEco.tradeIncomeMult || 1);
+      importer.tradeIncomeBonus += effectiveTradeValue * 0.35 * (importerEco.tradeIncomeMult || 1);
     });
   }
 

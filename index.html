@@ -122,6 +122,38 @@
       <ul id="blocList"></ul>
     </div>
 
+
+    <div class="card">
+      <h2>Government Profile</h2>
+      <p id="govProfileFocusCountry">Profile for: --</p>
+      <p id="govProfileSummary">Government profile: --</p>
+      <p id="govProfileHint">Profile effect: --</p>
+      <div class="field">
+        <label for="regimeTypeSelect">Regime Type</label>
+        <select id="regimeTypeSelect">
+          <option value="democracy">Democracy</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="authoritarian">Authoritarian</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="economicOrientationSelect">Economic Orientation</label>
+        <select id="economicOrientationSelect">
+          <option value="market">Market</option>
+          <option value="mixed">Mixed</option>
+          <option value="state_led">State-led</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="foreignPolicyStyleSelect">Foreign Policy Style</label>
+        <select id="foreignPolicyStyleSelect">
+          <option value="cooperative">Cooperative</option>
+          <option value="pragmatic">Pragmatic</option>
+          <option value="aggressive">Aggressive</option>
+        </select>
+      </div>
+      <button id="applyGovernmentProfileBtn">Apply Government Profile</button>
+    </div>
     <div class="card">
       <h2>Domestic Policy</h2>
       <p id="policyFocusCountry">Policy for: --</p>
@@ -434,6 +466,7 @@
   <script src="data/config.js" defer></script>
   <script src="core/gameClock.js" defer></script>
   <script src="core/taskScheduler.js" defer></script>
+  <script src="systems/government-profile.js" defer></script>
   <script src="systems/country.js" defer></script>
   <script src="systems/economy.js" defer></script>
   <script src="systems/resources.js" defer></script>
