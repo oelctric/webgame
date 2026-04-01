@@ -132,6 +132,10 @@
     .country.locked { fill: #3b4e74; cursor: not-allowed; }
     .city { fill: var(--city); stroke: #433616; stroke-width: 0.45; pointer-events: all; cursor: pointer; }
     .city.being_captured { fill: #ff8d4a; }
+
+    .city.local-hotspot-active { fill: #ff9f59; stroke: #5e2600; stroke-width: 0.75; }
+    .city.local-hotspot-critical { fill: #ff5a5a; stroke: #5f0000; stroke-width: 1.1; r: 4; }
+
     .base { stroke: #111; stroke-width: 0.5; }
     .base.building { opacity: 0.55; stroke: #ffdd57; stroke-width: 1.1; }
     .base.active { opacity: 1; stroke: #101015; stroke-width: 0.6; }

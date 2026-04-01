@@ -345,6 +345,48 @@
     </div>
 
     <div class="card">
+      <h2>Regional Hotspots</h2>
+      <p id="localHotspotFocusCountry">Hotspots for: --</p>
+      <p id="localHotspotSummary">Local instability: --</p>
+      <div class="field">
+        <label for="localHotspotSelect">Hotspot / City Zone</label>
+        <select id="localHotspotSelect"></select>
+      </div>
+      <p id="localHotspotMetrics">Local stability/unrest/control: --</p>
+      <p id="localHotspotTags">Hotspot tags: --</p>
+      <p id="localHotspotPressure">Local pressures: --</p>
+      <div class="row">
+        <button id="raiseLocalUnrestBtn">Local Unrest +8</button>
+        <button id="lowerLocalUnrestBtn">Local Unrest -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseLocalControlBtn">Local Control +8</button>
+        <button id="lowerLocalControlBtn">Local Control -8</button>
+      </div>
+      <div class="row">
+        <button id="raiseLocalStabilityBtn">Local Stability +8</button>
+        <button id="lowerLocalStabilityBtn">Local Stability -8</button>
+      </div>
+      <div class="field">
+        <label for="localHotspotTagSelect">Manual Hotspot Tag</label>
+        <select id="localHotspotTagSelect">
+          <option value="">Clear Manual Tag</option>
+          <option value="unrest hotspot">Unrest hotspot</option>
+          <option value="insurgency-prone area">Insurgency-prone area</option>
+          <option value="migration pressure zone">Migration pressure zone</option>
+          <option value="weak state control">Weak state control</option>
+        </select>
+      </div>
+      <div class="row">
+        <button id="createManualHotspotBtn">Create Hotspot</button>
+        <button id="clearManualHotspotBtn">Clear Hotspot</button>
+      </div>
+      <ul id="localHotspotList" class="compact-list">
+        <li>No local hotspots.</li>
+      </ul>
+    </div>
+
+    <div class="card">
       <h2>Migration & Humanitarian Pressure</h2>
       <p id="migrationFocusCountry">Migration focus: --</p>
       <p id="migrationSummary">Migration: --</p>
@@ -790,6 +832,7 @@
   <script src="systems/information.js" defer></script>
   <script src="systems/influence.js" defer></script>
   <script src="systems/migration.js" defer></script>
+  <script src="systems/local-instability.js" defer></script>
   <script src="systems/events.js" defer></script>
   <script src="systems/sanctions.js" defer></script>
   <script src="systems/trade.js" defer></script>

@@ -103,6 +103,8 @@ class InternalResistanceSystem {
     const humanitarianFactor = Math.max(0, (country.humanitarianBurden || 0) - 14) / 86;
     const crisisFactor = Math.min(1, activeEvents.length / 5);
     const foreignFactor = (country.foreignBackedPressure || 0) / 100;
+    const localEffects = country.localInstabilityEffects || {};
+    const localSeverityFactor = Math.max(0, (localEffects.avgSeverity || 0) / 100);
 
     const insurgencyDrift = this.clampDelta(
       0.12
@@ -118,6 +120,8 @@ class InternalResistanceSystem {
       + activeWars * 0.16
       + weakSecurity
       + foreignFactor * 0.8
+      + localSeverityFactor * 0.42
+      + (localEffects.insurgencyDrift || 0) * 0.5
       - (country.stateControl > 74 ? 0.45 : 0)
       - (country.legitimacy > 66 ? 0.22 : 0),
       -1.8,
@@ -132,6 +136,8 @@ class InternalResistanceSystem {
       + crisisFactor * 0.26
       + leadershipWeakness * 0.34
       + foreignFactor * 0.52
+      + localSeverityFactor * 0.32
+      + (localEffects.separatistDrift || 0) * 0.55
       + (activeWars > 0 ? 0.2 : 0)
       - (policy.internalSecurityLevel === 'high' ? 0.26 : 0)
       - (country.stateControl > 72 ? 0.3 : 0),
@@ -145,7 +151,8 @@ class InternalResistanceSystem {
   applyConsequences(country) {
     const resistanceMix = (country.insurgencyPressure * 0.58 + country.separatistPressure * 0.42) / 100;
     const controlLoss = Math.max(0, 70 - country.stateControl) / 70;
-    const outputPenalty = Math.min(INTERNAL_RESISTANCE_CONFIG.outputPenaltyMax, resistanceMix * 0.22 + controlLoss * 0.16);
+    const localEffects = country.localInstabilityEffects || {};
+    const outputPenalty = Math.min(INTERNAL_RESISTANCE_CONFIG.outputPenaltyMax, resistanceMix * 0.22 + controlLoss * 0.16 + (localEffects.outputPenalty || 0) * 0.5);
     const manpowerPenalty = Math.min(INTERNAL_RESISTANCE_CONFIG.manpowerPenaltyMax, resistanceMix * 0.16 + controlLoss * 0.14);
     const securityCost = Math.round(Math.min(INTERNAL_RESISTANCE_CONFIG.securityCostMax, resistanceMix * 60 + controlLoss * 38));
 
@@ -153,8 +160,8 @@ class InternalResistanceSystem {
       outputPenalty,
       manpowerPenalty,
       securityCost,
-      legitimacyDrift: -Math.max(0, resistanceMix * 0.26 + controlLoss * 0.18),
-      publicSupportDrift: -Math.max(0, resistanceMix * 0.22 + controlLoss * 0.15)
+      legitimacyDrift: -Math.max(0, resistanceMix * 0.26 + controlLoss * 0.18 + (localEffects.legitimacyDrift || 0) * 0.45),
+      publicSupportDrift: -Math.max(0, resistanceMix * 0.22 + controlLoss * 0.15 + (localEffects.legitimacyDrift || 0) * 0.4)
     };
   }
 

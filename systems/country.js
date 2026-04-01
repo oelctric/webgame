@@ -104,6 +104,18 @@ class CountrySystem {
         resistanceHotspots: [],
         resistanceAlertBucket: 'low',
         lastResistanceAlertAt: 0,
+        localInstabilityEffects: {
+          hotspotCount: 0,
+          severeHotspotCount: 0,
+          avgSeverity: 0,
+          outputPenalty: 0,
+          unrestDrift: 0,
+          legitimacyDrift: 0,
+          narrativeDrift: 0,
+          stateControlDrag: 0,
+          insurgencyDrift: 0,
+          separatistDrift: 0
+        },
         informationAlertBucket: 'stable',
         lastInformationAlertAt: 0,
         infoMetrics: {
@@ -204,6 +216,18 @@ class CountrySystem {
     if (!Array.isArray(country.resistanceHotspots)) country.resistanceHotspots = [];
     if (!country.resistanceAlertBucket) country.resistanceAlertBucket = 'low';
     if (typeof country.lastResistanceAlertAt !== 'number') country.lastResistanceAlertAt = 0;
+    country.localInstabilityEffects = country.localInstabilityEffects || {
+      hotspotCount: 0,
+      severeHotspotCount: 0,
+      avgSeverity: 0,
+      outputPenalty: 0,
+      unrestDrift: 0,
+      legitimacyDrift: 0,
+      narrativeDrift: 0,
+      stateControlDrag: 0,
+      insurgencyDrift: 0,
+      separatistDrift: 0
+    };
     if (!country.informationAlertBucket) country.informationAlertBucket = 'stable';
     if (typeof country.lastInformationAlertAt !== 'number') country.lastInformationAlertAt = 0;
     country.infoMetrics = country.infoMetrics || {
@@ -258,7 +282,10 @@ class CountrySystem {
       const country = this.ensureCountry(city.ownerCountry);
       country.controlledCityIds.push(city.id);
       const resistanceOutputMod = Math.max(0.45, 1 - (country.resistanceEffects?.outputPenalty || 0));
-      country.incomePerTick += ECONOMY_CONFIG.cityIncomePerDay * resistanceOutputMod;
+      const localPenalty = Math.max(0, Math.min(0.55, city.localEconomicPenalty || 0));
+      const nationalLocalPenalty = Math.max(0, Math.min(0.3, country.localInstabilityEffects?.outputPenalty || 0));
+      const localOutputMod = Math.max(0.35, 1 - localPenalty - nationalLocalPenalty);
+      country.incomePerTick += ECONOMY_CONFIG.cityIncomePerDay * resistanceOutputMod * localOutputMod;
     });
 
     this.gameState.bases.forEach((base) => {

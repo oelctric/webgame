@@ -60,7 +60,10 @@ class EconomySystem {
       const pressure = this.diplomacySystem.getEconomicPressureOnCountry(city.ownerCountry);
       const eventModifiers = this.eventSystem.getModifiersForCountry(city.ownerCountry);
       const resistanceOutputMod = Math.max(0.45, 1 - (country.resistanceEffects?.outputPenalty || 0));
-      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * resistanceOutputMod * pressure.incomeMultiplier * eventModifiers.incomeMultiplier;
+      const localPenalty = Math.max(0, Math.min(0.55, city.localEconomicPenalty || 0));
+      const nationalLocalPenalty = Math.max(0, Math.min(0.3, country.localInstabilityEffects?.outputPenalty || 0));
+      const localOutputMod = Math.max(0.35, 1 - localPenalty - nationalLocalPenalty);
+      const adjustedIncome = ECONOMY_CONFIG.cityIncomePerDay * (country.domesticOutputModifier || 1) * resistanceOutputMod * localOutputMod * pressure.incomeMultiplier * eventModifiers.incomeMultiplier;
       incomeByCountry[city.ownerCountry] = (incomeByCountry[city.ownerCountry] || 0) + adjustedIncome;
     });
 

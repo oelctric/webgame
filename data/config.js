@@ -148,6 +148,14 @@ const INTERNAL_RESISTANCE_CONFIG = {
   securityCostMax: 95
 };
 
+
+const LOCAL_INSTABILITY_CONFIG = {
+  tickMs: DAY_MS,
+  clampMin: 0,
+  clampMax: 100,
+  alertCooldownMs: 2 * DAY_MS
+};
+
 const LEADERSHIP_CONFIG = {
   tickMs: DAY_MS,
   clampMin: 0,
