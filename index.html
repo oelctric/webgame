@@ -195,6 +195,34 @@
     </div>
 
     <div class="card">
+      <h2>Treaties & Pacts</h2>
+      <p id="treatySummary">Treaties: --</p>
+      <div class="field">
+        <label for="treatyTypeSelect">Agreement Type</label>
+        <select id="treatyTypeSelect">
+          <option value="defense_pact">Defense Pact</option>
+          <option value="non_aggression_pact">Non-Aggression Pact</option>
+          <option value="trade_agreement">Trade Agreement</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="treatyCountryA">Country A</label>
+        <select id="treatyCountryA"></select>
+      </div>
+      <div class="field">
+        <label for="treatyCountryB">Country B</label>
+        <select id="treatyCountryB"></select>
+      </div>
+      <button id="createTreatyBtn">Create Agreement</button>
+      <div class="field">
+        <label for="breakTreatySelect">Active Agreement</label>
+        <select id="breakTreatySelect"></select>
+      </div>
+      <button id="breakTreatyBtn">Break Agreement</button>
+      <ul id="treatyList"></ul>
+    </div>
+
+    <div class="card">
       <h2>Base Production</h2>
       <p id="prodBaseLabel">Select a base to manage production.</p>
       <div class="row" id="prodUnitButtons"></div>
