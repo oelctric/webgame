@@ -316,6 +316,57 @@
       </div>
     </div>
     <div class="card">
+      <h2>Proxy Conflict</h2>
+      <p id="proxyFocusCountry">Proxy operations for: --</p>
+      <p id="proxySummary">Proxy summary: --</p>
+      <div class="field">
+        <label for="proxyTypeSelect">Support Type</label>
+        <select id="proxyTypeSelect">
+          <option value="insurgent_support">Insurgent Support</option>
+          <option value="separatist_support">Separatist Support</option>
+          <option value="faction_support">Faction Support</option>
+          <option value="hotspot_destabilization">Hotspot Destabilization</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="proxyTargetCountrySelect">Target Country</label>
+        <select id="proxyTargetCountrySelect"></select>
+      </div>
+      <div class="field">
+        <label for="proxyTargetHotspotSelect">Target Hotspot (optional)</label>
+        <select id="proxyTargetHotspotSelect"></select>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="proxyStrengthInput">Strength</label>
+          <input id="proxyStrengthInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+        </div>
+        <div class="field">
+          <label for="proxyRiskInput">Attribution Risk</label>
+          <input id="proxyRiskInput" type="number" min="0.05" max="0.9" step="0.01" value="0.28" />
+        </div>
+        <div class="field">
+          <label for="proxyDurationInput">Duration (days)</label>
+          <input id="proxyDurationInput" type="number" min="7" max="180" step="1" value="30" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="startProxyOperationBtn">Start Proxy Op</button>
+        <button id="cancelProxyOperationBtn">Cancel Selected</button>
+        <button id="forceExposeProxyOperationBtn">Force Expose</button>
+      </div>
+      <div class="field">
+        <label for="activeProxyOperationSelect">Active Proxy Operation</label>
+        <select id="activeProxyOperationSelect"></select>
+      </div>
+      <ul id="activeProxyList" class="compact-list">
+        <li>No active proxy operations.</li>
+      </ul>
+      <ul id="proxyIncidentList" class="compact-list">
+        <li>No proxy incidents.</li>
+      </ul>
+    </div>
+    <div class="card">
       <h2>Internal Resistance</h2>
       <p id="resistanceFocusCountry">Internal resistance for: --</p>
       <p id="resistanceInsurgency">Insurgency pressure: --</p>
@@ -833,6 +884,7 @@
   <script src="systems/influence.js" defer></script>
   <script src="systems/migration.js" defer></script>
   <script src="systems/local-instability.js" defer></script>
+  <script src="systems/proxy-conflict.js" defer></script>
   <script src="systems/events.js" defer></script>
   <script src="systems/sanctions.js" defer></script>
   <script src="systems/trade.js" defer></script>
