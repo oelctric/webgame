@@ -90,6 +90,39 @@
     </div>
 
     <div class="card">
+      <h2>Blocs & Coalitions</h2>
+      <p id="blocSummary">Blocs: --</p>
+      <p id="selectedCountryBlocs">Selected country blocs: --</p>
+      <div class="field">
+        <label for="blocNameInput">New Bloc Name</label>
+        <input id="blocNameInput" type="text" placeholder="e.g. Atlantic Compact" />
+      </div>
+      <div class="field">
+        <label for="blocTypeSelect">Bloc Type</label>
+        <select id="blocTypeSelect">
+          <option value="defense">Defense</option>
+          <option value="trade">Trade</option>
+          <option value="mixed" selected>Mixed</option>
+        </select>
+      </div>
+      <button id="createBlocBtn">Create Bloc</button>
+      <div class="field">
+        <label for="blocSelect">Active Bloc</label>
+        <select id="blocSelect"></select>
+      </div>
+      <div class="field">
+        <label for="blocMemberCountrySelect">Country</label>
+        <select id="blocMemberCountrySelect"></select>
+      </div>
+      <div class="row">
+        <button id="addBlocMemberBtn">Add Member</button>
+        <button id="removeBlocMemberBtn">Remove Member</button>
+      </div>
+      <button id="dissolveBlocBtn">Dissolve Bloc</button>
+      <ul id="blocList"></ul>
+    </div>
+
+    <div class="card">
       <h2>Domestic Policy</h2>
       <p id="policyFocusCountry">Policy for: --</p>
       <p id="policySummary">Policy: --</p>

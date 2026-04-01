@@ -211,6 +211,15 @@ const CHOKEPOINT_DEFINITIONS = [
   }
 ];
 
+const BLOC_CONFIG = {
+  tickMs: DAY_MS,
+  diplomacyInBlocDelta: 1.5,
+  diplomacyOutBlocDelta: -0.6,
+  tradePreferenceBonus: 1.25,
+  sanctionDiscourage: true,
+  aggressionResponseDelta: -8
+};
+
 class GameClock {
   constructor({ startTimeMs, speed = 1 }) {
     this.currentTimeMs = startTimeMs;
@@ -524,6 +533,7 @@ class CombatSystem {
         'Attack order issued',
         true
       );
+      blocSystem?.handleAggression(attacker.ownerCountry, target.ownerCountry);
     }
 
     return { ok: true, autoDeclaredWar: offensiveCheck.autoDeclaredWar, message: offensiveCheck.message };
@@ -673,6 +683,7 @@ class CaptureSystem {
       'Capture operation started',
       true
     );
+    blocSystem?.handleAggression(unit.ownerCountry, target.ownerCountry);
     return { ok: true, target, silent, autoDeclaredWar: offensiveCheck.autoDeclaredWar, message: offensiveCheck.message };
   }
 
@@ -1319,13 +1330,144 @@ class ChokepointSystem {
   }
 }
 
+class BlocSystem {
+  constructor(gameState, scheduler, diplomacySystem, countrySystem) {
+    this.gameState = gameState;
+    this.scheduler = scheduler;
+    this.diplomacySystem = diplomacySystem;
+    this.countrySystem = countrySystem;
+    this.started = false;
+  }
+
+  createBloc({ name, type = 'mixed', description = '' }) {
+    if (!name || !['defense', 'trade', 'mixed'].includes(type)) return null;
+    const bloc = {
+      id: `bloc_${this.gameState.blocs.nextBlocId++}`,
+      name,
+      type,
+      memberCountryIds: [],
+      foundedAt: this.gameState.currentTimeMs,
+      active: true,
+      description,
+      sharedModifiers: {
+        diplomacyBias: type === 'trade' ? 2 : 3,
+        tradeBias: type === 'defense' ? 1.12 : 1.2,
+        sanctionTolerance: type === 'defense' ? 'very_low' : 'low'
+      }
+    };
+    this.gameState.blocs.items.push(bloc);
+    this.gameState.blocs.lastSummary = `Bloc created: ${bloc.name} (${bloc.type}).`;
+    return bloc;
+  }
+
+  getBloc(blocId) {
+    return this.gameState.blocs.items.find((bloc) => bloc.id === blocId && bloc.active) || null;
+  }
+
+  getCountryBlocs(countryName) {
+    if (!countryName) return [];
+    return this.gameState.blocs.items.filter((bloc) => bloc.active && bloc.memberCountryIds.includes(countryName));
+  }
+
+  areInSameBloc(countryA, countryB) {
+    if (!countryA || !countryB || countryA === countryB) return false;
+    const blocA = this.getCountryBlocs(countryA);
+    return blocA.some((bloc) => bloc.memberCountryIds.includes(countryB));
+  }
+
+  joinBloc(blocId, countryName) {
+    const bloc = this.getBloc(blocId);
+    if (!bloc || !countryName) return null;
+    this.countrySystem.ensureCountry(countryName);
+    if (!bloc.memberCountryIds.includes(countryName)) {
+      bloc.memberCountryIds.push(countryName);
+    }
+    this.gameState.blocs.lastSummary = `${countryName} joined ${bloc.name}.`;
+    return bloc;
+  }
+
+  leaveBloc(blocId, countryName) {
+    const bloc = this.getBloc(blocId);
+    if (!bloc || !countryName) return null;
+    bloc.memberCountryIds = bloc.memberCountryIds.filter((member) => member !== countryName);
+    this.gameState.blocs.lastSummary = `${countryName} left ${bloc.name}.`;
+    return bloc;
+  }
+
+  dissolveBloc(blocId) {
+    const bloc = this.getBloc(blocId);
+    if (!bloc) return null;
+    bloc.active = false;
+    bloc.memberCountryIds = [];
+    this.gameState.blocs.lastSummary = `Bloc dissolved: ${bloc.name}.`;
+    return bloc;
+  }
+
+  getTradePreferenceMultiplier(exporter, importer) {
+    if (this.areInSameBloc(exporter, importer)) return BLOC_CONFIG.tradePreferenceBonus;
+    return 1;
+  }
+
+  handleAggression(attackerCountry, targetCountry) {
+    this.gameState.blocs.items
+      .filter((bloc) => bloc.active && bloc.memberCountryIds.includes(targetCountry))
+      .forEach((bloc) => {
+        bloc.memberCountryIds
+          .filter((member) => member !== targetCountry && member !== attackerCountry)
+          .forEach((member) => {
+            this.diplomacySystem.adjustRelationScore(member, attackerCountry, BLOC_CONFIG.aggressionResponseDelta, `${bloc.name} reacted to aggression on ${targetCountry}.`, true);
+          });
+      });
+  }
+
+  applyDiplomaticBias() {
+    const countries = Object.keys(this.gameState.countries);
+    this.gameState.blocs.items.filter((bloc) => bloc.active).forEach((bloc) => {
+      bloc.memberCountryIds.forEach((memberA) => {
+        bloc.memberCountryIds.forEach((memberB) => {
+          if (memberA >= memberB) return;
+          this.diplomacySystem.adjustRelationScore(memberA, memberB, BLOC_CONFIG.diplomacyInBlocDelta, `${bloc.name} alignment drift`);
+        });
+        countries
+          .filter((other) => other !== memberA && !bloc.memberCountryIds.includes(other))
+          .slice(0, 3)
+          .forEach((other) => {
+            this.diplomacySystem.adjustRelationScore(memberA, other, BLOC_CONFIG.diplomacyOutBlocDelta, `${bloc.name} external mistrust`);
+          });
+      });
+    });
+  }
+
+  processTick() {
+    this.applyDiplomaticBias();
+    refreshBlocHud();
+    this.scheduleTick();
+  }
+
+  scheduleTick() {
+    this.scheduler.schedule({
+      executeAt: this.gameState.currentTimeMs + BLOC_CONFIG.tickMs,
+      type: 'BLOC_TICK',
+      payload: {},
+      handler: () => this.processTick()
+    });
+  }
+
+  start() {
+    if (this.started) return;
+    this.started = true;
+    this.scheduleTick();
+  }
+}
+
 class TradeSystem {
-  constructor(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem) {
+  constructor(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem) {
     this.gameState = gameState;
     this.scheduler = scheduler;
     this.countrySystem = countrySystem;
     this.diplomacySystem = diplomacySystem;
     this.chokepointSystem = chokepointSystem;
+    this.blocSystem = blocSystem;
     this.started = false;
     this.nextFlowId = 1;
   }
@@ -1354,6 +1496,10 @@ class TradeSystem {
     const temporaryRestore = negotiationSystem?.hasTemporaryTradeRestoration(exporter, importer);
     if (!temporaryRestore && (expToImp.tradeAllowed === false || impToExp.tradeAllowed === false)) {
       return { ok: false, reason: 'trade_blocked' };
+    }
+    if (this.blocSystem.areInSameBloc(exporter, importer)) {
+      if (expToImp.sanctionsLevel === 'heavy' || impToExp.sanctionsLevel === 'heavy') return { ok: false, reason: 'heavy_sanctions' };
+      return { ok: true, blocPreferred: true };
     }
     if (expToImp.sanctionsLevel === 'heavy' || impToExp.sanctionsLevel === 'heavy') return { ok: false, reason: 'heavy_sanctions' };
     if (relation.status === 'hostile' && relation.relationScore < -55) return { ok: false, reason: 'hostile_relations' };
@@ -1427,7 +1573,8 @@ class TradeSystem {
             });
             continue;
           }
-          const flowAmount = Math.min(remaining, exporter.surplus);
+          const blocTradeBoost = this.blocSystem.getTradePreferenceMultiplier(exporter.name, importer.name);
+          const flowAmount = Math.min(remaining, exporter.surplus * blocTradeBoost);
           if (flowAmount <= 0) continue;
           exporter.surplus -= flowAmount;
           remaining -= flowAmount;
@@ -1458,11 +1605,12 @@ class TradeSystem {
       if (!exporter || !importer) return;
       const route = this.chokepointSystem.getRouteEfficiency(flow);
       flow.routeEfficiency = route.efficiency;
+      const blocMultiplier = this.blocSystem.getTradePreferenceMultiplier(flow.exporterCountryId, flow.importerCountryId);
       if (route.reason?.startsWith('chokepoint_blocked')) {
         flow.blockedReason = route.reason;
         return;
       }
-      const effectiveFlow = flow.flowAmount * Math.max(0, route.efficiency);
+      const effectiveFlow = flow.flowAmount * Math.max(0, route.efficiency) * blocMultiplier;
       if (effectiveFlow <= 0.05) return;
       flow.blockedReason = route.reason;
       if (flow.resourceType === 'oil') {
@@ -1474,7 +1622,7 @@ class TradeSystem {
         importer.tradeIndustrySupportBonus += effectiveFlow * 0.12;
         importer.tradeStressRelief += effectiveFlow * 0.015;
       }
-      const effectiveTradeValue = flow.tradeValue * Math.max(0, route.efficiency);
+      const effectiveTradeValue = flow.tradeValue * Math.max(0, route.efficiency) * blocMultiplier;
       exporter.tradeIncomeBonus += effectiveTradeValue;
       importer.tradeIncomeBonus += effectiveTradeValue * 0.35;
     });
@@ -1670,6 +1818,10 @@ class DiplomacySystem {
   imposeSanctions(sourceCountry, targetCountry, level = 'light') {
     const relation = this.ensureRelation(sourceCountry, targetCountry);
     if (!relation || !['light', 'heavy'].includes(level)) return null;
+    if (blocSystem?.areInSameBloc(sourceCountry, targetCountry) && BLOC_CONFIG.sanctionDiscourage) {
+      this.gameState.diplomacy.lastSummary = `${sourceCountry} avoided sanctioning bloc partner ${targetCountry}.`;
+      return null;
+    }
     relation.sanctionsBySource = relation.sanctionsBySource || {};
     relation.sanctionsBySource[sourceCountry] = {
       sanctionsLevel: level,
@@ -2591,6 +2743,11 @@ const gameState = {
     points: [],
     lastSummary: 'No chokepoint updates yet.'
   },
+  blocs: {
+    items: [],
+    nextBlocId: 1,
+    lastSummary: 'No bloc updates yet.'
+  },
   events: {
     active: [],
     recentLog: []
@@ -2614,7 +2771,8 @@ const diplomacySystem = new DiplomacySystem(gameState, scheduler, countrySystem)
 const eventSystem = new EventSystem(gameState, scheduler, countrySystem, diplomacySystem);
 const resourceSystem = new ResourceSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const chokepointSystem = new ChokepointSystem(gameState, scheduler, diplomacySystem);
-const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem);
+const blocSystem = new BlocSystem(gameState, scheduler, diplomacySystem, countrySystem);
+const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diplomacySystem, chokepointSystem, blocSystem);
 const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacySystem, tradeSystem);
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
@@ -2713,6 +2871,17 @@ const chokepointContestedToggleBtn = document.getElementById('chokepointConteste
 const assignChokepointControllerBtn = document.getElementById('assignChokepointControllerBtn');
 const recomputeRoutePressureBtn = document.getElementById('recomputeRoutePressureBtn');
 const chokepointList = document.getElementById('chokepointList');
+const blocSummary = document.getElementById('blocSummary');
+const selectedCountryBlocs = document.getElementById('selectedCountryBlocs');
+const blocNameInput = document.getElementById('blocNameInput');
+const blocTypeSelect = document.getElementById('blocTypeSelect');
+const createBlocBtn = document.getElementById('createBlocBtn');
+const blocSelect = document.getElementById('blocSelect');
+const blocMemberCountrySelect = document.getElementById('blocMemberCountrySelect');
+const addBlocMemberBtn = document.getElementById('addBlocMemberBtn');
+const removeBlocMemberBtn = document.getElementById('removeBlocMemberBtn');
+const dissolveBlocBtn = document.getElementById('dissolveBlocBtn');
+const blocList = document.getElementById('blocList');
 const tradeSummary = document.getElementById('tradeSummary');
 const tradeBalanceSummary = document.getElementById('tradeBalanceSummary');
 const toggleAutoTradeBtn = document.getElementById('toggleAutoTradeBtn');
@@ -2907,7 +3076,8 @@ function refreshDiplomacyHud() {
     relations.forEach((relation) => {
       const li = document.createElement('li');
       const directional = diplomacySystem.getDirectionalPressure(focusCountry, relation.counterpart);
-      li.textContent = `${relation.counterpart}: ${relation.status.toUpperCase()} (${relation.relationScore}) • Sanctions ${directional.sanctionsLevel} • Trade ${directional.tradeAllowed ? 'on' : 'blocked'}`;
+      const blocAligned = blocSystem.areInSameBloc(focusCountry, relation.counterpart) ? ' • same bloc' : '';
+      li.textContent = `${relation.counterpart}: ${relation.status.toUpperCase()} (${relation.relationScore}) • Sanctions ${directional.sanctionsLevel} • Trade ${directional.tradeAllowed ? 'on' : 'blocked'}${blocAligned}`;
       relationsList.appendChild(li);
     });
   }
@@ -3139,6 +3309,48 @@ function refreshChokepointHud() {
   }
 }
 
+function refreshBlocHud() {
+  const blocs = gameState.blocs.items.filter((bloc) => bloc.active);
+  const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
+  blocSummary.textContent = `Blocs: ${gameState.blocs.lastSummary}`;
+  const selectedCountry = getDiplomacyFocusCountry();
+  const countryBlocs = selectedCountry ? blocSystem.getCountryBlocs(selectedCountry) : [];
+  selectedCountryBlocs.textContent = `Selected country blocs: ${selectedCountry ? (countryBlocs.map((bloc) => bloc.name).join(', ') || 'none') : '--'}`;
+
+  const previousBloc = blocSelect.value;
+  blocSelect.innerHTML = '';
+  blocs.forEach((bloc) => {
+    const option = document.createElement('option');
+    option.value = bloc.id;
+    option.textContent = `${bloc.name} (${bloc.type})`;
+    blocSelect.appendChild(option);
+  });
+  if (previousBloc && blocs.some((bloc) => bloc.id === previousBloc)) blocSelect.value = previousBloc;
+
+  const previousMember = blocMemberCountrySelect.value;
+  blocMemberCountrySelect.innerHTML = '';
+  names.forEach((name) => {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    blocMemberCountrySelect.appendChild(option);
+  });
+  if (previousMember && names.includes(previousMember)) blocMemberCountrySelect.value = previousMember;
+
+  blocList.innerHTML = '';
+  if (!blocs.length) {
+    blocList.innerHTML = '<li>No active blocs.</li>';
+    [addBlocMemberBtn, removeBlocMemberBtn, dissolveBlocBtn].forEach((btn) => { btn.disabled = true; });
+    return;
+  }
+  [addBlocMemberBtn, removeBlocMemberBtn, dissolveBlocBtn].forEach((btn) => { btn.disabled = false; });
+  blocs.forEach((bloc) => {
+    const li = document.createElement('li');
+    li.textContent = `${bloc.name} [${bloc.type}] • members: ${bloc.memberCountryIds.join(', ') || 'none'} • founded ${formatDateTime(bloc.foundedAt)}`;
+    blocList.appendChild(li);
+  });
+}
+
 function refreshTradeHud() {
   const focusCountry = getDiplomacyFocusCountry();
   const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
@@ -3260,6 +3472,7 @@ function setPlayerCountry(countryFeature) {
   diplomacySystem.start();
   resourceSystem.start();
   chokepointSystem.start();
+  blocSystem.start();
   tradeSystem.start();
   negotiationSystem.start();
   policySystem.start();
@@ -3275,6 +3488,7 @@ function setPlayerCountry(countryFeature) {
   refreshDomesticHud();
   refreshEventHud();
   refreshChokepointHud();
+  refreshBlocHud();
   refreshTradeHud();
 }
 
@@ -4124,6 +4338,63 @@ function attachChokepointControls() {
   chokepointSelect.addEventListener('change', () => refreshChokepointHud());
 }
 
+function attachBlocControls() {
+  createBlocBtn.addEventListener('click', () => {
+    const name = blocNameInput.value.trim();
+    if (!name) {
+      setStatus('Enter a bloc name.', true);
+      return;
+    }
+    const bloc = blocSystem.createBloc({ name, type: blocTypeSelect.value, description: `${blocTypeSelect.value} bloc` });
+    if (!bloc) {
+      setStatus('Failed to create bloc.', true);
+      return;
+    }
+    blocNameInput.value = '';
+    refreshBlocHud();
+    refreshDiplomacyHud();
+    setStatus(`Bloc created: ${bloc.name}.`);
+  });
+
+  addBlocMemberBtn.addEventListener('click', () => {
+    const bloc = blocSystem.joinBloc(blocSelect.value, blocMemberCountrySelect.value);
+    if (!bloc) {
+      setStatus('Failed to add bloc member.', true);
+      return;
+    }
+    refreshBlocHud();
+    refreshDiplomacyHud();
+    refreshTradeHud();
+    setStatus(`${blocMemberCountrySelect.value} added to ${bloc.name}.`);
+  });
+
+  removeBlocMemberBtn.addEventListener('click', () => {
+    const bloc = blocSystem.leaveBloc(blocSelect.value, blocMemberCountrySelect.value);
+    if (!bloc) {
+      setStatus('Failed to remove bloc member.', true);
+      return;
+    }
+    refreshBlocHud();
+    refreshDiplomacyHud();
+    refreshTradeHud();
+    setStatus(`${blocMemberCountrySelect.value} removed from ${bloc.name}.`);
+  });
+
+  dissolveBlocBtn.addEventListener('click', () => {
+    const bloc = blocSystem.dissolveBloc(blocSelect.value);
+    if (!bloc) {
+      setStatus('Failed to dissolve bloc.', true);
+      return;
+    }
+    refreshBlocHud();
+    refreshDiplomacyHud();
+    refreshTradeHud();
+    setStatus(`Bloc dissolved: ${bloc.name}.`);
+  });
+
+  blocSelect.addEventListener('change', () => refreshBlocHud());
+}
+
 function attachTradeControls() {
   toggleAutoTradeBtn.addEventListener('click', () => {
     gameState.trade.autoEnabled = !gameState.trade.autoEnabled;
@@ -4233,6 +4504,7 @@ function startSimulationLoop() {
     refreshDomesticHud();
     refreshEventHud();
     refreshChokepointHud();
+    refreshBlocHud();
     refreshTradeHud();
     refreshProductionTicker();
     renderSelectedUnitPanel();
@@ -4389,6 +4661,7 @@ async function init() {
   attachPolicyControls();
   attachEventControls();
   attachChokepointControls();
+  attachBlocControls();
   attachTradeControls();
   refreshTimeHud();
   refreshEconomyHud();
@@ -4398,6 +4671,7 @@ async function init() {
   refreshDomesticHud();
   refreshEventHud();
   refreshChokepointHud();
+  refreshBlocHud();
   refreshTradeHud();
   renderSelectedUnitPanel();
 
