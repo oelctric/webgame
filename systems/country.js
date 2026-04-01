@@ -48,6 +48,17 @@ class CountrySystem {
         domesticOutputModifier: 1,
         domesticLastTickAt: null,
         domesticAlertBucket: 'stable',
+        legitimacy: 62,
+        publicSupport: 60,
+        eliteSupport: 58,
+        politicalEffects: {
+          stabilityDrift: 0,
+          unrestDrift: 0,
+          policyEffectiveness: 1,
+          crisisResilience: 1
+        },
+        politicalLastTickAt: null,
+        politicalAlertBucket: 'stable',
         controlledCityIds: [],
         controlledBaseIds: [],
         controlledUnitIds: [],
@@ -79,6 +90,17 @@ class CountrySystem {
     if (typeof country.domesticOutputModifier !== 'number') country.domesticOutputModifier = 1;
     if (country.domesticLastTickAt == null) country.domesticLastTickAt = null;
     if (!country.domesticAlertBucket) country.domesticAlertBucket = 'stable';
+    if (typeof country.legitimacy !== 'number') country.legitimacy = 62;
+    if (typeof country.publicSupport !== 'number') country.publicSupport = 60;
+    if (typeof country.eliteSupport !== 'number') country.eliteSupport = 58;
+    country.politicalEffects = country.politicalEffects || {
+      stabilityDrift: 0,
+      unrestDrift: 0,
+      policyEffectiveness: 1,
+      crisisResilience: 1
+    };
+    if (country.politicalLastTickAt == null) country.politicalLastTickAt = null;
+    if (!country.politicalAlertBucket) country.politicalAlertBucket = 'stable';
     if (typeof country.oil !== 'number') country.oil = RESOURCE_CONFIG.defaultOil;
     if (typeof country.maxOil !== 'number') country.maxOil = RESOURCE_CONFIG.defaultMaxOil;
     if (typeof country.oilPerTick !== 'number') country.oilPerTick = 0;

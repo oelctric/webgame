@@ -41,6 +41,10 @@ const gameState = {
     lastTickAt: null,
     lastSummary: 'No domestic updates yet.'
   },
+  political: {
+    lastTickAt: null,
+    lastSummary: 'No political updates yet.'
+  },
   resources: {
     lastTickAt: null
   },
@@ -86,6 +90,7 @@ const tradeSystem = new TradeSystem(gameState, scheduler, countrySystem, diploma
 const negotiationSystem = new NegotiationSystem(gameState, scheduler, diplomacySystem, tradeSystem);
 const policySystem = new PolicySystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const domesticStateSystem = new DomesticStateSystem(gameState, scheduler, countrySystem, diplomacySystem, policySystem, eventSystem);
+const politicalSystem = new PoliticalSystem(gameState, scheduler, countrySystem, diplomacySystem, eventSystem);
 const productionSystem = new ProductionSystem(gameState, scheduler, resourceSystem);
 const movementSystem = new MovementSystem(gameState, scheduler, resourceSystem);
 const combatSystem = new CombatSystem(gameState, scheduler, movementSystem, diplomacySystem, resourceSystem);
@@ -100,7 +105,12 @@ const aiSystem = new AISystem(gameState, scheduler, {
   policySystem,
   diplomacySystem,
   resourceSystem,
-  countrySystem
+  countrySystem,
+  tradeSystem,
+  chokepointSystem,
+  blocSystem,
+  eventSystem,
+  negotiationSystem
 });
 
 const svg = d3.select('#map');
@@ -163,6 +173,10 @@ const domesticStability = document.getElementById('domesticStability');
 const domesticUnrest = document.getElementById('domesticUnrest');
 const domesticWarWeariness = document.getElementById('domesticWarWeariness');
 const domesticEconomicStress = document.getElementById('domesticEconomicStress');
+const domesticLegitimacy = document.getElementById('domesticLegitimacy');
+const domesticPublicSupport = document.getElementById('domesticPublicSupport');
+const domesticEliteSupport = document.getElementById('domesticEliteSupport');
+const domesticPoliticalLabel = document.getElementById('domesticPoliticalLabel');
 const domesticTrend = document.getElementById('domesticTrend');
 const eventSummary = document.getElementById('eventSummary');
 const eventTypeSelect = document.getElementById('eventTypeSelect');
@@ -334,8 +348,10 @@ function refreshCountryHud() {
     return;
   }
   const country = countrySystem.ensureCountry(countryName);
-  const aiPosture = gameState.aiStateByCountry[countryName]?.posture;
-  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${aiPosture ? `: ${aiPosture}` : ''})` : ''}`;
+  const aiState = gameState.aiStateByCountry[countryName];
+  const aiPosture = aiState?.posture;
+  const strategicGoal = aiState?.strategicGoal;
+  countryHudName.textContent = `Country: ${country.name}${country.aiControlled ? ` (AI${strategicGoal ? `: ${strategicGoal}` : ''}${aiPosture ? ` / ${aiPosture}` : ''})` : ''}`;
   countryHudTreasury.textContent = `Treasury: ${Math.round(country.treasury).toLocaleString()}`;
   countryHudPop.textContent = `Population: ${Math.round(country.population).toLocaleString()}`;
   countryHudStability.textContent = `Stability: ${country.stability.toFixed(1)}`;
@@ -346,7 +362,8 @@ function refreshCountryHud() {
   if (country.oil < RESOURCE_CONFIG.oilShortageThreshold) strainFlags.push('oil shortage');
   if (country.manpowerPool < 1200) strainFlags.push('manpower shortage');
   if (country.industrialCapacity < 22) strainFlags.push('industrial strain');
-  countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}`;
+  const aiReason = country.aiControlled && aiState?.strategicReason ? ` • AI rationale: ${aiState.strategicReason}` : '';
+  countryHudStrain.textContent = `Resource strain: ${strainFlags.length ? strainFlags.join(', ') : 'none'}${aiReason}`;
   countryHudAssets.textContent = `Cities/Bases/Units: ${country.controlledCityIds.length}/${country.controlledBaseIds.length}/${country.controlledUnitIds.length}`;
   countryHudFlow.textContent = `Income/Upkeep/Net: +${country.incomePerTick}/-${country.upkeepPerTick}/${country.netPerTick >= 0 ? '+' : ''}${country.netPerTick}`;
 }
@@ -505,6 +522,10 @@ function refreshDomesticHud() {
     domesticUnrest.textContent = 'Unrest: --';
     domesticWarWeariness.textContent = 'War weariness: --';
     domesticEconomicStress.textContent = 'Economic stress: --';
+    domesticLegitimacy.textContent = 'Legitimacy: --';
+    domesticPublicSupport.textContent = 'Public support: --';
+    domesticEliteSupport.textContent = 'Elite support: --';
+    domesticPoliticalLabel.textContent = 'Political pressure: --';
     domesticTrend.textContent = 'Domestic trend: --';
     return;
   }
@@ -514,9 +535,13 @@ function refreshDomesticHud() {
   domesticUnrest.textContent = `Unrest: ${country.unrest.toFixed(1)} / 100`;
   domesticWarWeariness.textContent = `War weariness: ${country.warWeariness.toFixed(1)} / 100`;
   domesticEconomicStress.textContent = `Economic stress: ${country.economicStress.toFixed(1)} / 100`;
+  domesticLegitimacy.textContent = `Legitimacy: ${country.legitimacy.toFixed(1)} / 100`;
+  domesticPublicSupport.textContent = `Public support: ${country.publicSupport.toFixed(1)} / 100`;
+  domesticEliteSupport.textContent = `Elite support: ${country.eliteSupport.toFixed(1)} / 100`;
+  domesticPoliticalLabel.textContent = `Political pressure: ${politicalSystem.getPoliticalLabel(country)}`;
   const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
   const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
-  domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount}`;
+  domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
 }
 
 function refreshEventHud() {
@@ -787,6 +812,7 @@ function setPlayerCountry(countryFeature) {
   negotiationSystem.start();
   policySystem.start();
   domesticStateSystem.start();
+  politicalSystem.start();
   countrySystem.syncOwnership();
   renderProductionPanel();
   renderSelectedUnitPanel();
