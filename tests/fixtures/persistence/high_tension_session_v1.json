@@ -1,0 +1,22 @@
+{
+  "id": "high_tension_session_v1",
+  "snapshot": {
+    "meta": {
+      "version": 1,
+      "country": "Poland",
+      "scenario": "High Tension",
+      "mode": "hard",
+      "inGameDate": "2032-09-04T00:00:00.000Z"
+    },
+    "state": {
+      "selectedPlayerCountryName": "Poland",
+      "currentTimeMs": 1977868800000,
+      "simulationSpeed": 5,
+      "pendingTasks": [
+        { "id": 1, "type": "UNKNOWN_TASK", "executeAt": 1977869800000, "payload": {} }
+      ],
+      "bases": [],
+      "units": []
+    }
+  }
+}

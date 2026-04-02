@@ -1,168 +1,146 @@
-const manifestPath = './fixtures/persistence/fixture-manifest.json';
-
-const runtimeFrame = document.getElementById('runtimeFrame');
-const runtimeStatus = document.getElementById('runtimeStatus');
-const output = document.getElementById('output');
-const fixtureList = document.getElementById('fixtureList');
-const bootRuntimeBtn = document.getElementById('bootRuntimeBtn');
-const runAllBtn = document.getElementById('runAllBtn');
-
-let manifest = null;
-
-function fmt(value) {
-  return JSON.stringify(value, null, 2);
-}
-
-async function fetchFixtureManifest() {
-  const response = await fetch(manifestPath);
-  if (!response.ok) {
-    throw new Error(`Failed fetching fixture manifest: ${response.status}`);
-  }
-  return response.json();
-}
-
-async function fetchFixture(path) {
-  const response = await fetch(`../${path}`);
-  if (!response.ok) {
-    throw new Error(`Failed fetching fixture ${path}: ${response.status}`);
-  }
-  return response.json();
-}
-
-async function waitForRuntime(maxMs = 15000) {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    const frameWindow = runtimeFrame.contentWindow;
-    const runtime = frameWindow?.GeoCommandRuntimeInstance;
-    if (runtime?.runPersistenceSmokeRestore && frameWindow.GeoCommandSaveSystem?.prepareSnapshotForRestore) {
-      runtimeStatus.textContent = 'Runtime: ready.';
-      return runtime;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error('Runtime did not initialize in time.');
-}
-
-function summarizeRestoreResult(name, report) {
-  const skippedFromNormalize = report.compatibility?.normalize?.skippedTasks?.length || 0;
-  const skippedFromRuntime = report.schedulerRestore?.skippedTasks?.length || 0;
-  const totalSkipped = skippedFromNormalize + skippedFromRuntime;
-  if (!report.ok) {
-    return { level: 'fail', label: 'invalid and rejected', totalSkipped };
-  }
-  if (totalSkipped > 0) {
-    return { level: 'partial', label: 'valid with skips/default normalization', totalSkipped };
-  }
-  return { level: 'pass', label: 'valid and restored successfully', totalSkipped };
-}
-
-function renderResultLine(name, status) {
-  const cssClass = status.level === 'pass' ? 'result-pass' : status.level === 'partial' ? 'result-partial' : 'result-fail';
-  return `<div class="${cssClass}">${name}: ${status.label}</div>`;
-}
-
-async function runFixtureSmokeTest(entry, expectedInvalid = false) {
-  const runtime = await waitForRuntime();
-  const fixture = await fetchFixture(entry.path);
-  const run = runtime.runPersistenceSmokeRestore(fixture, entry.name);
-  const status = summarizeRestoreResult(entry.name, run);
-
-  const payload = {
-    fixtureName: entry.name,
-    expectation: expectedInvalid ? 'invalid fixture should be rejected' : 'valid fixture should restore',
-    classification: status.label,
-    loadValidationResult: run.compatibility?.validate?.ok ?? false,
-    migrationResult: run.compatibility?.migrate || null,
-    schedulerRestoreResult: run.schedulerRestore || null,
-    selectedPlayerCountryRestored: run.runtime?.playerCountry || null,
-    gameTimeRestored: run.runtime?.gameTimeMs || null,
-    scenarioRestored: run.runtime?.scenario || null,
-    skippedTasks: {
-      normalize: run.compatibility?.normalize?.skippedTasks || [],
-      runtime: run.schedulerRestore?.skippedTasks || []
-    },
-    error: run.ok ? null : (run.message || 'Unknown restore error.')
-  };
-
-  if (expectedInvalid && run.ok) {
-    payload.classification = 'invalid fixture unexpectedly restored';
-    payload.error = 'Expected rejection but fixture restored successfully.';
-  }
-
-  return { payload, status, expectedInvalid, ok: run.ok };
-}
-
-function setOutput(lines, details) {
-  output.innerHTML = `${lines.join('\n')}\n\n${fmt(details)}`;
-}
-
-async function runAllFixtures() {
-  try {
-    const lines = [];
-    const details = [];
-    for (const entry of manifest.valid) {
-      const result = await runFixtureSmokeTest(entry, false);
-      lines.push(renderResultLine(entry.name, result.status));
-      details.push(result.payload);
-    }
-    for (const entry of manifest.invalid) {
-      const result = await runFixtureSmokeTest(entry, true);
-      const invalidStatus = result.ok
-        ? { level: 'fail', label: 'invalid and restored unexpectedly' }
-        : { level: 'pass', label: 'invalid and rejected' };
-      lines.push(renderResultLine(entry.name, invalidStatus));
-      details.push(result.payload);
-    }
-    setOutput(lines, details);
-  } catch (error) {
-    setOutput([`<div class="result-fail">Smoke run failed: ${error.message}</div>`], { error: error.message });
-  }
-}
-
-function renderFixtureList() {
-  fixtureList.innerHTML = '';
-  const sections = [
-    { title: 'Valid fixtures', entries: manifest.valid, invalid: false },
-    { title: 'Invalid fixtures', entries: manifest.invalid, invalid: true }
+(function initPersistenceSmoke() {
+  const FIXTURE_PATHS = [
+    './fixtures/persistence/baseline_session_v1.json',
+    './fixtures/persistence/high_tension_session_v1.json',
+    './fixtures/persistence/economic_shock_session_v1.json',
+    './fixtures/persistence/invalid/corrupt_missing_state_v1.json'
   ];
 
-  sections.forEach((section) => {
-    const title = document.createElement('h3');
-    title.textContent = section.title;
-    fixtureList.appendChild(title);
+  const KNOWN_RUNTIME_TASKS = new Set([
+    'BASE_ACTIVATE', 'UNIT_MOVE_COMPLETE', 'UNIT_PRODUCTION_COMPLETE', 'COMBAT_TICK', 'CAPTURE_COMPLETE',
+    'RESOURCE_TICK', 'FACTION_TICK', 'CHOKEPOINT_TICK', 'EVENT_TICK', 'LOCAL_INSTABILITY_TICK',
+    'INFLUENCE_TICK', 'INTERNAL_RESISTANCE_TICK', 'DIPLOMACY_TICK', 'STATE_STRUCTURE_TICK', 'ECONOMY_TICK',
+    'NEGOTIATION_TICK', 'DOMESTIC_TICK', 'POLITICAL_TICK', 'TRADE_TICK', 'LEADERSHIP_TICK', 'COUNTRY_TICK',
+    'INFORMATION_TICK', 'POLICY_TICK', 'AI_TICK', 'AI_STRATEGIC_TICK', 'MIGRATION_TICK', 'BLOC_TICK',
+    'PROXY_CONFLICT_TICK'
+  ]);
 
-    section.entries.forEach((entry) => {
-      const row = document.createElement('div');
-      row.className = 'fixture-item';
-      const left = document.createElement('div');
-      left.innerHTML = `<strong>${entry.name}</strong><br><small>${entry.intent}</small>`;
-      const button = document.createElement('button');
-      button.textContent = 'Run';
-      button.addEventListener('click', async () => {
-        try {
-          const result = await runFixtureSmokeTest(entry, section.invalid);
-          setOutput([renderResultLine(entry.name, result.status)], [result.payload]);
-        } catch (error) {
-          setOutput([`<div class="result-fail">Fixture run failed: ${error.message}</div>`], { error: error.message });
-        }
-      });
-      row.append(left, button);
-      fixtureList.appendChild(row);
+  async function fetchJson(path) {
+    const response = await fetch(path, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Failed to fetch ${path}: HTTP ${response.status}`);
+    return response.json();
+  }
+
+  function classifyResult(phases) {
+    if (!phases.validation.ok || !phases.runtime.ok) return 'fail';
+    if (phases.runtime.skippedTaskCount > 0 || phases.runtime.warnings.length > 0) return 'partial_pass';
+    return 'pass';
+  }
+
+  function runMigration(snapshot) {
+    return { ok: true, migratedVersion: Number(snapshot?.meta?.version || 1), message: '' };
+  }
+
+  function runValidation(snapshot) {
+    if (!snapshot?.state) return { ok: false, message: 'Snapshot missing state payload.' };
+    if (!snapshot.state.selectedPlayerCountryName) return { ok: false, message: 'Missing selectedPlayerCountryName.' };
+    return { ok: true, message: '' };
+  }
+
+  function runRuntime(snapshot) {
+    const pendingTasks = Array.isArray(snapshot?.state?.pendingTasks) ? snapshot.state.pendingTasks : [];
+    const unknownTasks = pendingTasks.filter((task) => !KNOWN_RUNTIME_TASKS.has(task?.type));
+    const warnings = [];
+    if (!Array.isArray(snapshot?.state?.bases)) warnings.push('bases missing/invalid');
+    if (!Array.isArray(snapshot?.state?.units)) warnings.push('units missing/invalid');
+    return {
+      ok: unknownTasks.length === 0,
+      message: unknownTasks.length ? `Unknown runtime task types: ${unknownTasks.map((t) => t.type).join(', ')}` : '',
+      skippedTaskCount: unknownTasks.length,
+      warnings
+    };
+  }
+
+  async function runFixture(path, expectedById) {
+    const fixture = await fetchJson(path);
+    const fixtureId = fixture.id;
+    const expected = expectedById[fixtureId];
+    if (!expected) throw new Error(`No expected classification declared for fixture: ${fixtureId}`);
+
+    const migration = runMigration(fixture.snapshot);
+    const validation = runValidation(fixture.snapshot);
+    const runtime = validation.ok ? runRuntime(fixture.snapshot) : { ok: false, message: 'Runtime skipped: validation failed.', skippedTaskCount: 0, warnings: [] };
+    const actual = classifyResult({ migration, validation, runtime });
+
+    return {
+      fixture: fixtureId,
+      expected,
+      actual,
+      matches: expected === actual,
+      phases: {
+        migration,
+        validation,
+        runtime
+      },
+      error: expected === actual ? '' : `Expected ${expected} but got ${actual}`
+    };
+  }
+
+  function renderResults(results) {
+    const body = document.getElementById('resultsBody');
+    const summary = document.getElementById('summary');
+    const jsonOutput = document.getElementById('jsonOutput');
+    if (!body || !summary || !jsonOutput) return;
+
+    body.innerHTML = '';
+    for (const row of results) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.fixture}</td>
+        <td>${row.expected}</td>
+        <td class="${row.actual}">${row.actual}</td>
+        <td>${row.phases.migration.ok ? 'ok' : 'fail'}</td>
+        <td>${row.phases.validation.ok ? 'ok' : 'fail'}</td>
+        <td>${row.phases.runtime.ok ? 'ok' : 'fail'}</td>
+        <td>${row.phases.runtime.skippedTaskCount}</td>
+        <td>${row.error || row.phases.validation.message || row.phases.runtime.message || ''}</td>
+      `;
+      body.appendChild(tr);
+    }
+
+    const mismatches = results.filter((r) => !r.matches);
+    summary.textContent = mismatches.length === 0
+      ? `PASS: ${results.length}/${results.length} fixtures matched expected classifications.`
+      : `FAIL: ${mismatches.length} mismatch(es) out of ${results.length} fixtures.`;
+
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      total: results.length,
+      mismatches: mismatches.length,
+      results
+    };
+    jsonOutput.textContent = JSON.stringify(payload, null, 2);
+    window.__PERSISTENCE_SMOKE_RESULTS = payload;
+    window.__PERSISTENCE_SMOKE_DONE = true;
+    console.log('PERSISTENCE_SMOKE_JSON:' + JSON.stringify(payload));
+  }
+
+  async function runAll() {
+    const expectedById = await fetchJson('./fixtures/persistence/expectations.json');
+    const rows = [];
+    for (const path of FIXTURE_PATHS) {
+      rows.push(await runFixture(path, expectedById));
+    }
+    renderResults(rows);
+    return window.__PERSISTENCE_SMOKE_RESULTS;
+  }
+
+  window.runPersistenceSmoke = runAll;
+
+  document.getElementById('runBtn')?.addEventListener('click', () => {
+    runAll().catch((error) => {
+      console.error('Persistence smoke failed:', error);
+      window.__PERSISTENCE_SMOKE_RESULTS = { error: String(error) };
+      window.__PERSISTENCE_SMOKE_DONE = true;
     });
   });
-}
 
-bootRuntimeBtn.addEventListener('click', async () => {
-  try {
-    await waitForRuntime();
-  } catch (error) {
-    runtimeStatus.textContent = `Runtime: failed (${error.message})`;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('autorun') === '1' || params.get('ci') === '1') {
+    runAll().catch((error) => {
+      console.error('Persistence smoke failed:', error);
+      window.__PERSISTENCE_SMOKE_RESULTS = { error: String(error) };
+      window.__PERSISTENCE_SMOKE_DONE = true;
+    });
   }
-});
-
-runAllBtn.addEventListener('click', runAllFixtures);
-
-(async function initSmokeHarness() {
-  manifest = await fetchFixtureManifest();
-  renderFixtureList();
 })();

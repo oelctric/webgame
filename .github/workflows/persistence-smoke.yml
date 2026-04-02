@@ -1,0 +1,65 @@
+name: Persistence Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'core/saveSystem.js'
+      - 'core/saveRuntimeGuards.js'
+      - 'ui/gameRuntime.js'
+      - 'app.js'
+      - 'tests/persistence*'
+      - 'tests/fixtures/persistence/**'
+      - 'scenario/persistence/**'
+      - '.github/workflows/persistence-smoke.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'core/saveSystem.js'
+      - 'core/saveRuntimeGuards.js'
+      - 'ui/gameRuntime.js'
+      - 'app.js'
+      - 'tests/persistence*'
+      - 'tests/fixtures/persistence/**'
+      - 'scenario/persistence/**'
+      - '.github/workflows/persistence-smoke.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+jobs:
+  persistence-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start static server
+        run: |
+          python3 -m http.server 8080 --directory . > /tmp/persistence-http.log 2>&1 &
+          echo $! > /tmp/persistence-http.pid
+
+      - name: Run browser persistence smoke harness
+        env:
+          PERSISTENCE_SMOKE_URL: http://127.0.0.1:8080/tests/persistence-smoke.html?ci=1
+        run: npm run test:persistence:smoke
+
+      - name: Stop static server
+        if: always()
+        run: |
+          kill "$(cat /tmp/persistence-http.pid)" || true
+          rm -f /tmp/persistence-http.pid

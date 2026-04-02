@@ -1,0 +1,11 @@
+{
+  "name": "webgame",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:persistence:smoke": "node tests/run-persistence-smoke-ci.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.2"
+  }
+}
