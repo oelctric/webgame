@@ -1,0 +1,9 @@
+{
+  "id": "invalid_corrupt_missing_state_v1",
+  "snapshot": {
+    "meta": {
+      "version": 1,
+      "country": "Unknown"
+    }
+  }
+}

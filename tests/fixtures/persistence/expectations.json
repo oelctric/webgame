@@ -1,0 +1,6 @@
+{
+  "baseline_session_v1": "pass",
+  "high_tension_session_v1": "partial_pass",
+  "economic_shock_session_v1": "pass",
+  "invalid_corrupt_missing_state_v1": "fail"
+}

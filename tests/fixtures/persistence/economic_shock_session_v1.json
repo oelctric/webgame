@@ -1,0 +1,20 @@
+{
+  "id": "economic_shock_session_v1",
+  "snapshot": {
+    "meta": {
+      "version": 1,
+      "country": "Japan",
+      "scenario": "Economic Shock",
+      "mode": "standard",
+      "inGameDate": "2033-03-20T00:00:00.000Z"
+    },
+    "state": {
+      "selectedPlayerCountryName": "Japan",
+      "currentTimeMs": 1994976000000,
+      "simulationSpeed": 1,
+      "pendingTasks": [],
+      "bases": [],
+      "units": []
+    }
+  }
+}
