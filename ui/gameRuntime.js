@@ -527,6 +527,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   let menuController;
   let layoutPanelController;
   let countryPanelController;
+  let uiControllers;
   let playStep = 1;
   let lastFrameTime = performance.now();
   
@@ -546,6 +547,423 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     gameState
   });
 
+  const panelScope = {
+    gameState,
+    gameClock,
+    scheduler,
+    governmentProfileSystem,
+    countrySystem,
+    stateStructureSystem,
+    diplomacySystem,
+    eventSystem,
+    resourceSystem,
+    chokepointSystem,
+    blocSystem,
+    tradeSystem,
+    negotiationSystem,
+    policySystem,
+    domesticStateSystem,
+    politicalSystem,
+    factionSystem,
+    leadershipSystem,
+    migrationSystem,
+    internalResistanceSystem,
+    localInstabilitySystem,
+    informationSystem,
+    influenceSystem,
+    proxyConflictSystem,
+    productionSystem,
+    movementSystem,
+    combatSystem,
+    captureSystem,
+    economySystem,
+    aiSystem,
+    svg,
+    mapWrap,
+    tooltip,
+    selectedCountryLabel,
+    cityList,
+    statusLabel,
+    baseButtons,
+    playerProfile,
+    gameDateTime,
+    simSpeedLabel,
+    treasuryLabel,
+    hudCurrentCountry,
+    hudAlerts,
+    resetViewBtn,
+    rightPanel,
+    bottomDrawer,
+    bottomDrawerTabs,
+    bottomDrawerContent,
+    toggleDrawerBtn,
+    economySummary,
+    aiCountriesLabel,
+    countryHudName,
+    countryHudTreasury,
+    countryHudPop,
+    countryHudStability,
+    countryHudOil,
+    countryHudIndustry,
+    countryHudManpower,
+    countryHudStrain,
+    countryHudAssets,
+    countryHudFlow,
+    diplomacyFocusCountry,
+    diplomacySummary,
+    diplomacyTargetCountry,
+    declareWarBtn,
+    makePeaceBtn,
+    improveRelationsBtn,
+    worsenRelationsBtn,
+    relationsList,
+    sanctionsStateLabel,
+    tradeStateLabel,
+    sanctionLightBtn,
+    sanctionHeavyBtn,
+    liftSanctionsBtn,
+    toggleTradeBtn,
+    negotiationSummary,
+    negotiationCountryA,
+    negotiationCountryB,
+    ceasefireDaysInput,
+    tradeRestoreDaysInput,
+    declareCeasefireBtn,
+    signPeaceDealBtn,
+    grantSanctionsReliefBtn,
+    borderDeEscalationBtn,
+    restoreTradeBtn,
+    negotiationStateList,
+    policyFocusCountry,
+    policySummary,
+    militaryPolicySelect,
+    industryPolicySelect,
+    securityPolicySelect,
+    applyPolicyBtn,
+    policyCostLabel,
+    govProfileFocusCountry,
+    govProfileSummary,
+    govProfileHint,
+    regimeTypeSelect,
+    economicOrientationSelect,
+    foreignPolicyStyleSelect,
+    applyGovernmentProfileBtn,
+    domesticFocusCountry,
+    domesticStability,
+    domesticUnrest,
+    domesticWarWeariness,
+    domesticEconomicStress,
+    domesticLegitimacy,
+    domesticPublicSupport,
+    domesticEliteSupport,
+    domesticPoliticalLabel,
+    domesticTrend,
+    domesticLeaderApproval,
+    domesticLeaderMandate,
+    domesticGovernmentContinuity,
+    domesticElectionDate,
+    domesticLeadershipLabel,
+    domesticLeadershipSummary,
+    domesticFactionSummary,
+    domesticFactionBias,
+    domesticFactionsList,
+    factionInfluenceUpBtn,
+    factionInfluenceDownBtn,
+    factionSatisfactionUpBtn,
+    factionSatisfactionDownBtn,
+    triggerFactionShiftBtn,
+    resetFactionStateBtn,
+    resistanceFocusCountry,
+    resistanceInsurgency,
+    resistanceSeparatist,
+    resistanceControl,
+    resistanceForeign,
+    resistanceStatus,
+    resistanceImpact,
+    resistanceHotspots,
+    raiseInsurgencyBtn,
+    lowerInsurgencyBtn,
+    raiseSeparatistBtn,
+    lowerSeparatistBtn,
+    raiseStateControlBtn,
+    lowerStateControlBtn,
+    raiseForeignPressureBtn,
+    lowerForeignPressureBtn,
+    triggerResistanceHotspotBtn,
+    localHotspotFocusCountry,
+    localHotspotSummary,
+    localHotspotSelect,
+    localHotspotMetrics,
+    localHotspotTags,
+    localHotspotPressure,
+    localHotspotTagSelect,
+    localHotspotList,
+    raiseLocalUnrestBtn,
+    lowerLocalUnrestBtn,
+    raiseLocalControlBtn,
+    lowerLocalControlBtn,
+    raiseLocalStabilityBtn,
+    lowerLocalStabilityBtn,
+    createManualHotspotBtn,
+    clearManualHotspotBtn,
+    leaderApprovalUpBtn,
+    leaderApprovalDownBtn,
+    leaderMandateUpBtn,
+    leaderMandateDownBtn,
+    triggerElectionCheckBtn,
+    triggerTurnoverBtn,
+    leaderDisplayName,
+    leaderArchetypeLabel,
+    leaderTraitRisk,
+    leaderTraitRepression,
+    leaderTraitEconomic,
+    leaderTraitDiplomatic,
+    leaderTraitCrisis,
+    leaderFlavorSummary,
+    leaderFlavorBio,
+    leaderBehaviorExplanation,
+    leaderBehaviorHint,
+    leaderRenameInput,
+    leaderRenameBtn,
+    leaderRegenerateBtn,
+    leaderRefreshFlavorBtn,
+    leaderRerollIdentityBtn,
+    leaderArchetypeSelect,
+    leaderApplyArchetypeBtn,
+    leaderRiskUpBtn,
+    leaderRiskDownBtn,
+    leaderRepressionUpBtn,
+    leaderRepressionDownBtn,
+    leaderEconomicUpBtn,
+    leaderEconomicDownBtn,
+    leaderDiplomaticUpBtn,
+    leaderDiplomaticDownBtn,
+    electionOffsetDaysInput,
+    applyElectionOffsetBtn,
+    stateStructureFocusCountry,
+    stateStructureSummary,
+    stateAutonomyLabel,
+    stateGovernanceLabel,
+    stateEmergencyLabel,
+    stateTensionLabel,
+    stateStructureSelect,
+    autonomyUpBtn,
+    autonomyDownBtn,
+    governanceUpBtn,
+    governanceDownBtn,
+    tensionUpBtn,
+    tensionDownBtn,
+    toggleEmergencyPowersBtn,
+    infoFocusCountry,
+    infoNarrativePressure,
+    infoReputation,
+    infoControl,
+    infoLegitimacy,
+    infoInfluenceSummary,
+    infoLabel,
+    reputationLabel,
+    influenceTypeSelect,
+    influenceTargetCountry,
+    influenceIntensityInput,
+    influenceDurationInput,
+    startInfluenceOperationBtn,
+    cancelInfluenceOperationBtn,
+    activeInfluenceOperationSelect,
+    activeInfluenceList,
+    proxyFocusCountry,
+    proxySummary,
+    proxyTypeSelect,
+    proxyTargetCountrySelect,
+    proxyTargetHotspotSelect,
+    proxyStrengthInput,
+    proxyRiskInput,
+    proxyDurationInput,
+    startProxyOperationBtn,
+    cancelProxyOperationBtn,
+    forceExposeProxyOperationBtn,
+    activeProxyOperationSelect,
+    activeProxyList,
+    proxyIncidentList,
+    raiseNarrativePressureBtn,
+    lowerNarrativePressureBtn,
+    raiseReputationBtn,
+    lowerReputationBtn,
+    raiseInfoControlBtn,
+    lowerInfoControlBtn,
+    triggerInfoSuccessBtn,
+    triggerInfoScandalBtn,
+    migrationFocusCountry,
+    migrationSummary,
+    migrationInflowLabel,
+    migrationOutflowLabel,
+    migrationHumanitarianLabel,
+    migrationFlowList,
+    migrationOriginSelect,
+    migrationDestinationSelect,
+    triggerRefugeeFlowBtn,
+    triggerEconomicMigrationBtn,
+    migrationAmountInput,
+    migrationFlowSelect,
+    easeSelectedFlowBtn,
+    recomputeMigrationBtn,
+    eventSummary,
+    eventTypeSelect,
+    eventTargetCountry,
+    eventSecondaryCountry,
+    triggerEventBtn,
+    activeEventsList,
+    eventLogList,
+    chokepointSummary,
+    chokepointSelect,
+    chokepointControllerSelect,
+    chokepointOpenBtn,
+    chokepointRestrictedBtn,
+    chokepointBlockedBtn,
+    chokepointContestedToggleBtn,
+    assignChokepointControllerBtn,
+    recomputeRoutePressureBtn,
+    chokepointList,
+    blocSummary,
+    selectedCountryBlocs,
+    blocNameInput,
+    blocTypeSelect,
+    createBlocBtn,
+    blocSelect,
+    blocMemberCountrySelect,
+    addBlocMemberBtn,
+    removeBlocMemberBtn,
+    dissolveBlocBtn,
+    blocList,
+    tradeSummary,
+    tradeBalanceSummary,
+    toggleAutoTradeBtn,
+    recomputeTradeBtn,
+    tradeExporterSelect,
+    tradeImporterSelect,
+    tradeResourceSelect,
+    tradeAmountInput,
+    forceTradeBtn,
+    blockTradePairBtn,
+    tradeFlowsList,
+    prodBaseLabel,
+    prodUnitButtons,
+    prodCurrent,
+    prodQueue,
+    unitCount,
+    unitList,
+    selectedUnitLabel,
+    selectedUnitMeta,
+    moveUnitBtn,
+    attackUnitBtn,
+    captureUnitBtn,
+    clearUnitSelectionBtn,
+    moveModeStatus,
+    attackModeStatus,
+    captureModeStatus,
+    selectedAssetStatus,
+    overlays,
+    playTitle,
+    playStepIndicator,
+    playStepCountry,
+    playStepLeader,
+    playStepScenario,
+    playStepConfirm,
+    countrySelect,
+    countryWarning,
+    leaderNameInput,
+    scenarioTypeSelect,
+    simulationModeSelect,
+    launchSummary,
+    timeControlButtons,
+    skipDayBtn,
+    skipWeekBtn,
+    skipMonthBtn,
+    menuPreviewLabel,
+    menuPreviewTitle,
+    menuPreviewDescription,
+    menuPreviewBullets,
+    baseTypes,
+    majorCities,
+    selectedBaseType,
+    selectedCountryFeature,
+    countries,
+    playStep,
+    lastFrameTime,
+    settingsState,
+    refreshDomainPanels,
+    bindDomainPanels,
+    formatDateTime,
+    refreshTimeHud,
+    refreshEconomyHud,
+    refreshCountryHud,
+    getDiplomacyFocusCountry,
+    refreshDiplomacyHud,
+    refreshNegotiationHud,
+    refreshGovernmentProfileHud,
+    refreshPolicyHud,
+    refreshDomesticHud,
+    refreshStateStructureHud,
+    refreshResistanceHud,
+    refreshLocalHotspotHud,
+    refreshInformationHud,
+    refreshProxyConflictHud,
+    refreshMigrationHud,
+    refreshEventHud,
+    refreshChokepointHud,
+    refreshBlocHud,
+    refreshTradeHud,
+    setStatus,
+    getMapLonLatFromEvent,
+    shouldIgnoreMapClick,
+    organizePanels,
+    setDrawerCollapsed,
+    attachDrawerControls,
+    updateContextActionPanels,
+    setOverlay,
+    hideOverlays,
+    updatePlayFlowUI,
+    renderCityList,
+    initializeCityState,
+    updateCountryStyles,
+    setPlayerCountry,
+    spawnEnemyForces,
+    pointInsideCountry,
+    createBaseButtons,
+    populateCountrySelect,
+    applySettingsUI,
+    setSimulationSpeed,
+    attachTimeControls,
+    skipGameTime,
+    createBase,
+    renderBases,
+    renderCities,
+    renderUnits,
+    renderSelectedUnitPanel,
+    renderProductionPanel,
+    refreshProductionTicker,
+    setMenuPreview,
+    attachMenuHandlers,
+    attachUnitControls,
+    attachDiplomacyControls,
+    attachNegotiationControls,
+    attachPolicyControls,
+    attachGovernmentProfileControls,
+    attachInformationControls,
+    attachProxyConflictControls,
+    attachResistanceControls,
+    attachLocalHotspotControls,
+    attachLeadershipControls,
+    attachFactionControls,
+    attachStateStructureControls,
+    attachMigrationControls,
+    attachEventControls,
+    attachChokepointControls,
+    attachBlocControls,
+    attachTradeControls,
+    startSimulationLoop,
+    placeBaseFromLonLat,
+  };
+
   countryPanelController = window.createCountryPanelController({
     cityList,
     baseButtons,
@@ -559,7 +977,60 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     },
     setStatus
   });
-  
+
+  uiControllers = {
+    diplomacy: window.createDiplomacyPanelController(panelScope),
+    negotiation: window.createNegotiationPanelController(panelScope),
+    government: window.createGovernmentPanelController(panelScope),
+    stateStructure: window.createStateStructurePanelController(panelScope),
+    resistance: window.createResistancePanelController(panelScope),
+    localHotspot: window.createLocalHotspotPanelController(panelScope),
+    information: window.createInformationPanelController(panelScope),
+    proxy: window.createProxyPanelController(panelScope),
+    migration: window.createMigrationPanelController(panelScope),
+    event: window.createEventPanelController(panelScope),
+    chokepoint: window.createChokepointPanelController(panelScope),
+    bloc: window.createBlocPanelController(panelScope),
+    trade: window.createTradePanelController(panelScope)
+  };
+
+  function refreshDomainPanels() {
+    uiControllers.diplomacy.refresh();
+    uiControllers.negotiation.refresh();
+    uiControllers.government.refreshPolicyHud();
+    uiControllers.government.refreshGovernmentProfileHud();
+    uiControllers.government.refreshDomesticHud();
+    uiControllers.stateStructure.refresh();
+    uiControllers.resistance.refresh();
+    uiControllers.localHotspot.refresh();
+    uiControllers.information.refresh();
+    uiControllers.proxy.refresh();
+    uiControllers.migration.refresh();
+    uiControllers.event.refresh();
+    uiControllers.chokepoint.refresh();
+    uiControllers.bloc.refresh();
+    uiControllers.trade.refresh();
+  }
+
+  function bindDomainPanels() {
+    uiControllers.diplomacy.bind();
+    uiControllers.negotiation.bind();
+    uiControllers.government.bindPolicyControls();
+    uiControllers.government.bindGovernmentProfileControls();
+    uiControllers.government.bindLeadershipControls();
+    uiControllers.government.bindFactionControls();
+    uiControllers.stateStructure.bind();
+    uiControllers.resistance.bind();
+    uiControllers.localHotspot.bind();
+    uiControllers.information.bind();
+    uiControllers.proxy.bind();
+    uiControllers.migration.bind();
+    uiControllers.event.bind();
+    uiControllers.chokepoint.bind();
+    uiControllers.bloc.bind();
+    uiControllers.trade.bind();
+  }
+
   function formatDateTime(timestamp) {
     return new Date(timestamp).toLocaleString(undefined, {
       year: 'numeric',
@@ -646,786 +1117,66 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function refreshDiplomacyHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      diplomacyFocusCountry.textContent = 'Diplomacy for: --';
-      diplomacySummary.textContent = 'Diplomacy: --';
-      relationsList.innerHTML = '<li>No country selected.</li>';
-      diplomacyTargetCountry.innerHTML = '';
-      sanctionsStateLabel.textContent = 'Sanctions: --';
-      tradeStateLabel.textContent = 'Trade: --';
-      [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn, sanctionLightBtn, sanctionHeavyBtn, liftSanctionsBtn, toggleTradeBtn]
-        .forEach((btn) => { btn.disabled = true; });
-      return;
-    }
-  
-    countrySystem.ensureCountry(focusCountry);
-    Object.keys(gameState.countries).forEach((otherCountry) => {
-      if (otherCountry !== focusCountry) diplomacySystem.ensureRelation(focusCountry, otherCountry);
-    });
-  
-    const relations = diplomacySystem.getRelationsForCountry(focusCountry);
-    diplomacyFocusCountry.textContent = `Diplomacy for: ${focusCountry}`;
-    diplomacySummary.textContent = `Diplomacy: ${gameState.diplomacy.lastSummary}`;
-  
-    relationsList.innerHTML = '';
-    if (!relations.length) {
-      relationsList.innerHTML = '<li>No bilateral relations yet.</li>';
-    } else {
-      relations.forEach((relation) => {
-        const li = document.createElement('li');
-        const directional = diplomacySystem.getDirectionalPressure(focusCountry, relation.counterpart);
-        const blocAligned = blocSystem.areInSameBloc(focusCountry, relation.counterpart) ? ' • same bloc' : '';
-        li.textContent = `${relation.counterpart}: ${relation.status.toUpperCase()} (${relation.relationScore}) • Sanctions ${directional.sanctionsLevel} • Trade ${directional.tradeAllowed ? 'on' : 'blocked'}${blocAligned}`;
-        relationsList.appendChild(li);
-      });
-    }
-  
-    const previousTarget = diplomacyTargetCountry.value;
-    diplomacyTargetCountry.innerHTML = '';
-    relations.forEach((relation) => {
-      const option = document.createElement('option');
-      option.value = relation.counterpart;
-      option.textContent = relation.counterpart;
-      diplomacyTargetCountry.appendChild(option);
-    });
-    if (previousTarget && relations.some((relation) => relation.counterpart === previousTarget)) {
-      diplomacyTargetCountry.value = previousTarget;
-    }
-  
-    const hasTarget = Boolean(diplomacyTargetCountry.value);
-    [declareWarBtn, makePeaceBtn, improveRelationsBtn, worsenRelationsBtn, sanctionLightBtn, sanctionHeavyBtn, liftSanctionsBtn, toggleTradeBtn]
-      .forEach((btn) => { btn.disabled = !hasTarget; });
-  
-    if (hasTarget) {
-      const directional = diplomacySystem.getDirectionalPressure(focusCountry, diplomacyTargetCountry.value);
-      sanctionsStateLabel.textContent = `Sanctions: ${directional.sanctionsLevel.toUpperCase()} (${focusCountry} → ${diplomacyTargetCountry.value})`;
-      tradeStateLabel.textContent = `Trade: ${directional.tradeAllowed ? 'Allowed' : 'Blocked'} (${focusCountry} → ${diplomacyTargetCountry.value})`;
-      toggleTradeBtn.textContent = directional.tradeAllowed ? 'Block Trade' : 'Allow Trade';
-    } else {
-      sanctionsStateLabel.textContent = 'Sanctions: --';
-      tradeStateLabel.textContent = 'Trade: --';
-      toggleTradeBtn.textContent = 'Toggle Trade';
-    }
+    return uiControllers.diplomacy.refresh();
   }
   
   function refreshNegotiationHud() {
-    const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousA = negotiationCountryA.value;
-    const previousB = negotiationCountryB.value;
-    [negotiationCountryA, negotiationCountryB].forEach((select) => { select.innerHTML = ''; });
-    names.forEach((name) => {
-      const optA = document.createElement('option');
-      optA.value = name;
-      optA.textContent = name;
-      negotiationCountryA.appendChild(optA);
-      const optB = document.createElement('option');
-      optB.value = name;
-      optB.textContent = name;
-      negotiationCountryB.appendChild(optB);
-    });
-    if (previousA && names.includes(previousA)) negotiationCountryA.value = previousA;
-    if (previousB && names.includes(previousB)) negotiationCountryB.value = previousB;
-    if (!negotiationCountryA.value && names.length) negotiationCountryA.value = names[0];
-    if (!negotiationCountryB.value && names.length > 1) negotiationCountryB.value = names[1];
-  
-    const hasCountries = names.length >= 2;
-    [
-      declareCeasefireBtn,
-      signPeaceDealBtn,
-      grantSanctionsReliefBtn,
-      borderDeEscalationBtn,
-      restoreTradeBtn,
-      negotiationCountryA,
-      negotiationCountryB,
-      ceasefireDaysInput,
-      tradeRestoreDaysInput
-    ].forEach((el) => { el.disabled = !hasCountries; });
-  
-    negotiationSummary.textContent = `Negotiation: ${gameState.negotiation.lastSummary}`;
-    negotiationStateList.innerHTML = '';
-    const ceasefires = Object.values(gameState.negotiation.ceasefiresByPair);
-    const tradeDeals = Object.values(gameState.negotiation.tradeRestorationByPair);
-    if (!ceasefires.length && !tradeDeals.length) {
-      negotiationStateList.innerHTML = '<li>No active negotiated agreements.</li>';
-      return;
-    }
-    ceasefires.forEach((agreement) => {
-      const li = document.createElement('li');
-      li.textContent = `Ceasefire ${agreement.countryA} ↔ ${agreement.countryB} (${negotiationSystem.formatDaysLeft(agreement.expiresAt)})`;
-      negotiationStateList.appendChild(li);
-    });
-    tradeDeals.forEach((agreement) => {
-      const li = document.createElement('li');
-      li.textContent = `Temporary trade ${agreement.countryA} ↔ ${agreement.countryB} (${negotiationSystem.formatDaysLeft(agreement.expiresAt)})`;
-      negotiationStateList.appendChild(li);
-    });
+    return uiControllers.negotiation.refresh();
   }
   
   
   function refreshGovernmentProfileHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      govProfileFocusCountry.textContent = 'Profile for: --';
-      govProfileSummary.textContent = 'Government profile: --';
-      govProfileHint.textContent = 'Profile effect: --';
-      [regimeTypeSelect, economicOrientationSelect, foreignPolicyStyleSelect, applyGovernmentProfileBtn]
-        .forEach((el) => { el.disabled = true; });
-      return;
-    }
-  
-    const country = countrySystem.ensureCountry(focusCountry);
-    const profile = governmentProfileSystem.getProfile(country);
-    govProfileFocusCountry.textContent = `Profile for: ${focusCountry}`;
-    govProfileSummary.textContent = `Government profile: ${governmentProfileSystem.getProfileSummary(country)}`;
-    govProfileHint.textContent = `Profile effect: ${governmentProfileSystem.getProfileHint(country)}`;
-    regimeTypeSelect.value = profile.regimeType;
-    economicOrientationSelect.value = profile.economicOrientation;
-    foreignPolicyStyleSelect.value = profile.foreignPolicyStyle;
-    [regimeTypeSelect, economicOrientationSelect, foreignPolicyStyleSelect, applyGovernmentProfileBtn]
-      .forEach((el) => { el.disabled = false; });
+    return uiControllers.government.refreshGovernmentProfileHud();
   }
   
   function refreshPolicyHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      policyFocusCountry.textContent = 'Policy for: --';
-      policySummary.textContent = 'Policy: --';
-      policyCostLabel.textContent = 'Daily policy cost: --';
-      [militaryPolicySelect, industryPolicySelect, securityPolicySelect, applyPolicyBtn].forEach((el) => { el.disabled = true; });
-      return;
-    }
-  
-    const country = countrySystem.ensureCountry(focusCountry);
-    policySystem.updateCountryPolicyCost(focusCountry);
-    policyFocusCountry.textContent = `Policy for: ${focusCountry}`;
-    policySummary.textContent = `Policy: ${gameState.policy.lastSummary}`;
-    policyCostLabel.textContent = `Daily policy cost: ${Math.round(country.policyDailyCost)}`;
-    militaryPolicySelect.value = country.policy.militarySpendingLevel;
-    industryPolicySelect.value = country.policy.industryInvestmentLevel;
-    securityPolicySelect.value = country.policy.internalSecurityLevel;
-  
-    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-    const editable = playerCountry && focusCountry === playerCountry;
-    [militaryPolicySelect, industryPolicySelect, securityPolicySelect, applyPolicyBtn].forEach((el) => { el.disabled = !editable; });
+    return uiControllers.government.refreshPolicyHud();
   }
   
   function refreshDomesticHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      domesticFocusCountry.textContent = 'Domestic state for: --';
-      domesticStability.textContent = 'Stability: --';
-      domesticUnrest.textContent = 'Unrest: --';
-      domesticWarWeariness.textContent = 'War weariness: --';
-      domesticEconomicStress.textContent = 'Economic stress: --';
-      domesticLegitimacy.textContent = 'Legitimacy: --';
-      domesticPublicSupport.textContent = 'Public support: --';
-      domesticEliteSupport.textContent = 'Elite support: --';
-      domesticPoliticalLabel.textContent = 'Political pressure: --';
-      domesticTrend.textContent = 'Domestic trend: --';
-      domesticLeaderApproval.textContent = 'Leader approval: --';
-      domesticLeaderMandate.textContent = 'Leader mandate: --';
-      domesticGovernmentContinuity.textContent = 'Government continuity: --';
-      domesticElectionDate.textContent = 'Next election: --';
-      domesticLeadershipLabel.textContent = 'Leadership status: --';
-      domesticLeadershipSummary.textContent = 'Leadership cycle: --';
-      leaderDisplayName.textContent = 'Leader: --';
-      leaderArchetypeLabel.textContent = 'Archetype: --';
-      leaderTraitRisk.textContent = 'Risk tolerance: --';
-      leaderTraitRepression.textContent = 'Repression preference: --';
-      leaderTraitEconomic.textContent = 'Economic competence: --';
-      leaderTraitDiplomatic.textContent = 'Diplomatic flexibility: --';
-      leaderTraitCrisis.textContent = 'Crisis management: --';
-      leaderFlavorSummary.textContent = 'Leader flavor: --';
-      leaderFlavorBio.textContent = 'Leader bio: --';
-      leaderBehaviorExplanation.textContent = 'Leader explanation: --';
-      leaderBehaviorHint.textContent = 'Leader bias: --';
-      domesticFactionSummary.textContent = 'Faction pressure: --';
-      domesticFactionBias.textContent = 'Faction policy bias: --';
-      domesticFactionsList.innerHTML = '<li>No faction data.</li>';
-      return;
-    }
-    const country = countrySystem.ensureCountry(focusCountry);
-    leadershipSystem.ensureLeadershipFields(country);
-    domesticFocusCountry.textContent = `Domestic state for: ${focusCountry}`;
-    domesticStability.textContent = `Stability: ${country.stability.toFixed(1)} / 100`;
-    domesticUnrest.textContent = `Unrest: ${country.unrest.toFixed(1)} / 100`;
-    domesticWarWeariness.textContent = `War weariness: ${country.warWeariness.toFixed(1)} / 100`;
-    domesticEconomicStress.textContent = `Economic stress: ${country.economicStress.toFixed(1)} / 100`;
-    domesticLegitimacy.textContent = `Legitimacy: ${country.legitimacy.toFixed(1)} / 100`;
-    domesticPublicSupport.textContent = `Public support: ${country.publicSupport.toFixed(1)} / 100`;
-    domesticEliteSupport.textContent = `Elite support: ${country.eliteSupport.toFixed(1)} / 100`;
-    domesticPoliticalLabel.textContent = `Political pressure: ${politicalSystem.getPoliticalLabel(country)}`;
-    domesticLeaderApproval.textContent = `Leader approval: ${country.leaderApproval.toFixed(1)} / 100`;
-    domesticLeaderMandate.textContent = `Leader mandate: ${country.leaderMandate.toFixed(1)} / 100`;
-    domesticGovernmentContinuity.textContent = `Government continuity: ${country.governmentContinuity.toFixed(1)} / 100`;
-    domesticElectionDate.textContent = leadershipSystem.usesElectionCycle(country) && country.nextElectionAt
-      ? `Next election: ${formatDateTime(country.nextElectionAt)}`
-      : 'Next election: n/a for current regime';
-    domesticLeadershipLabel.textContent = `Leadership status: ${leadershipSystem.getLeadershipLabel(country)}`;
-    domesticLeadershipSummary.textContent = `Leadership cycle: ${gameState.leadership.lastSummary}`;
-    leaderDisplayName.textContent = `Leader: ${country.leaderName}`;
-    leaderArchetypeLabel.textContent = `Archetype: ${country.leaderArchetype} (${country.leaderSummary})`;
-    leaderTraitRisk.textContent = `Risk tolerance: ${country.leaderTraits.riskTolerance.toFixed(0)} / 100`;
-    leaderTraitRepression.textContent = `Repression preference: ${country.leaderTraits.repressionPreference.toFixed(0)} / 100`;
-    leaderTraitEconomic.textContent = `Economic competence: ${country.leaderTraits.economicCompetence.toFixed(0)} / 100`;
-    leaderTraitDiplomatic.textContent = `Diplomatic flexibility: ${country.leaderTraits.diplomaticFlexibility.toFixed(0)} / 100`;
-    leaderTraitCrisis.textContent = `Crisis management: ${country.leaderTraits.crisisManagement.toFixed(0)} / 100`;
-    leaderFlavorSummary.textContent = `Leader flavor: ${country.leaderFlavor?.summary || '--'}`;
-    leaderFlavorBio.textContent = `Leader bio: ${country.leaderFlavor?.bio || '--'}`;
-    leaderBehaviorExplanation.textContent = `Leader explanation: ${country.leaderFlavor?.explanation || '--'}`;
-    const bias = country.leaderBehaviorBias || {};
-    leaderBehaviorHint.textContent = `Leader bias: escalation ${((bias.escalationBias || 0) * 100).toFixed(0)} • de-escalation ${((bias.deescalationBias || 0) * 100).toFixed(0)} • security ${((bias.internalSecurityBias || 0) * 100).toFixed(0)} • economic stabilization ${((bias.economicStabilizationBias || 0) * 100).toFixed(0)}`;
-    leaderArchetypeSelect.value = country.leaderArchetype || 'pragmatist';
-    factionSystem.ensureCountryFactions(country);
-    const factionEffects = country.factionEffects || {};
-    domesticFactionSummary.textContent = `Faction pressure: ${factionEffects.interpretation || 'balanced'}`;
-    domesticFactionBias.textContent = `Faction policy bias: security ${((factionEffects.internalSecurityBias || 0) * 100).toFixed(0)} • war ${((factionEffects.warToleranceBias || 0) * 100).toFixed(0)} • de-escalation ${((factionEffects.deescalationBias || 0) * 100).toFixed(0)} • trade ${((factionEffects.tradeRestorationBias || 0) * 100).toFixed(0)}`;
-    domesticFactionsList.innerHTML = '';
-    Object.values(country.factions || {}).forEach((faction) => {
-      const li = document.createElement('li');
-      li.textContent = `${faction.id.replace(/_/g, ' ')} | influence ${faction.influence.toFixed(1)} | support ${faction.satisfaction.toFixed(1)} | direction ${faction.pressureDirection}`;
-      domesticFactionsList.appendChild(li);
-    });
-    const trendLabel = country.stability >= 60 ? 'Stable' : (country.stability >= 35 ? 'Strained' : 'Fragile');
-    const pressure = diplomacySystem.getEconomicPressureOnCountry(focusCountry);
-    domesticTrend.textContent = `Domestic trend: ${trendLabel} • Output x${country.domesticOutputModifier.toFixed(2)} • Sanction sources ${pressure.incomingCount} • Policy effectiveness x${(country.politicalEffects?.policyEffectiveness || 1).toFixed(2)}`;
+    return uiControllers.government.refreshDomesticHud();
   }
   
   function refreshStateStructureHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      stateStructureFocusCountry.textContent = 'Structure for: --';
-      stateStructureSummary.textContent = 'State structure: --';
-      stateAutonomyLabel.textContent = 'Regional autonomy: --';
-      stateGovernanceLabel.textContent = 'Local governance capacity: --';
-      stateEmergencyLabel.textContent = 'Emergency powers: --';
-      stateTensionLabel.textContent = 'Center-region tension: --';
-      [stateStructureSelect, autonomyUpBtn, autonomyDownBtn, governanceUpBtn, governanceDownBtn, tensionUpBtn, tensionDownBtn, toggleEmergencyPowersBtn]
-        .forEach((el) => { el.disabled = true; });
-      return;
-    }
-    const country = countrySystem.ensureCountry(focusCountry);
-    stateStructureSystem.ensureCountryFields(country);
-    stateStructureFocusCountry.textContent = `Structure for: ${focusCountry}`;
-    stateStructureSummary.textContent = `State structure: ${stateStructureSystem.getStructureLabel(country)}`;
-    stateAutonomyLabel.textContent = `Regional autonomy: ${country.regionalAutonomy.toFixed(1)} / 100`;
-    stateGovernanceLabel.textContent = `Local governance capacity: ${country.localGovernanceCapacity.toFixed(1)} / 100 (${stateStructureSystem.getGovernanceLabel(country)})`;
-    stateEmergencyLabel.textContent = `Emergency powers: ${country.emergencyPowersActive ? 'emergency rule active' : 'inactive'}`;
-    stateTensionLabel.textContent = `Center-region tension: ${country.centerRegionTension.toFixed(1)} / 100`;
-    stateStructureSelect.value = country.stateStructure;
-    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-    const editable = playerCountry && focusCountry === playerCountry;
-    [stateStructureSelect, autonomyUpBtn, autonomyDownBtn, governanceUpBtn, governanceDownBtn, tensionUpBtn, tensionDownBtn, toggleEmergencyPowersBtn]
-      .forEach((el) => { el.disabled = !editable; });
+    return uiControllers.stateStructure.refresh();
   }
   
   function refreshResistanceHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    if (!focusCountry) {
-      resistanceFocusCountry.textContent = 'Internal resistance for: --';
-      resistanceInsurgency.textContent = 'Insurgency pressure: --';
-      resistanceSeparatist.textContent = 'Separatist pressure: --';
-      resistanceControl.textContent = 'State control: --';
-      resistanceForeign.textContent = 'Foreign-backed pressure: --';
-      resistanceStatus.textContent = 'Resistance status: --';
-      resistanceImpact.textContent = 'Resistance effects: --';
-      resistanceHotspots.textContent = 'Hotspots: --';
-      return;
-    }
-    const country = countrySystem.ensureCountry(focusCountry);
-    const effects = country.resistanceEffects || {};
-    resistanceFocusCountry.textContent = `Internal resistance for: ${focusCountry}`;
-    resistanceInsurgency.textContent = `Insurgency pressure: ${country.insurgencyPressure.toFixed(1)} / 100`;
-    resistanceSeparatist.textContent = `Separatist pressure: ${country.separatistPressure.toFixed(1)} / 100`;
-    resistanceControl.textContent = `State control: ${country.stateControl.toFixed(1)} / 100`;
-    resistanceForeign.textContent = `Foreign-backed pressure: ${(country.foreignBackedPressure || 0).toFixed(1)} / 100`;
-    resistanceStatus.textContent = `Resistance status: ${internalResistanceSystem.getResistanceLabel(country)} • ${gameState.internalResistance.lastSummary}`;
-    resistanceImpact.textContent = `Resistance effects: output -${((effects.outputPenalty || 0) * 100).toFixed(1)}% • manpower -${((effects.manpowerPenalty || 0) * 100).toFixed(1)}% • security cost +${Math.round(effects.securityCost || 0)}/day`;
-    const hotspotLabel = (country.resistanceHotspots || [])
-      .slice(0, 2)
-      .map((hotspot) => `${hotspot.label} (ins ${hotspot.insurgencyPressure.toFixed(0)}, sep ${hotspot.separatistPressure.toFixed(0)}, ctrl ${hotspot.stateControl.toFixed(0)})`)
-      .join(' • ');
-    resistanceHotspots.textContent = `Hotspots: ${hotspotLabel || 'none'}`;
+    return uiControllers.resistance.refresh();
   }
   
   
   
   function refreshLocalHotspotHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    localHotspotSummary.textContent = gameState.localInstability?.lastSummary || 'Local instability: --';
-    if (!focusCountry) {
-      localHotspotFocusCountry.textContent = 'Hotspots for: --';
-      localHotspotMetrics.textContent = 'Local stability/unrest/control: --';
-      localHotspotTags.textContent = 'Hotspot tags: --';
-      localHotspotPressure.textContent = 'Local pressures: --';
-      localHotspotSelect.innerHTML = '<option value="">No hotspots</option>';
-      localHotspotList.innerHTML = '<li>No local hotspots.</li>';
-      return;
-    }
-    localInstabilitySystem.ensureHotspots();
-    const hotspots = localInstabilitySystem.getCountryHotspots(focusCountry);
-    localHotspotFocusCountry.textContent = `Hotspots for: ${focusCountry}`;
-    const previousSelection = gameState.localInstability.selectedHotspotId;
-    localHotspotSelect.innerHTML = '';
-    hotspots.forEach((hotspot) => {
-      const option = document.createElement('option');
-      option.value = hotspot.id;
-      option.textContent = `${hotspot.name} (${hotspot.severityLabel}, ${hotspot.severity.toFixed(0)})`;
-      localHotspotSelect.appendChild(option);
-    });
-    if (!hotspots.length) {
-      localHotspotSelect.innerHTML = '<option value="">No hotspots</option>';
-      localHotspotMetrics.textContent = 'Local stability/unrest/control: --';
-      localHotspotTags.textContent = 'Hotspot tags: --';
-      localHotspotPressure.textContent = 'Local pressures: --';
-      localHotspotList.innerHTML = '<li>No local hotspots.</li>';
-      return;
-    }
-    if (previousSelection && hotspots.some((hotspot) => hotspot.id === previousSelection)) {
-      localHotspotSelect.value = previousSelection;
-    } else {
-      localHotspotSelect.value = hotspots[0].id;
-    }
-    gameState.localInstability.selectedHotspotId = localHotspotSelect.value;
-    const selected = hotspots.find((hotspot) => hotspot.id === localHotspotSelect.value) || hotspots[0];
-    localHotspotMetrics.textContent = `Local stability/unrest/control: ${selected.localStability.toFixed(1)} / ${selected.localUnrest.toFixed(1)} / ${selected.localStateControl.toFixed(1)}`;
-    localHotspotTags.textContent = `Hotspot tags: ${(selected.hotspotTags || []).join(', ') || 'none'}`;
-    localHotspotPressure.textContent = `Local pressures: migration ${(selected.activePressures?.migration || 0).toFixed(1)} • insurgency ${(selected.activePressures?.insurgency || 0).toFixed(1)} • crisis ${(selected.activePressures?.crisis || 0).toFixed(1)}`;
-  
-    localHotspotList.innerHTML = '';
-    hotspots.slice(0, 6).forEach((hotspot) => {
-      const li = document.createElement('li');
-      li.textContent = `${hotspot.name}: ${hotspot.severityLabel} (${hotspot.severity.toFixed(0)}) • tags ${hotspot.hotspotTags?.join(', ') || 'none'}`;
-      localHotspotList.appendChild(li);
-    });
+    return uiControllers.localHotspot.refresh();
   }
   
   function refreshInformationHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-    const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousTarget = influenceTargetCountry.value;
-    influenceTargetCountry.innerHTML = '';
-    countryNames.forEach((name) => {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      influenceTargetCountry.appendChild(option);
-    });
-    if (previousTarget && countryNames.includes(previousTarget)) influenceTargetCountry.value = previousTarget;
-    if (!influenceTargetCountry.value && playerCountry) influenceTargetCountry.value = playerCountry;
-  
-    if (!focusCountry) {
-      infoFocusCountry.textContent = 'Information state for: --';
-      infoNarrativePressure.textContent = 'Domestic narrative pressure: --';
-      infoReputation.textContent = 'International reputation: --';
-      infoControl.textContent = 'Information control: --';
-      infoLegitimacy.textContent = 'Legitimacy impact: --';
-      infoInfluenceSummary.textContent = 'Influence ops: --';
-      infoLabel.textContent = 'Narrative status: --';
-      reputationLabel.textContent = 'Reputation status: --';
-      activeInfluenceList.innerHTML = '<li>No active influence operations.</li>';
-      activeInfluenceOperationSelect.innerHTML = '<option value="">No active operations</option>';
-      startInfluenceOperationBtn.disabled = true;
-      cancelInfluenceOperationBtn.disabled = true;
-      return;
-    }
-  
-    const country = countrySystem.ensureCountry(focusCountry);
-    infoFocusCountry.textContent = `Information state for: ${focusCountry}`;
-    infoNarrativePressure.textContent = `Domestic narrative pressure: ${country.domesticNarrativePressure.toFixed(1)} / 100`;
-    infoReputation.textContent = `International reputation: ${country.internationalReputation.toFixed(1)} / 100`;
-    infoControl.textContent = `Information control: ${country.informationControl.toFixed(1)} / 100`;
-    infoLegitimacy.textContent = `Legitimacy/Public support: ${country.legitimacy.toFixed(1)} / ${country.publicSupport.toFixed(1)}`;
-    infoInfluenceSummary.textContent = `Influence ops: ${gameState.influence.lastSummary}`;
-    infoLabel.textContent = `Narrative status: ${informationSystem.getNarrativeLabel(country)}`;
-    reputationLabel.textContent = `Reputation status: ${informationSystem.getReputationLabel(country)}`;
-    startInfluenceOperationBtn.disabled = !playerCountry || playerCountry !== focusCountry;
-    influenceTargetCountry.disabled = !INFLUENCE_CONFIG.types[influenceTypeSelect.value]?.requiresForeignTarget;
-  
-    const playerOps = (gameState.influence.operations || []).filter((operation) => operation.sourceCountryId === playerCountry && operation.active);
-    const previousActiveOperation = activeInfluenceOperationSelect.value;
-    activeInfluenceOperationSelect.innerHTML = '<option value="">Select operation</option>';
-    playerOps.forEach((operation) => {
-      const option = document.createElement('option');
-      option.value = String(operation.id);
-      const targetLabel = operation.targetCountryId === operation.sourceCountryId ? 'domestic' : operation.targetCountryId;
-      option.textContent = `#${operation.id} ${influenceSystem.getOperationLabel(operation.type)} → ${targetLabel}`;
-      activeInfluenceOperationSelect.appendChild(option);
-    });
-    if (previousActiveOperation && playerOps.some((operation) => String(operation.id) === previousActiveOperation)) {
-      activeInfluenceOperationSelect.value = previousActiveOperation;
-    }
-    cancelInfluenceOperationBtn.disabled = !activeInfluenceOperationSelect.value;
-  
-    activeInfluenceList.innerHTML = '';
-    if (!playerOps.length) {
-      activeInfluenceList.innerHTML = '<li>No active influence operations.</li>';
-    } else {
-      playerOps.forEach((operation) => {
-        const li = document.createElement('li');
-        const remainingDays = Math.ceil(influenceSystem.getRemainingDuration(operation) / DAY_MS);
-        const targetLabel = operation.targetCountryId === operation.sourceCountryId ? 'Domestic' : operation.targetCountryId;
-        li.textContent = `${influenceSystem.getOperationLabel(operation.type)} | Target: ${targetLabel} | Strength ${operation.intensity.toFixed(1)} | ${remainingDays}d left`;
-        activeInfluenceList.appendChild(li);
-      });
-    }
+    return uiControllers.information.refresh();
   }
   
   function refreshProxyConflictHud() {
-    const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-    const focusCountry = getDiplomacyFocusCountry();
-    const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousTarget = proxyTargetCountrySelect.value;
-    proxyTargetCountrySelect.innerHTML = '';
-    countryNames
-      .filter((name) => name !== playerCountry)
-      .forEach((name) => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        proxyTargetCountrySelect.appendChild(option);
-      });
-    if (previousTarget && countryNames.includes(previousTarget)) proxyTargetCountrySelect.value = previousTarget;
-    if (!proxyTargetCountrySelect.value && proxyTargetCountrySelect.options.length) proxyTargetCountrySelect.value = proxyTargetCountrySelect.options[0].value;
-  
-    const targetCountryId = proxyTargetCountrySelect.value;
-    localInstabilitySystem.ensureHotspots();
-    const hotspots = targetCountryId ? localInstabilitySystem.getCountryHotspots(targetCountryId) : [];
-    const previousHotspot = proxyTargetHotspotSelect.value;
-    proxyTargetHotspotSelect.innerHTML = '<option value="">Auto / country-level target</option>';
-    hotspots.slice(0, 10).forEach((hotspot) => {
-      const option = document.createElement('option');
-      option.value = hotspot.id;
-      option.textContent = `${hotspot.name} (${hotspot.severityLabel})`;
-      proxyTargetHotspotSelect.appendChild(option);
-    });
-    if (previousHotspot && hotspots.some((hotspot) => hotspot.id === previousHotspot)) {
-      proxyTargetHotspotSelect.value = previousHotspot;
-    }
-  
-    if (!focusCountry) {
-      proxyFocusCountry.textContent = 'Proxy operations for: --';
-      proxySummary.textContent = 'Proxy summary: --';
-      activeProxyOperationSelect.innerHTML = '<option value="">No active proxy operations</option>';
-      activeProxyList.innerHTML = '<li>No active proxy operations.</li>';
-      proxyIncidentList.innerHTML = '<li>No proxy incidents.</li>';
-      startProxyOperationBtn.disabled = true;
-      cancelProxyOperationBtn.disabled = true;
-      forceExposeProxyOperationBtn.disabled = true;
-      return;
-    }
-  
-    proxyFocusCountry.textContent = `Proxy operations for: ${focusCountry}`;
-    proxySummary.textContent = `Proxy summary: ${gameState.proxyConflict.lastSummary}`;
-    const canOperate = Boolean(playerCountry && focusCountry === playerCountry);
-    startProxyOperationBtn.disabled = !canOperate || !proxyTargetCountrySelect.value;
-  
-    const activePlayerOps = (gameState.proxyConflict.operations || [])
-      .filter((operation) => operation.active && operation.sourceCountryId === playerCountry);
-    const previousOp = activeProxyOperationSelect.value;
-    activeProxyOperationSelect.innerHTML = '<option value="">Select operation</option>';
-    activePlayerOps.forEach((operation) => {
-      const option = document.createElement('option');
-      option.value = operation.id;
-      option.textContent = `${operation.id} • ${proxyConflictSystem.getOperationLabel(operation.supportType)} → ${operation.targetCountryId}`;
-      activeProxyOperationSelect.appendChild(option);
-    });
-    if (previousOp && activePlayerOps.some((operation) => operation.id === previousOp)) activeProxyOperationSelect.value = previousOp;
-    cancelProxyOperationBtn.disabled = !activeProxyOperationSelect.value;
-    forceExposeProxyOperationBtn.disabled = !activeProxyOperationSelect.value;
-  
-    activeProxyList.innerHTML = '';
-    if (!activePlayerOps.length) {
-      activeProxyList.innerHTML = '<li>No active proxy operations.</li>';
-    } else {
-      activePlayerOps.forEach((operation) => {
-        const li = document.createElement('li');
-        const remainingDays = Math.ceil(proxyConflictSystem.getRemainingDuration(operation) / DAY_MS);
-        const status = operation.exposed ? 'EXPOSED' : 'deniable';
-        li.textContent = `${proxyConflictSystem.getOperationLabel(operation.supportType)} | Target: ${proxyConflictSystem.resolveTargetDescriptor(operation)} | Strength ${operation.strength.toFixed(2)} | Risk ${(operation.attributionRisk * 100).toFixed(0)}% | ${status} | ${remainingDays}d left`;
-        activeProxyList.appendChild(li);
-      });
-    }
-  
-    proxyIncidentList.innerHTML = '';
-    const incidents = gameState.proxyConflict.incidentLog || [];
-    if (!incidents.length) {
-      proxyIncidentList.innerHTML = '<li>No proxy incidents.</li>';
-    } else {
-      incidents.slice(0, 6).forEach((incident) => {
-        const li = document.createElement('li');
-        li.textContent = `${formatDateTime(incident.at)}: ${incident.message}`;
-        proxyIncidentList.appendChild(li);
-      });
-    }
+    return uiControllers.proxy.refresh();
   }
   
   function refreshMigrationHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    migrationSummary.textContent = gameState.migration?.lastSummary
-      ? `Migration: ${gameState.migration.lastSummary}`
-      : 'Migration: --';
-  
-    const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousOrigin = migrationOriginSelect.value;
-    const previousDestination = migrationDestinationSelect.value;
-    migrationOriginSelect.innerHTML = '';
-    migrationDestinationSelect.innerHTML = '';
-    countryNames.forEach((name) => {
-      const originOption = document.createElement('option');
-      originOption.value = name;
-      originOption.textContent = name;
-      migrationOriginSelect.appendChild(originOption);
-      const destinationOption = document.createElement('option');
-      destinationOption.value = name;
-      destinationOption.textContent = name;
-      migrationDestinationSelect.appendChild(destinationOption);
-    });
-    if (previousOrigin && countryNames.includes(previousOrigin)) migrationOriginSelect.value = previousOrigin;
-    if (previousDestination && countryNames.includes(previousDestination)) migrationDestinationSelect.value = previousDestination;
-  
-    const activeFlows = (gameState.migration?.flows || []).filter((flow) => flow.active);
-    const previousFlowId = Number(migrationFlowSelect.value);
-    migrationFlowSelect.innerHTML = '<option value="">Select active flow</option>';
-    activeFlows.forEach((flow) => {
-      const option = document.createElement('option');
-      option.value = String(flow.id);
-      option.textContent = `#${flow.id} ${flow.type} ${flow.originCountryId}→${flow.destinationCountryId} (${flow.amount.toFixed(1)})`;
-      migrationFlowSelect.appendChild(option);
-    });
-    if (previousFlowId && activeFlows.some((flow) => flow.id === previousFlowId)) {
-      migrationFlowSelect.value = String(previousFlowId);
-    }
-  
-    if (!focusCountry) {
-      migrationFocusCountry.textContent = 'Migration focus: --';
-      migrationInflowLabel.textContent = 'Inflow pressure: --';
-      migrationOutflowLabel.textContent = 'Outflow pressure: --';
-      migrationHumanitarianLabel.textContent = 'Humanitarian burden: --';
-      migrationFlowList.innerHTML = '<li>No country selected.</li>';
-      return;
-    }
-  
-    const country = countrySystem.ensureCountry(focusCountry);
-    const inflow = activeFlows
-      .filter((flow) => flow.destinationCountryId === focusCountry)
-      .reduce((sum, flow) => sum + flow.amount, 0);
-    const outflow = activeFlows
-      .filter((flow) => flow.originCountryId === focusCountry)
-      .reduce((sum, flow) => sum + flow.amount, 0);
-    const refugeeIn = activeFlows
-      .filter((flow) => flow.destinationCountryId === focusCountry && flow.type === 'refugee')
-      .reduce((sum, flow) => sum + flow.amount, 0);
-  
-    migrationFocusCountry.textContent = `Migration focus: ${focusCountry}`;
-    migrationInflowLabel.textContent = `Inflow pressure: ${inflow.toFixed(1)} (refugee ${refugeeIn.toFixed(1)})`;
-    migrationOutflowLabel.textContent = `Outflow pressure: ${outflow.toFixed(1)}`;
-    migrationHumanitarianLabel.textContent = `Humanitarian burden: ${(country.humanitarianBurden || 0).toFixed(1)} / 100`;
-  
-    const flows = activeFlows.filter((flow) => flow.originCountryId === focusCountry || flow.destinationCountryId === focusCountry);
-    migrationFlowList.innerHTML = '';
-    if (!flows.length) {
-      migrationFlowList.innerHTML = '<li>No active migration/refugee flows for this country.</li>';
-      return;
-    }
-  
-    flows
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 8)
-      .forEach((flow) => {
-        const li = document.createElement('li');
-        li.textContent = `${flow.type.toUpperCase()} ${flow.originCountryId} → ${flow.destinationCountryId} • pressure ${flow.amount.toFixed(1)} • cause ${flow.cause || 'n/a'} • ${flow.severity}`;
-        migrationFlowList.appendChild(li);
-      });
+    return uiControllers.migration.refresh();
   }
   
   function refreshEventHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    eventSummary.textContent = `Events: ${gameState.events.active.length} active globally`;
-    const countryNames = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousPrimary = eventTargetCountry.value;
-    const previousSecondary = eventSecondaryCountry.value;
-    eventTargetCountry.innerHTML = '';
-    eventSecondaryCountry.innerHTML = '<option value="">None</option>';
-    countryNames.forEach((name) => {
-      const optA = document.createElement('option');
-      optA.value = name;
-      optA.textContent = name;
-      eventTargetCountry.appendChild(optA);
-      const optB = document.createElement('option');
-      optB.value = name;
-      optB.textContent = name;
-      eventSecondaryCountry.appendChild(optB);
-    });
-    if (previousPrimary && countryNames.includes(previousPrimary)) eventTargetCountry.value = previousPrimary;
-    if (previousSecondary && countryNames.includes(previousSecondary)) eventSecondaryCountry.value = previousSecondary;
-  
-    const active = focusCountry ? eventSystem.getActiveEventsForCountry(focusCountry) : [];
-    activeEventsList.innerHTML = '';
-    if (!active.length) {
-      activeEventsList.innerHTML = '<li>No active events.</li>';
-    } else {
-      active.forEach((event) => {
-        const li = document.createElement('li');
-        const remainingDays = Math.max(0, (event.endTime - gameState.currentTimeMs) / DAY_MS).toFixed(1);
-        const chokepointTag = event.targetChokepointId ? ` • chokepoint ${event.targetChokepointId}` : '';
-        li.textContent = `${event.title} (${remainingDays} days left)${chokepointTag}`;
-        activeEventsList.appendChild(li);
-      });
-    }
-  
-    eventLogList.innerHTML = '';
-    if (!gameState.events.recentLog.length) {
-      eventLogList.innerHTML = '<li>No events logged.</li>';
-    } else {
-      gameState.events.recentLog.slice(0, 8).forEach((entry) => {
-        const li = document.createElement('li');
-        li.textContent = `${formatDateTime(entry.at)}: ${entry.message}`;
-        eventLogList.appendChild(li);
-      });
-    }
+    return uiControllers.event.refresh();
   }
   
   function refreshChokepointHud() {
-    const chokepoints = gameState.chokepoints.points || [];
-    chokepointSummary.textContent = `Route pressure: ${gameState.chokepoints.lastSummary}`;
-    const previousChokepoint = chokepointSelect.value;
-    chokepointSelect.innerHTML = '';
-    chokepoints.forEach((cp) => {
-      const option = document.createElement('option');
-      option.value = cp.id;
-      option.textContent = cp.name;
-      chokepointSelect.appendChild(option);
-    });
-    if (previousChokepoint && chokepoints.some((cp) => cp.id === previousChokepoint)) {
-      chokepointSelect.value = previousChokepoint;
-    }
-  
-    const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const previousController = chokepointControllerSelect.value;
-    chokepointControllerSelect.innerHTML = '<option value="">None</option>';
-    names.forEach((name) => {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      chokepointControllerSelect.appendChild(option);
-    });
-    if (previousController && names.includes(previousController)) {
-      chokepointControllerSelect.value = previousController;
-    }
-  
-    chokepointList.innerHTML = '';
-    if (!chokepoints.length) {
-      chokepointList.innerHTML = '<li>No chokepoints initialized.</li>';
-      [chokepointOpenBtn, chokepointRestrictedBtn, chokepointBlockedBtn, chokepointContestedToggleBtn, assignChokepointControllerBtn]
-        .forEach((btn) => { btn.disabled = true; });
-      return;
-    }
-    [chokepointOpenBtn, chokepointRestrictedBtn, chokepointBlockedBtn, chokepointContestedToggleBtn, assignChokepointControllerBtn]
-      .forEach((btn) => { btn.disabled = false; });
-  
-    chokepoints.forEach((cp) => {
-      const linkedFlows = gameState.trade.flows.filter((flow) => flow.requiredChokepoints?.includes(cp.id));
-      const affectedCountries = new Set(linkedFlows.flatMap((flow) => [flow.exporterCountryId, flow.importerCountryId]));
-      const li = document.createElement('li');
-      li.textContent = `${cp.name} • ${cp.openState.toUpperCase()} • controller ${cp.controllingCountryId || 'None'} • contested ${cp.contested ? 'Yes' : 'No'} • linked flows ${linkedFlows.length} • countries ${affectedCountries.size}`;
-      chokepointList.appendChild(li);
-    });
-  
-    const selected = chokepointSystem.getChokepoint(chokepointSelect.value);
-    if (selected) {
-      chokepointControllerSelect.value = selected.controllingCountryId || '';
-      chokepointContestedToggleBtn.textContent = selected.contested ? 'Mark Not Contested' : 'Mark Contested';
-    }
+    return uiControllers.chokepoint.refresh();
   }
   
   function refreshBlocHud() {
-    const blocs = gameState.blocs.items.filter((bloc) => bloc.active);
-    const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    blocSummary.textContent = `Blocs: ${gameState.blocs.lastSummary}`;
-    const selectedCountry = getDiplomacyFocusCountry();
-    const countryBlocs = selectedCountry ? blocSystem.getCountryBlocs(selectedCountry) : [];
-    selectedCountryBlocs.textContent = `Selected country blocs: ${selectedCountry ? (countryBlocs.map((bloc) => bloc.name).join(', ') || 'none') : '--'}`;
-  
-    const previousBloc = blocSelect.value;
-    blocSelect.innerHTML = '';
-    blocs.forEach((bloc) => {
-      const option = document.createElement('option');
-      option.value = bloc.id;
-      option.textContent = `${bloc.name} (${bloc.type})`;
-      blocSelect.appendChild(option);
-    });
-    if (previousBloc && blocs.some((bloc) => bloc.id === previousBloc)) blocSelect.value = previousBloc;
-  
-    const previousMember = blocMemberCountrySelect.value;
-    blocMemberCountrySelect.innerHTML = '';
-    names.forEach((name) => {
-      const option = document.createElement('option');
-      option.value = name;
-      option.textContent = name;
-      blocMemberCountrySelect.appendChild(option);
-    });
-    if (previousMember && names.includes(previousMember)) blocMemberCountrySelect.value = previousMember;
-  
-    blocList.innerHTML = '';
-    if (!blocs.length) {
-      blocList.innerHTML = '<li>No active blocs.</li>';
-      [addBlocMemberBtn, removeBlocMemberBtn, dissolveBlocBtn].forEach((btn) => { btn.disabled = true; });
-      return;
-    }
-    [addBlocMemberBtn, removeBlocMemberBtn, dissolveBlocBtn].forEach((btn) => { btn.disabled = false; });
-    blocs.forEach((bloc) => {
-      const li = document.createElement('li');
-      li.textContent = `${bloc.name} [${bloc.type}] • members: ${bloc.memberCountryIds.join(', ') || 'none'} • founded ${formatDateTime(bloc.foundedAt)}`;
-      blocList.appendChild(li);
-    });
+    return uiControllers.bloc.refresh();
   }
   
   function refreshTradeHud() {
-    const focusCountry = getDiplomacyFocusCountry();
-    const names = Object.keys(gameState.countries).sort((a, b) => a.localeCompare(b));
-    const prevExp = tradeExporterSelect.value;
-    const prevImp = tradeImporterSelect.value;
-    [tradeExporterSelect, tradeImporterSelect].forEach((select) => { select.innerHTML = ''; });
-    names.forEach((name) => {
-      const opt1 = document.createElement('option');
-      opt1.value = name;
-      opt1.textContent = name;
-      tradeExporterSelect.appendChild(opt1);
-      const opt2 = document.createElement('option');
-      opt2.value = name;
-      opt2.textContent = name;
-      tradeImporterSelect.appendChild(opt2);
-    });
-    if (prevExp && names.includes(prevExp)) tradeExporterSelect.value = prevExp;
-    if (prevImp && names.includes(prevImp)) tradeImporterSelect.value = prevImp;
-    toggleAutoTradeBtn.textContent = `Auto Trade: ${gameState.trade.autoEnabled ? 'On' : 'Off'}`;
-    tradeSummary.textContent = `Trade: ${gameState.trade.flows.filter((flow) => flow.active).length} active flows`;
-  
-    if (!focusCountry) {
-      tradeBalanceSummary.textContent = 'Balance: --';
-      tradeFlowsList.innerHTML = '<li>No country selected.</li>';
-      return;
-    }
-  
-    const country = countrySystem.ensureCountry(focusCountry);
-    tradeBalanceSummary.textContent = `Balance: Oil ${country.tradeBalance?.oil?.surplus?.toFixed(1) || 0}/${country.tradeBalance?.oil?.deficit?.toFixed(1) || 0} (surplus/deficit), Industry ${country.tradeBalance?.industry_support?.surplus?.toFixed(1) || 0}/${country.tradeBalance?.industry_support?.deficit?.toFixed(1) || 0}`;
-    const flows = gameState.trade.flows.filter((flow) => flow.exporterCountryId === focusCountry || flow.importerCountryId === focusCountry);
-    tradeFlowsList.innerHTML = '';
-    if (!flows.length) {
-      tradeFlowsList.innerHTML = '<li>No trade links.</li>';
-    } else {
-      flows.slice(-10).forEach((flow) => {
-        const li = document.createElement('li');
-        const dir = `${flow.exporterCountryId} → ${flow.importerCountryId}`;
-        const routeLabel = flow.requiredChokepoints?.length ? ` via ${flow.requiredChokepoints.join(',')}` : '';
-        const efficiency = typeof flow.routeEfficiency === 'number' ? ` eff ${(flow.routeEfficiency * 100).toFixed(0)}%` : '';
-        li.textContent = `${flow.resourceType} ${flow.flowAmount.toFixed(1)} (${dir}) ${flow.active ? `ACTIVE${efficiency}` : `BLOCKED:${flow.blockedReason || 'n/a'}`}${routeLabel}${flow.blockedReason && flow.active ? ` (${flow.blockedReason})` : ''}`;
-        tradeFlowsList.appendChild(li);
-      });
-    }
+    return uiControllers.trade.refresh();
   }
   
   function setStatus(message, isError = false) {
@@ -2276,993 +2027,70 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function attachDiplomacyControls() {
-    const runAction = (action) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      const targetCountry = diplomacyTargetCountry.value;
-      if (!focusCountry || !targetCountry) {
-        setStatus('Select a diplomacy target first.', true);
-        return false;
-      }
-      if (focusCountry === targetCountry) {
-        setStatus('Cannot apply diplomacy action to the same country.', true);
-        return false;
-      }
-      const result = action(focusCountry, targetCountry);
-      if (!result) {
-        setStatus('Diplomacy action failed.', true);
-        return false;
-      }
-      refreshDiplomacyHud();
-      refreshCountryHud();
-      return true;
-    };
-  
-    declareWarBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.declareWar(focus, target, `${focus} declared war on ${target}.`))) {
-        setStatus('War declared.');
-      }
-    });
-    makePeaceBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.makePeace(focus, target, `${focus} made peace with ${target}.`))) {
-        setStatus('Peace declared.');
-      }
-    });
-    improveRelationsBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.adjustRelationScore(focus, target, 10, `${focus} improved relations with ${target}.`))) {
-        setStatus('Relations improved.');
-      }
-    });
-    worsenRelationsBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.adjustRelationScore(focus, target, -10, `${focus} worsened relations with ${target}.`, true))) {
-        setStatus('Relations worsened.');
-      }
-    });
-    sanctionLightBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.imposeSanctions(focus, target, 'light'))) {
-        setStatus('Light sanctions imposed.');
-      }
-    });
-    sanctionHeavyBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.imposeSanctions(focus, target, 'heavy'))) {
-        setStatus('Heavy sanctions imposed.');
-      }
-    });
-    liftSanctionsBtn.addEventListener('click', () => {
-      if (runAction((focus, target) => diplomacySystem.liftSanctions(focus, target))) {
-        setStatus('Sanctions lifted.');
-      }
-    });
-    toggleTradeBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      const targetCountry = diplomacyTargetCountry.value;
-      if (!focusCountry || !targetCountry) {
-        setStatus('Select a diplomacy target first.', true);
-        return;
-      }
-      const currentState = diplomacySystem.getDirectionalPressure(focusCountry, targetCountry);
-      runAction((focus, target) => diplomacySystem.setTradeAllowed(focus, target, !currentState.tradeAllowed));
-      setStatus(currentState.tradeAllowed ? 'Trade blocked.' : 'Trade restored.');
-    });
-    diplomacyTargetCountry.addEventListener('change', () => refreshDiplomacyHud());
+    return uiControllers.diplomacy.bind();
   }
   
   function attachNegotiationControls() {
-    const getPair = () => {
-      const countryA = negotiationCountryA.value;
-      const countryB = negotiationCountryB.value;
-      if (!countryA || !countryB) {
-        setStatus('Select two countries for negotiation.', true);
-        return null;
-      }
-      if (countryA === countryB) {
-        setStatus('Negotiation requires two different countries.', true);
-        return null;
-      }
-      return { countryA, countryB };
-    };
-  
-    declareCeasefireBtn.addEventListener('click', () => {
-      const pair = getPair();
-      if (!pair) return;
-      const days = Math.max(0, Number(ceasefireDaysInput.value) || NEGOTIATION_CONFIG.ceasefireDefaultDays);
-      const result = negotiationSystem.setCeasefire(pair.countryA, pair.countryB, days);
-      if (!result) {
-        setStatus('Failed to set ceasefire.', true);
-        return;
-      }
-      refreshDiplomacyHud();
-      refreshNegotiationHud();
-      refreshTradeHud();
-      setStatus(`Ceasefire declared between ${pair.countryA} and ${pair.countryB}.`);
-    });
-  
-    signPeaceDealBtn.addEventListener('click', () => {
-      const pair = getPair();
-      if (!pair) return;
-      const result = negotiationSystem.signPeaceDeal(pair.countryA, pair.countryB);
-      if (!result) {
-        setStatus('Failed to sign peace deal.', true);
-        return;
-      }
-      refreshDiplomacyHud();
-      refreshNegotiationHud();
-      refreshTradeHud();
-      setStatus(`Peace deal signed between ${pair.countryA} and ${pair.countryB}.`);
-    });
-  
-    grantSanctionsReliefBtn.addEventListener('click', () => {
-      const pair = getPair();
-      if (!pair) return;
-      const result = negotiationSystem.applySanctionsRelief(pair.countryA, pair.countryB);
-      if (!result) {
-        setStatus('Failed to apply sanctions relief.', true);
-        return;
-      }
-      refreshDiplomacyHud();
-      refreshNegotiationHud();
-      refreshDomesticHud();
-      refreshTradeHud();
-      setStatus(`${pair.countryA} granted sanctions relief to ${pair.countryB}.`);
-    });
-  
-    borderDeEscalationBtn.addEventListener('click', () => {
-      const pair = getPair();
-      if (!pair) return;
-      const result = negotiationSystem.applyBorderDeEscalation(pair.countryA, pair.countryB);
-      if (!result) {
-        setStatus('Failed to apply border de-escalation.', true);
-        return;
-      }
-      refreshDiplomacyHud();
-      refreshNegotiationHud();
-      refreshDomesticHud();
-      setStatus(`Border de-escalation applied between ${pair.countryA} and ${pair.countryB}.`);
-    });
-  
-    restoreTradeBtn.addEventListener('click', () => {
-      const pair = getPair();
-      if (!pair) return;
-      const days = Math.max(0, Number(tradeRestoreDaysInput.value) || NEGOTIATION_CONFIG.temporaryTradeDefaultDays);
-      const result = negotiationSystem.restoreTemporaryTrade(pair.countryA, pair.countryB, days);
-      if (!result) {
-        setStatus('Failed to restore temporary trade.', true);
-        return;
-      }
-      refreshDiplomacyHud();
-      refreshNegotiationHud();
-      refreshTradeHud();
-      refreshDomesticHud();
-      setStatus(`Temporary trade restored between ${pair.countryA} and ${pair.countryB}.`);
-    });
+    return uiControllers.negotiation.bind();
   }
   
   function attachPolicyControls() {
-    applyPolicyBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-      if (!focusCountry || !playerCountry || focusCountry !== playerCountry) {
-        setStatus('Policies can only be changed for your selected country.', true);
-        return;
-      }
-      policySystem.setPolicyBundle(focusCountry, {
-        militarySpendingLevel: militaryPolicySelect.value,
-        industryInvestmentLevel: industryPolicySelect.value,
-        internalSecurityLevel: securityPolicySelect.value
-      });
-      setStatus(`Policy updated for ${focusCountry}.`);
-      refreshPolicyHud();
-      refreshCountryHud();
-      refreshDomesticHud();
-    });
+    return uiControllers.government.bindPolicyControls();
   }
   
   
   function attachGovernmentProfileControls() {
-    applyGovernmentProfileBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const country = countrySystem.ensureCountry(focusCountry);
-      governmentProfileSystem.setCountryProfile(country, {
-        regimeType: regimeTypeSelect.value,
-        economicOrientation: economicOrientationSelect.value,
-        foreignPolicyStyle: foreignPolicyStyleSelect.value
-      });
-      leadershipSystem.ensureLeadershipFields(country);
-      leadershipSystem.scheduleNextElection(country);
-      gameState.policy.lastSummary = `${focusCountry} profile set to ${governmentProfileSystem.getProfileSummary(country)}.`;
-      setStatus(`Government profile updated for ${focusCountry}.`);
-      refreshGovernmentProfileHud();
-      refreshCountryHud();
-      refreshPolicyHud();
-      refreshDomesticHud();
-      refreshDiplomacyHud();
-      refreshTradeHud();
-      refreshMigrationHud();
-    });
+    return uiControllers.government.bindGovernmentProfileControls();
   }
   
   
   function attachInformationControls() {
-    const syncInfluenceTargetState = () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-      const selectedType = influenceTypeSelect.value;
-      const typeMeta = INFLUENCE_CONFIG.types[selectedType];
-      const requiresForeignTarget = Boolean(typeMeta?.requiresForeignTarget);
-      influenceTargetCountry.disabled = !requiresForeignTarget;
-      if (!playerCountry || !focusCountry) {
-        startInfluenceOperationBtn.disabled = true;
-        return;
-      }
-      const canOperate = focusCountry === playerCountry;
-      startInfluenceOperationBtn.disabled = !canOperate;
-      if (!requiresForeignTarget) {
-        influenceTargetCountry.value = playerCountry;
-      } else if (influenceTargetCountry.value === playerCountry) {
-        const fallback = Object.keys(gameState.countries).find((name) => name !== playerCountry);
-        if (fallback) influenceTargetCountry.value = fallback;
-      }
-    };
-  
-    influenceTypeSelect.addEventListener('change', syncInfluenceTargetState);
-    activeInfluenceOperationSelect.addEventListener('change', () => {
-      cancelInfluenceOperationBtn.disabled = !activeInfluenceOperationSelect.value;
-    });
-    startInfluenceOperationBtn.addEventListener('click', () => {
-      const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!playerCountry || !focusCountry || focusCountry !== playerCountry) {
-        setStatus('Influence operations can only be started for your selected country.', true);
-        return;
-      }
-      const type = influenceTypeSelect.value;
-      const typeMeta = INFLUENCE_CONFIG.types[type];
-      const rawDuration = Math.max(INFLUENCE_CONFIG.minDurationDays, Math.min(INFLUENCE_CONFIG.maxDurationDays, Number(influenceDurationInput.value) || INFLUENCE_CONFIG.defaultDurationDays));
-      const rawIntensity = Math.max(INFLUENCE_CONFIG.minIntensity, Math.min(INFLUENCE_CONFIG.maxIntensity, Number(influenceIntensityInput.value) || 1));
-      const targetCountryId = typeMeta?.requiresForeignTarget ? influenceTargetCountry.value : playerCountry;
-      const result = influenceSystem.startOperation({
-        type,
-        sourceCountryId: playerCountry,
-        targetCountryId,
-        durationDays: rawDuration,
-        intensity: rawIntensity
-      });
-      if (!result.ok) {
-        setStatus(result.reason || 'Unable to start influence operation.', true);
-        return;
-      }
-      setStatus(`Started ${influenceSystem.getOperationLabel(type)} targeting ${result.operation.targetCountryId}.`);
-      refreshInformationHud();
-      refreshEconomyHud();
-      refreshDomesticHud();
-      refreshDiplomacyHud();
-      refreshResistanceHud();
-    });
-  
-    cancelInfluenceOperationBtn.addEventListener('click', () => {
-      const operationId = Number(activeInfluenceOperationSelect.value);
-      if (!operationId) {
-        setStatus('Select an active operation to cancel.', true);
-        return;
-      }
-      const canceled = influenceSystem.cancelOperation(operationId, 'canceled');
-      if (!canceled) {
-        setStatus('Unable to cancel that operation.', true);
-        return;
-      }
-      setStatus(`Influence operation #${operationId} canceled.`);
-      refreshInformationHud();
-    });
-  
-    const mutate = (mutator, message) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const country = countrySystem.ensureCountry(focusCountry);
-      mutator(country);
-      refreshInformationHud();
-      refreshDomesticHud();
-      refreshDiplomacyHud();
-      setStatus(message);
-    };
-  
-    raiseNarrativePressureBtn.addEventListener('click', () => mutate((country) => {
-      country.domesticNarrativePressure = Math.min(100, country.domesticNarrativePressure + 8);
-    }, 'Domestic narrative pressure increased.'));
-    lowerNarrativePressureBtn.addEventListener('click', () => mutate((country) => {
-      country.domesticNarrativePressure = Math.max(0, country.domesticNarrativePressure - 8);
-    }, 'Domestic narrative pressure reduced.'));
-    raiseReputationBtn.addEventListener('click', () => mutate((country) => {
-      country.internationalReputation = Math.min(100, country.internationalReputation + 8);
-    }, 'International reputation improved.'));
-    lowerReputationBtn.addEventListener('click', () => mutate((country) => {
-      country.internationalReputation = Math.max(-100, country.internationalReputation - 8);
-    }, 'International reputation damaged.'));
-    raiseInfoControlBtn.addEventListener('click', () => mutate((country) => {
-      country.informationControl = Math.min(100, country.informationControl + 6);
-    }, 'Information control strengthened.'));
-    lowerInfoControlBtn.addEventListener('click', () => mutate((country) => {
-      country.informationControl = Math.max(0, country.informationControl - 6);
-    }, 'Information control weakened.'));
-    triggerInfoSuccessBtn.addEventListener('click', () => mutate((country) => {
-      country.domesticNarrativePressure = Math.max(0, country.domesticNarrativePressure - 10);
-      country.internationalReputation = Math.min(100, country.internationalReputation + 4);
-      country.infoMetrics.cooperativeActions += 0.6;
-    }, 'Information campaign succeeded.'));
-    triggerInfoScandalBtn.addEventListener('click', () => mutate((country) => {
-      country.domesticNarrativePressure = Math.min(100, country.domesticNarrativePressure + 12);
-      country.internationalReputation = Math.max(-100, country.internationalReputation - 7);
-      country.infoMetrics.aggressiveActions += 0.4;
-    }, 'Information scandal spread.'));
-    syncInfluenceTargetState();
+    return uiControllers.information.bind();
   }
   
   function attachProxyConflictControls() {
-    const syncControls = () => {
-      refreshProxyConflictHud();
-    };
-  
-    proxyTypeSelect.addEventListener('change', syncControls);
-    proxyTargetCountrySelect.addEventListener('change', syncControls);
-    activeProxyOperationSelect.addEventListener('change', () => {
-      const enabled = Boolean(activeProxyOperationSelect.value);
-      cancelProxyOperationBtn.disabled = !enabled;
-      forceExposeProxyOperationBtn.disabled = !enabled;
-    });
-  
-    startProxyOperationBtn.addEventListener('click', () => {
-      const playerCountry = gameState.selectedPlayerCountry ? gameState.selectedPlayerCountry.properties.name : null;
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!playerCountry || !focusCountry || focusCountry !== playerCountry) {
-        setStatus('Proxy operations can only be started for your selected country.', true);
-        return;
-      }
-      const result = proxyConflictSystem.startOperation({
-        sourceCountryId: playerCountry,
-        targetCountryId: proxyTargetCountrySelect.value,
-        targetHotspotId: proxyTargetHotspotSelect.value || null,
-        supportType: proxyTypeSelect.value,
-        strength: Number(proxyStrengthInput.value),
-        attributionRisk: Number(proxyRiskInput.value),
-        durationDays: Number(proxyDurationInput.value)
-      });
-      if (!result.ok) {
-        setStatus(result.reason || 'Unable to start proxy operation.', true);
-        return;
-      }
-      setStatus(`Started ${proxyConflictSystem.getOperationLabel(result.operation.supportType)} targeting ${proxyConflictSystem.resolveTargetDescriptor(result.operation)}.`);
-      refreshProxyConflictHud();
-      refreshResistanceHud();
-      refreshLocalHotspotHud();
-      refreshEconomyHud();
-    });
-  
-    cancelProxyOperationBtn.addEventListener('click', () => {
-      const operationId = activeProxyOperationSelect.value;
-      if (!operationId) {
-        setStatus('Select an operation to cancel.', true);
-        return;
-      }
-      if (!proxyConflictSystem.cancelOperation(operationId)) {
-        setStatus('Unable to cancel selected proxy operation.', true);
-        return;
-      }
-      setStatus(`Canceled proxy operation ${operationId}.`);
-      refreshProxyConflictHud();
-    });
-  
-    forceExposeProxyOperationBtn.addEventListener('click', () => {
-      const operationId = activeProxyOperationSelect.value;
-      if (!operationId) {
-        setStatus('Select an operation to expose.', true);
-        return;
-      }
-      const ok = proxyConflictSystem.forceExpose(operationId);
-      if (!ok) {
-        setStatus('Unable to force exposure for selected operation.', true);
-        return;
-      }
-      setStatus(`Forced exposure for ${operationId}.`);
-      refreshProxyConflictHud();
-      refreshDiplomacyHud();
-    });
-  
-    syncControls();
+    return uiControllers.proxy.bind();
   }
   
   function attachResistanceControls() {
-    const mutateResistance = (mutator, message) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const country = countrySystem.ensureCountry(focusCountry);
-      mutator(country, focusCountry);
-      refreshResistanceHud();
-      refreshDomesticHud();
-      refreshStateStructureHud();
-      refreshCountryHud();
-      refreshEconomyHud();
-      setStatus(message);
-    };
-  
-    raiseInsurgencyBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.insurgencyPressure = internalResistanceSystem.clamp(country.insurgencyPressure + 8);
-    }, 'Insurgency pressure increased.'));
-    lowerInsurgencyBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.insurgencyPressure = internalResistanceSystem.clamp(country.insurgencyPressure - 8);
-    }, 'Insurgency pressure reduced.'));
-    raiseSeparatistBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.separatistPressure = internalResistanceSystem.clamp(country.separatistPressure + 8);
-    }, 'Separatist pressure increased.'));
-    lowerSeparatistBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.separatistPressure = internalResistanceSystem.clamp(country.separatistPressure - 8);
-    }, 'Separatist pressure reduced.'));
-    raiseStateControlBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.stateControl = internalResistanceSystem.clamp(country.stateControl + 8);
-    }, 'State control strengthened.'));
-    lowerStateControlBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.stateControl = internalResistanceSystem.clamp(country.stateControl - 8);
-    }, 'State control weakened.'));
-    raiseForeignPressureBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.foreignBackedPressure = internalResistanceSystem.clamp((country.foreignBackedPressure || 0) + 6);
-    }, 'Foreign-backed pressure increased.'));
-    lowerForeignPressureBtn.addEventListener('click', () => mutateResistance((country) => {
-      country.foreignBackedPressure = internalResistanceSystem.clamp((country.foreignBackedPressure || 0) - 6);
-    }, 'Foreign-backed pressure reduced.'));
-    triggerResistanceHotspotBtn.addEventListener('click', () => mutateResistance((country) => {
-      internalResistanceSystem.ensureHotspot(country, `Unstable zone ${Date.now().toString().slice(-3)}`);
-    }, 'Internal resistance hotspot created.'));
+    return uiControllers.resistance.bind();
   }
   
   
   function attachLocalHotspotControls() {
-    const mutateLocal = (mutator, message) => {
-      const hotspotId = localHotspotSelect.value || gameState.localInstability.selectedHotspotId;
-      if (!hotspotId) {
-        setStatus('Select a local hotspot first.', true);
-        return;
-      }
-      mutator(hotspotId);
-      refreshLocalHotspotHud();
-      refreshResistanceHud();
-      refreshDomesticHud();
-      refreshStateStructureHud();
-      refreshCountryHud();
-      refreshEconomyHud();
-      renderCities();
-      setStatus(message);
-    };
-  
-    localHotspotSelect.addEventListener('change', () => {
-      gameState.localInstability.selectedHotspotId = localHotspotSelect.value;
-      refreshLocalHotspotHud();
-    });
-    raiseLocalUnrestBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localUnrest', 8), 'Local unrest increased.'));
-    lowerLocalUnrestBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localUnrest', -8), 'Local unrest reduced.'));
-    raiseLocalControlBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStateControl', 8), 'Local state control increased.'));
-    lowerLocalControlBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStateControl', -8), 'Local state control reduced.'));
-    raiseLocalStabilityBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStability', 8), 'Local stability increased.'));
-    lowerLocalStabilityBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.adjustHotspotMetric(id, 'localStability', -8), 'Local stability reduced.'));
-    createManualHotspotBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const hotspots = localInstabilitySystem.getCountryHotspots(focusCountry);
-      const pick = hotspots[0];
-      if (!pick) {
-        setStatus('No city hotspots available for this country.', true);
-        return;
-      }
-      localInstabilitySystem.createManualHotspot(focusCountry, pick.linkedCityId, localHotspotTagSelect.value || 'unrest hotspot');
-      refreshLocalHotspotHud();
-      renderCities();
-      setStatus('Manual local hotspot created.');
-    });
-    clearManualHotspotBtn.addEventListener('click', () => mutateLocal((id) => localInstabilitySystem.clearHotspot(id), 'Local hotspot cleared.'));
-    localHotspotTagSelect.addEventListener('change', () => {
-      const hotspotId = localHotspotSelect.value || gameState.localInstability.selectedHotspotId;
-      if (!hotspotId) return;
-      localInstabilitySystem.setHotspotTag(hotspotId, localHotspotTagSelect.value);
-      refreshLocalHotspotHud();
-      renderCities();
-    });
+    return uiControllers.localHotspot.bind();
   }
   
   function attachLeadershipControls() {
-    const mutateLeadership = (mutator, message) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const country = countrySystem.ensureCountry(focusCountry);
-      leadershipSystem.ensureLeadershipFields(country);
-      mutator(country, focusCountry);
-      refreshDomesticHud();
-      refreshCountryHud();
-      refreshPolicyHud();
-      refreshDiplomacyHud();
-      setStatus(message);
-    };
-  
-    const mutateLeaderTrait = (trait, delta, label) => mutateLeadership((country, countryName) => {
-      const current = country.leaderTraits?.[trait] ?? 50;
-      leadershipSystem.setLeaderTrait(countryName, trait, current + delta);
-    }, `${label} adjusted.`);
-  
-    leaderApprovalUpBtn.addEventListener('click', () => mutateLeadership((country) => {
-      country.leaderApproval = Math.min(100, country.leaderApproval + 8);
-    }, 'Leader approval increased.'));
-    leaderApprovalDownBtn.addEventListener('click', () => mutateLeadership((country) => {
-      country.leaderApproval = Math.max(0, country.leaderApproval - 8);
-    }, 'Leader approval reduced.'));
-    leaderMandateUpBtn.addEventListener('click', () => mutateLeadership((country) => {
-      country.leaderMandate = Math.min(100, country.leaderMandate + 8);
-    }, 'Leader mandate increased.'));
-    leaderMandateDownBtn.addEventListener('click', () => mutateLeadership((country) => {
-      country.leaderMandate = Math.max(0, country.leaderMandate - 8);
-    }, 'Leader mandate reduced.'));
-  
-    triggerElectionCheckBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const result = leadershipSystem.evaluateElection(focusCountry, 'manual');
-      if (!result || result.ok === false) {
-        setStatus('Election check skipped: regime does not run standard elections.', true);
-        return;
-      }
-      setStatus(result.type === 'turnover'
-        ? `${focusCountry} election triggered turnover.`
-        : `${focusCountry} election renewed mandate.`);
-      refreshDomesticHud();
-      refreshCountryHud();
-    });
-  
-    triggerTurnoverBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      leadershipSystem.applyGovernmentTurnover(focusCountry, 'manual_override');
-      setStatus(`Manual government turnover applied for ${focusCountry}.`);
-      refreshDomesticHud();
-      refreshCountryHud();
-      refreshDiplomacyHud();
-      refreshPolicyHud();
-    });
-  
-    leaderRenameBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const nextName = leaderRenameInput.value.trim();
-      if (!nextName) {
-        setStatus('Enter a leader name first.', true);
-        return;
-      }
-      const changed = leadershipSystem.renameLeader(focusCountry, nextName);
-      if (!changed) {
-        setStatus('Unable to rename leader.', true);
-        return;
-      }
-      setStatus(`${focusCountry} leader renamed to ${nextName}.`);
-      refreshDomesticHud();
-    });
-  
-    leaderRegenerateBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const result = leadershipSystem.regenerateLeader(focusCountry);
-      setStatus(result?.message || 'Leader regenerated.');
-      refreshDomesticHud();
-      refreshCountryHud();
-    });
-  
-    leaderRefreshFlavorBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const result = leadershipSystem.regenerateLeaderFlavor(focusCountry);
-      setStatus(result?.message || 'Leader flavor refreshed.');
-      refreshDomesticHud();
-    });
-  
-    leaderRerollIdentityBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const result = leadershipSystem.regenerateLeaderFlavor(focusCountry, { rerollNameOnly: true });
-      setStatus(result?.message || 'Leader identity rerolled.');
-      refreshDomesticHud();
-      refreshCountryHud();
-    });
-  
-    leaderApplyArchetypeBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const archetype = leaderArchetypeSelect.value || 'pragmatist';
-      const result = leadershipSystem.regenerateLeader(focusCountry, { archetype });
-      setStatus(result?.message || `Leader archetype changed to ${archetype}.`);
-      refreshDomesticHud();
-      refreshCountryHud();
-    });
-  
-    leaderRiskUpBtn.addEventListener('click', () => mutateLeaderTrait('riskTolerance', 8, 'Leader risk tolerance'));
-    leaderRiskDownBtn.addEventListener('click', () => mutateLeaderTrait('riskTolerance', -8, 'Leader risk tolerance'));
-    leaderRepressionUpBtn.addEventListener('click', () => mutateLeaderTrait('repressionPreference', 8, 'Leader repression preference'));
-    leaderRepressionDownBtn.addEventListener('click', () => mutateLeaderTrait('repressionPreference', -8, 'Leader repression preference'));
-    leaderEconomicUpBtn.addEventListener('click', () => mutateLeaderTrait('economicCompetence', 8, 'Leader economic competence'));
-    leaderEconomicDownBtn.addEventListener('click', () => mutateLeaderTrait('economicCompetence', -8, 'Leader economic competence'));
-    leaderDiplomaticUpBtn.addEventListener('click', () => mutateLeaderTrait('diplomaticFlexibility', 8, 'Leader diplomatic flexibility'));
-    leaderDiplomaticDownBtn.addEventListener('click', () => mutateLeaderTrait('diplomaticFlexibility', -8, 'Leader diplomatic flexibility'));
-  
-    applyElectionOffsetBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const days = Math.max(1, Number(electionOffsetDaysInput.value) || 30);
-      const changed = leadershipSystem.setElectionOffsetDays(focusCountry, days);
-      if (!changed) {
-        setStatus('Election timing update not available for this regime.', true);
-        return;
-      }
-      setStatus(`Election timing moved to ${days} days from now for ${focusCountry}.`);
-      refreshDomesticHud();
-    });
+    return uiControllers.government.bindLeadershipControls();
   }
   
   function attachFactionControls() {
-    const mutateFaction = (mutator, message) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const country = countrySystem.ensureCountry(focusCountry);
-      factionSystem.ensureCountryFactions(country);
-      mutator(country, focusCountry);
-      country.factionEffects = factionSystem.computePressure(country);
-      refreshDomesticHud();
-      setStatus(message);
-    };
-  
-    factionInfluenceUpBtn.addEventListener('click', () => mutateFaction((country) => {
-      country.factions.security_elite.influence = factionSystem.clamp(country.factions.security_elite.influence + 8);
-    }, 'Security-elite influence increased.'));
-    factionInfluenceDownBtn.addEventListener('click', () => mutateFaction((country) => {
-      country.factions.security_elite.influence = factionSystem.clamp(country.factions.security_elite.influence - 8);
-    }, 'Security-elite influence reduced.'));
-    factionSatisfactionUpBtn.addEventListener('click', () => mutateFaction((country) => {
-      country.factions.public_civic_pressure.satisfaction = factionSystem.clamp(country.factions.public_civic_pressure.satisfaction + 8);
-    }, 'Public/civic support increased.'));
-    factionSatisfactionDownBtn.addEventListener('click', () => mutateFaction((country) => {
-      country.factions.public_civic_pressure.satisfaction = factionSystem.clamp(country.factions.public_civic_pressure.satisfaction - 8);
-    }, 'Public/civic support reduced.'));
-    triggerFactionShiftBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      factionSystem.triggerPressureShift(focusCountry);
-      refreshDomesticHud();
-      setStatus(`Faction pressure shift triggered for ${focusCountry}.`);
-    });
-    resetFactionStateBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      factionSystem.resetCountryFactions(focusCountry);
-      refreshDomesticHud();
-      setStatus(`Faction state reset for ${focusCountry}.`);
-    });
+    return uiControllers.government.bindFactionControls();
   }
   
   function attachStateStructureControls() {
-    const mutate = (mutator, successMessage) => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      mutator(focusCountry);
-      refreshStateStructureHud();
-      refreshDomesticHud();
-      refreshResistanceHud();
-      refreshLocalHotspotHud();
-      refreshCountryHud();
-      setStatus(successMessage);
-    };
-  
-    stateStructureSelect.addEventListener('change', () => mutate((focusCountry) => {
-      stateStructureSystem.setStateStructure(focusCountry, stateStructureSelect.value);
-    }, 'State structure updated.'));
-    autonomyUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustRegionalAutonomy(focusCountry, 8), 'Regional autonomy increased.'));
-    autonomyDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustRegionalAutonomy(focusCountry, -8), 'Regional autonomy reduced.'));
-    governanceUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustLocalGovernance(focusCountry, 8), 'Local governance capacity increased.'));
-    governanceDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustLocalGovernance(focusCountry, -8), 'Local governance capacity reduced.'));
-    tensionUpBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustCenterRegionTension(focusCountry, 8), 'Center-region tension increased.'));
-    tensionDownBtn.addEventListener('click', () => mutate((focusCountry) => stateStructureSystem.adjustCenterRegionTension(focusCountry, -8), 'Center-region tension reduced.'));
-    toggleEmergencyPowersBtn.addEventListener('click', () => {
-      const focusCountry = getDiplomacyFocusCountry();
-      if (!focusCountry) {
-        setStatus('Select a country first.', true);
-        return;
-      }
-      const result = stateStructureSystem.toggleEmergencyPowers(focusCountry);
-      if (!result.ok) {
-        setStatus(result.reason, true);
-        return;
-      }
-      refreshStateStructureHud();
-      refreshDomesticHud();
-      refreshResistanceHud();
-      refreshLocalHotspotHud();
-      refreshCountryHud();
-      setStatus(`Emergency powers ${result.active ? 'activated' : 'deactivated'} for ${focusCountry}.`);
-    });
+    return uiControllers.stateStructure.bind();
   }
   
   function attachMigrationControls() {
-    triggerRefugeeFlowBtn.addEventListener('click', () => {
-      const origin = migrationOriginSelect.value;
-      const destination = migrationDestinationSelect.value;
-      const amount = Number(migrationAmountInput.value) || 10;
-      const result = migrationSystem.triggerManualFlow(origin, destination, 'refugee', amount, 'manual_refugee_shock');
-      if (!result.ok) {
-        setStatus(result.message, true);
-        return;
-      }
-      setStatus(`Manual refugee flow triggered: ${origin} → ${destination}.`);
-      refreshMigrationHud();
-      refreshDomesticHud();
-    });
-  
-    triggerEconomicMigrationBtn.addEventListener('click', () => {
-      const origin = migrationOriginSelect.value;
-      const destination = migrationDestinationSelect.value;
-      const amount = Number(migrationAmountInput.value) || 10;
-      const result = migrationSystem.triggerManualFlow(origin, destination, 'migration', amount, 'manual_economic_pressure');
-      if (!result.ok) {
-        setStatus(result.message, true);
-        return;
-      }
-      setStatus(`Manual economic migration flow triggered: ${origin} → ${destination}.`);
-      refreshMigrationHud();
-      refreshDomesticHud();
-    });
-  
-    easeSelectedFlowBtn.addEventListener('click', () => {
-      const flowId = Number(migrationFlowSelect.value);
-      if (!flowId) {
-        setStatus('Select an active flow to ease.', true);
-        return;
-      }
-      const reduced = migrationSystem.reduceFlow(flowId, 0.35);
-      if (!reduced) {
-        setStatus('Unable to reduce selected flow.', true);
-        return;
-      }
-      setStatus(`Flow #${flowId} reduced.`);
-      refreshMigrationHud();
-    });
-  
-    recomputeMigrationBtn.addEventListener('click', () => {
-      migrationSystem.recomputeNow();
-      setStatus('Migration system recomputed.');
-      refreshMigrationHud();
-    });
+    return uiControllers.migration.bind();
   }
   
   function attachEventControls() {
-    triggerEventBtn.addEventListener('click', () => {
-      const type = eventTypeSelect.value;
-      const primary = eventTargetCountry.value;
-      const secondary = eventSecondaryCountry.value;
-      if (!primary) {
-        setStatus('Select a target country for the event.', true);
-        return;
-      }
-      let created = null;
-      if (type === 'border_incident') {
-        if (!secondary || secondary === primary) {
-          setStatus('Border incident requires two different countries.', true);
-          return;
-        }
-        created = eventSystem.createEvent(type, { targetCountryIds: [primary, secondary] });
-      } else if (type === 'chokepoint_disruption') {
-        const chokepointId = chokepointSelect.value;
-        if (!chokepointId) {
-          setStatus('Select a chokepoint before triggering chokepoint disruption.', true);
-          return;
-        }
-        created = eventSystem.createEvent(type, { targetCountryId: primary, targetChokepointId: chokepointId });
-      } else {
-        created = eventSystem.createEvent(type, { targetCountryId: primary });
-      }
-      if (!created) {
-        setStatus('Event not created (duplicate active event or invalid target).', true);
-        return;
-      }
-      refreshEventHud();
-    });
+    return uiControllers.event.bind();
   }
   
   function attachChokepointControls() {
-    const selectedId = () => chokepointSelect.value;
-    const setState = (state) => {
-      const chokepoint = chokepointSystem.setOpenState(selectedId(), state, 'manual');
-      if (!chokepoint) {
-        setStatus('Unable to update chokepoint state.', true);
-        return;
-      }
-      tradeSystem.processTick();
-      refreshChokepointHud();
-      refreshTradeHud();
-      setStatus(`${chokepoint.name} set to ${state}.`);
-    };
-  
-    chokepointOpenBtn.addEventListener('click', () => setState('open'));
-    chokepointRestrictedBtn.addEventListener('click', () => setState('restricted'));
-    chokepointBlockedBtn.addEventListener('click', () => setState('blocked'));
-    chokepointContestedToggleBtn.addEventListener('click', () => {
-      const chokepoint = chokepointSystem.getChokepoint(selectedId());
-      if (!chokepoint) {
-        setStatus('Select a chokepoint first.', true);
-        return;
-      }
-      chokepointSystem.setContested(chokepoint.id, !chokepoint.contested);
-      tradeSystem.processTick();
-      refreshChokepointHud();
-      refreshTradeHud();
-      setStatus(`${chokepoint.name} contestation toggled.`);
-    });
-    assignChokepointControllerBtn.addEventListener('click', () => {
-      const chokepoint = chokepointSystem.setController(selectedId(), chokepointControllerSelect.value || null);
-      if (!chokepoint) {
-        setStatus('Unable to assign chokepoint controller.', true);
-        return;
-      }
-      refreshChokepointHud();
-      refreshDiplomacyHud();
-      setStatus(`Controller updated for ${chokepoint.name}.`);
-    });
-    recomputeRoutePressureBtn.addEventListener('click', () => {
-      tradeSystem.processTick();
-      refreshTradeHud();
-      refreshChokepointHud();
-      setStatus('Route pressure recomputed.');
-    });
-    chokepointSelect.addEventListener('change', () => refreshChokepointHud());
+    return uiControllers.chokepoint.bind();
   }
   
   function attachBlocControls() {
-    createBlocBtn.addEventListener('click', () => {
-      const name = blocNameInput.value.trim();
-      if (!name) {
-        setStatus('Enter a bloc name.', true);
-        return;
-      }
-      const bloc = blocSystem.createBloc({ name, type: blocTypeSelect.value, description: `${blocTypeSelect.value} bloc` });
-      if (!bloc) {
-        setStatus('Failed to create bloc.', true);
-        return;
-      }
-      blocNameInput.value = '';
-      refreshBlocHud();
-      refreshDiplomacyHud();
-      setStatus(`Bloc created: ${bloc.name}.`);
-    });
-  
-    addBlocMemberBtn.addEventListener('click', () => {
-      const bloc = blocSystem.joinBloc(blocSelect.value, blocMemberCountrySelect.value);
-      if (!bloc) {
-        setStatus('Failed to add bloc member.', true);
-        return;
-      }
-      refreshBlocHud();
-      refreshDiplomacyHud();
-      refreshTradeHud();
-      setStatus(`${blocMemberCountrySelect.value} added to ${bloc.name}.`);
-    });
-  
-    removeBlocMemberBtn.addEventListener('click', () => {
-      const bloc = blocSystem.leaveBloc(blocSelect.value, blocMemberCountrySelect.value);
-      if (!bloc) {
-        setStatus('Failed to remove bloc member.', true);
-        return;
-      }
-      refreshBlocHud();
-      refreshDiplomacyHud();
-      refreshTradeHud();
-      setStatus(`${blocMemberCountrySelect.value} removed from ${bloc.name}.`);
-    });
-  
-    dissolveBlocBtn.addEventListener('click', () => {
-      const bloc = blocSystem.dissolveBloc(blocSelect.value);
-      if (!bloc) {
-        setStatus('Failed to dissolve bloc.', true);
-        return;
-      }
-      refreshBlocHud();
-      refreshDiplomacyHud();
-      refreshTradeHud();
-      setStatus(`Bloc dissolved: ${bloc.name}.`);
-    });
-  
-    blocSelect.addEventListener('change', () => refreshBlocHud());
+    return uiControllers.bloc.bind();
   }
   
   function attachTradeControls() {
-    toggleAutoTradeBtn.addEventListener('click', () => {
-      gameState.trade.autoEnabled = !gameState.trade.autoEnabled;
-      refreshTradeHud();
-      setStatus(`Auto trade ${gameState.trade.autoEnabled ? 'enabled' : 'disabled'}.`);
-    });
-    recomputeTradeBtn.addEventListener('click', () => {
-      tradeSystem.processTick();
-      setStatus('Trade flows recomputed.');
-    });
-    forceTradeBtn.addEventListener('click', () => {
-      const exporter = tradeExporterSelect.value;
-      const importer = tradeImporterSelect.value;
-      const resourceType = tradeResourceSelect.value;
-      const amount = Number(tradeAmountInput.value);
-      if (!exporter || !importer || exporter === importer) {
-        setStatus('Choose different exporter/importer countries.', true);
-        return;
-      }
-      const result = tradeSystem.createManualFlow(exporter, importer, resourceType, amount);
-      if (!result.ok) {
-        setStatus(result.message, true);
-        return;
-      }
-      tradeSystem.applyFlows();
-      refreshTradeHud();
-      setStatus('Manual trade flow applied.');
-    });
-    blockTradePairBtn.addEventListener('click', () => {
-      const exporter = tradeExporterSelect.value;
-      const importer = tradeImporterSelect.value;
-      if (!exporter || !importer || exporter === importer) {
-        setStatus('Choose different countries to block trade.', true);
-        return;
-      }
-      diplomacySystem.setTradeAllowed(exporter, importer, false);
-      diplomacySystem.setTradeAllowed(importer, exporter, false);
-      tradeSystem.processTick();
-      refreshDiplomacyHud();
-      setStatus(`Trade blocked between ${exporter} and ${importer}.`);
-    });
+    return uiControllers.trade.bind();
   }
   
   async function loadCountriesData() {
@@ -3474,39 +2302,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     attachMenuHandlers();
     attachTimeControls();
     attachUnitControls();
-    attachDiplomacyControls();
-    attachNegotiationControls();
-    attachPolicyControls();
-    attachGovernmentProfileControls();
-    attachLeadershipControls();
-    attachStateStructureControls();
-    attachInformationControls();
-    attachProxyConflictControls();
-    attachResistanceControls();
-    attachLocalHotspotControls();
-    attachFactionControls();
-    attachMigrationControls();
-    attachEventControls();
-    attachChokepointControls();
-    attachBlocControls();
-    attachTradeControls();
+    bindDomainPanels();
     refreshTimeHud();
     refreshEconomyHud();
     refreshCountryHud();
-    refreshDiplomacyHud();
-    refreshPolicyHud();
-    refreshGovernmentProfileHud();
-    refreshDomesticHud();
-    refreshStateStructureHud();
-    refreshResistanceHud();
-    refreshLocalHotspotHud();
-    refreshInformationHud();
-    refreshProxyConflictHud();
-    refreshMigrationHud();
-    refreshEventHud();
-    refreshChokepointHud();
-    refreshBlocHud();
-    refreshTradeHud();
+    refreshDomainPanels();
     renderSelectedUnitPanel();
     hudAlerts.textContent = 'Alerts: Ready';
   
