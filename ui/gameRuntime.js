@@ -507,6 +507,10 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   const manualSaveSlotSelect = document.getElementById('manualSaveSlotSelect');
   const manualSaveBtn = document.getElementById('manualSaveBtn');
   const manualLoadBtn = document.getElementById('manualLoadBtn');
+  const manualRenameBtn = document.getElementById('manualRenameBtn');
+  const manualDeleteBtn = document.getElementById('manualDeleteBtn');
+  const manualSaveLabelInput = document.getElementById('manualSaveLabelInput');
+  const manualLoadPauseCheckbox = document.getElementById('manualLoadPauseCheckbox');
   const manualSaveList = document.getElementById('manualSaveList');
   const scenarioPresetList = document.getElementById('scenarioPresetList');
   
@@ -2054,9 +2058,14 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
 
   function restoreScheduledTasks(taskList = [], nextTaskId = 1) {
     scheduler.tasks = [];
-    scheduler.nextTaskId = Number(nextTaskId) || 1;
+    scheduler.nextTaskId = Math.max(1, Number(nextTaskId) || 1);
     const handlerMap = buildTaskHandlerMap();
-    taskList.forEach((task) => {
+
+    const guardResult = window.GeoCommandSaveRuntimeGuards?.sanitizeScheduledTasks
+      ? window.GeoCommandSaveRuntimeGuards.sanitizeScheduledTasks(taskList, handlerMap)
+      : { tasks: Array.isArray(taskList) ? taskList : [], report: { restored: 0, skippedUnknown: 0, skippedInvalid: 0 } };
+
+    guardResult.tasks.forEach((task) => {
       const handler = handlerMap[task.type];
       if (!handler) return;
       scheduler.tasks.push({
@@ -2064,11 +2073,23 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         executeAt: task.executeAt,
         type: task.type,
         payload: task.payload,
-        handler: () => handler(task.payload || {})
+        handler: () => {
+          try {
+            handler(task.payload || {});
+          } catch (error) {
+            console.warn('Scheduled task handler failed during replay:', task.type, error);
+          }
+        }
       });
     });
+
     scheduler.tasks.sort((a, b) => a.executeAt - b.executeAt || a.id - b.id);
     scheduler.syncPendingTasks();
+    return {
+      restored: scheduler.tasks.length,
+      skippedUnknown: guardResult.report?.skippedUnknown || 0,
+      skippedInvalid: guardResult.report?.skippedInvalid || 0
+    };
   }
 
   function refreshAfterLoad() {
@@ -2099,14 +2120,16 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     updateContextActionPanels();
   }
 
-  function loadSnapshotIntoRuntime(snapshot, sourceLabel = 'session') {
+  function loadSnapshotIntoRuntime(snapshot, sourceLabel = 'session', options = {}) {
     if (!snapshot?.state) return { ok: false, message: 'Save payload is missing state.' };
+    const { pauseAfterLoad = false } = options;
     const incoming = snapshot.state;
     const selectedCountryName = incoming.selectedPlayerCountryName || null;
     const selectedFeature = selectedCountryName ? countries.find((entry) => entry.properties?.name === selectedCountryName) || null : null;
 
+    const targetSpeed = pauseAfterLoad ? 0 : (incoming.simulationSpeed ?? 1);
     gameClock.currentTimeMs = incoming.currentTimeMs || Date.parse(GAME_START_ISO);
-    gameClock.setSpeed(incoming.simulationSpeed ?? 1);
+    gameClock.setSpeed(targetSpeed);
 
     Object.assign(gameState, {
       selectedPlayerCountry: selectedFeature,
@@ -2115,7 +2138,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       selectedUnitId: incoming.selectedUnitId || null,
       selectedAsset: incoming.selectedAsset || null,
       currentTimeMs: incoming.currentTimeMs || Date.parse(GAME_START_ISO),
-      simulationSpeed: incoming.simulationSpeed ?? 1,
+      simulationSpeed: targetSpeed,
       bases: incoming.bases || [],
       cities: incoming.cities || [],
       units: incoming.units || [],
@@ -2172,27 +2195,57 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       ? `Loaded session for ${selectedFeature.properties.name} (${gameState.scenario?.name || 'Scenario'}).`
       : 'Loaded session with no active commander selected.';
 
-    restoreScheduledTasks(incoming.pendingTasks || [], snapshot.scheduler?.nextTaskId || incoming.nextCounters?.schedulerTask || 1);
+    const taskRestoreReport = restoreScheduledTasks(incoming.pendingTasks || [], snapshot.scheduler?.nextTaskId || incoming.nextCounters?.schedulerTask || 1);
     refreshAfterLoad();
-    setStatus(`Loaded ${sourceLabel} successfully.`, 'success');
-    return { ok: true };
+    const pausedLabel = pauseAfterLoad ? ' Simulation paused for inspection.' : '';
+    const queueLabel = (taskRestoreReport.skippedUnknown || taskRestoreReport.skippedInvalid)
+      ? ` Restored ${taskRestoreReport.restored} tasks; skipped ${taskRestoreReport.skippedUnknown} unknown and ${taskRestoreReport.skippedInvalid} invalid tasks.`
+      : ` Restored ${taskRestoreReport.restored} scheduled tasks.`;
+    setStatus(`Loaded ${sourceLabel} successfully.${pausedLabel}${queueLabel}`, 'success');
+    return {
+      ok: true,
+      taskRestoreReport,
+      pausedAfterLoad: pauseAfterLoad
+    };
+  }
+
+  function getDefaultManualSlotLabel(slotId) {
+    return `Manual Slot ${slotId.slice(-1)}`;
+  }
+
+  function getCurrentSlotMetadata(slotId) {
+    const manifest = window.GeoCommandSaveSystem.getManifestView();
+    return manifest.slots.find((entry) => entry.slotId === slotId)?.metadata || null;
   }
 
   function persistSave(slotId, slotName) {
     if (!window.GeoCommandSaveSystem) return { ok: false, message: 'Save subsystem unavailable.' };
     if (!gameState.selectedPlayerCountry) return { ok: false, message: 'Start a simulation before saving.' };
+    const hadData = window.GeoCommandSaveSystem.hasSlotData(slotId);
     const snapshot = createSnapshot(slotId, slotName);
     const saved = window.GeoCommandSaveSystem.saveSnapshot({ slotId, slotName, snapshot });
     if (!saved.ok) return saved;
+    saved.overwroteExisting = hadData;
     refreshLoadPanelUI();
     return saved;
   }
 
-  function loadSaveSlot(slotId, sourceLabel = 'save slot') {
+  function loadSaveSlot(slotId, sourceLabel = 'save slot', options = {}) {
     if (!window.GeoCommandSaveSystem) return { ok: false, message: 'Save subsystem unavailable.' };
     const loaded = window.GeoCommandSaveSystem.loadSnapshot(slotId);
-    if (!loaded.ok) return loaded;
-    return loadSnapshotIntoRuntime(loaded.snapshot, sourceLabel);
+    if (!loaded.ok) {
+      if (Array.isArray(loaded.errors) && loaded.errors.length) {
+        console.warn('Save validation errors:', loaded.errors);
+      }
+      return loaded;
+    }
+    const loadResult = loadSnapshotIntoRuntime(loaded.snapshot, sourceLabel, options);
+    if (!loadResult.ok) return loadResult;
+    return {
+      ...loadResult,
+      metadata: loaded.metadata,
+      migrations: loaded.migrations || []
+    };
   }
 
   function maybeAutosave(reason = 'autosave') {
@@ -2214,12 +2267,22 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       latestSaveMeta.textContent = manifest.latest ? `Latest save: ${formatSaveMeta(manifest.latest)}` : 'Latest save: none';
     }
 
+    const selectedSlotId = manualSaveSlotSelect?.value || 'slot1';
+    const selectedMetadata = manifest.slots.find((entry) => entry.slotId === selectedSlotId)?.metadata || null;
+    if (manualSaveLabelInput) {
+      manualSaveLabelInput.value = selectedMetadata?.slotName || getDefaultManualSlotLabel(selectedSlotId);
+    }
+
     if (manualSaveList) {
       manualSaveList.innerHTML = '';
       manifest.manualSlots.forEach((slotId, index) => {
         const metadata = manifest.slots.find((entry) => entry.slotId === slotId)?.metadata || null;
         const item = document.createElement('li');
-        item.textContent = `Manual Slot ${index + 1}: ${formatSaveMeta(metadata)}`;
+        if (!metadata) {
+          item.textContent = `Manual Slot ${index + 1}: Empty`;
+        } else {
+          item.textContent = `Manual Slot ${index + 1} (${metadata.slotName}): ${formatSaveMeta(metadata)}`;
+        }
         manualSaveList.appendChild(item);
       });
     }
@@ -2235,22 +2298,69 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
 
   function attachSaveControls() {
+    manualSaveSlotSelect?.addEventListener('change', refreshLoadPanelUI);
+
     manualSaveBtn?.addEventListener('click', () => {
       const slotId = manualSaveSlotSelect?.value || 'slot1';
-      const slotLabel = `Manual Slot ${slotId.slice(-1)}`;
+      const currentMeta = getCurrentSlotMetadata(slotId);
+      const customName = (manualSaveLabelInput?.value || '').trim();
+      const slotLabel = customName || currentMeta?.slotName || getDefaultManualSlotLabel(slotId);
+      if (currentMeta && !window.confirm(`Overwrite ${currentMeta.slotName}?`)) {
+        setStatus('Save cancelled. Existing slot kept unchanged.', 'warning');
+        return;
+      }
       const result = persistSave(slotId, slotLabel);
-      setStatus(result.ok ? `Saved to ${slotLabel}.` : result.message, result.ok ? 'success' : 'danger');
+      if (!result.ok) {
+        setStatus(result.message, 'danger');
+        return;
+      }
+      const overwriteLabel = result.overwroteExisting ? ' Overwrite confirmed.' : '';
+      setStatus(`Saved to ${slotLabel}.${overwriteLabel}`, 'success');
     });
 
     manualLoadBtn?.addEventListener('click', () => {
       const slotId = manualSaveSlotSelect?.value || 'slot1';
-      const slotLabel = `Manual Slot ${slotId.slice(-1)}`;
-      const result = loadSaveSlot(slotId, slotLabel);
+      const slotMeta = getCurrentSlotMetadata(slotId);
+      const slotLabel = slotMeta?.slotName || getDefaultManualSlotLabel(slotId);
+      const pauseAfterLoad = Boolean(manualLoadPauseCheckbox?.checked);
+      const result = loadSaveSlot(slotId, slotLabel, { pauseAfterLoad });
       if (!result.ok) {
-        setStatus(result.message, true);
+        setStatus(result.message, 'danger');
         return;
       }
       hideOverlays();
+    });
+
+    manualRenameBtn?.addEventListener('click', () => {
+      const slotId = manualSaveSlotSelect?.value || 'slot1';
+      const slotLabel = (manualSaveLabelInput?.value || '').trim();
+      const result = window.GeoCommandSaveSystem.renameManualSlot(slotId, slotLabel);
+      if (!result.ok) {
+        setStatus(result.message, 'danger');
+        return;
+      }
+      refreshLoadPanelUI();
+      setStatus(`Renamed ${getDefaultManualSlotLabel(slotId)} to ${result.metadata.slotName}.`, 'success');
+    });
+
+    manualDeleteBtn?.addEventListener('click', () => {
+      const slotId = manualSaveSlotSelect?.value || 'slot1';
+      const meta = getCurrentSlotMetadata(slotId);
+      if (!meta) {
+        setStatus('Selected manual slot is already empty.', 'warning');
+        return;
+      }
+      if (!window.confirm(`Delete ${meta.slotName}? This cannot be undone.`)) {
+        setStatus('Delete cancelled.', 'warning');
+        return;
+      }
+      const result = window.GeoCommandSaveSystem.deleteManualSlot(slotId);
+      if (!result.ok) {
+        setStatus(result.message, 'danger');
+        return;
+      }
+      refreshLoadPanelUI();
+      setStatus(result.message, 'success');
     });
 
     quickSaveBtn?.addEventListener('click', () => {
@@ -2264,7 +2374,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         setStatus('No latest save found. Use Quick Save or manual slots first.', true);
         return;
       }
-      const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session');
+      const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session', { pauseAfterLoad: false });
       if (!result.ok) setStatus(result.message, true);
     });
 

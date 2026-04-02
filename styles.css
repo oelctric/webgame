@@ -481,6 +481,8 @@
 
     .field { margin: 0.7rem 0; }
     .field label { display: block; margin-bottom: 0.28rem; }
+    .inline-checkbox { display: flex !important; align-items: center; gap: 0.45rem; margin: 0; }
+    .inline-checkbox input { width: auto; }
 
     .field input,
     .field select {

@@ -927,9 +927,23 @@
                 <option value="slot3">Manual Slot 3</option>
               </select>
             </div>
+            <div class="field">
+              <label for="manualSaveLabelInput">Save Label</label>
+              <input id="manualSaveLabelInput" type="text" maxlength="64" placeholder="Custom save label" />
+            </div>
             <div class="row">
               <button id="manualSaveBtn">Save to Slot</button>
               <button id="manualLoadBtn">Load Slot</button>
+            </div>
+            <div class="row">
+              <button id="manualRenameBtn">Rename Slot</button>
+              <button id="manualDeleteBtn">Delete Slot</button>
+            </div>
+            <div class="field">
+              <label class="inline-checkbox" for="manualLoadPauseCheckbox">
+                <input id="manualLoadPauseCheckbox" type="checkbox" checked />
+                Pause simulation after manual load
+              </label>
             </div>
             <ul class="menu-list" id="manualSaveList"></ul>
           </article>
@@ -1054,6 +1068,7 @@
   <script src="core/gameClock.js" defer></script>
   <script src="core/taskScheduler.js" defer></script>
   <script src="core/saveSystem.js" defer></script>
+  <script src="core/saveRuntimeGuards.js" defer></script>
   <script src="systems/government-profile.js" defer></script>
   <script src="systems/country.js" defer></script>
   <script src="systems/state-structure.js" defer></script>
