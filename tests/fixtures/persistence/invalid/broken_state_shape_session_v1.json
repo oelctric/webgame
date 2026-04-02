@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "version": 1,
+    "slotId": "fixture-broken-state",
+    "slotName": "Broken State Shape Fixture",
+    "country": "Turkey",
+    "scenario": "Shape Corruption"
+  },
+  "scheduler": {
+    "nextTaskId": 2
+  },
+  "state": null
+}

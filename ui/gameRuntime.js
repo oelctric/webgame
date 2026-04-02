@@ -2056,9 +2056,17 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     scheduler.tasks = [];
     scheduler.nextTaskId = Number(nextTaskId) || 1;
     const handlerMap = buildTaskHandlerMap();
+    const skippedTasks = [];
     taskList.forEach((task) => {
+      if (!task || typeof task !== 'object' || typeof task.type !== 'string' || !Number.isFinite(Number(task.executeAt))) {
+        skippedTasks.push({ type: task?.type || null, reason: 'Malformed task payload.' });
+        return;
+      }
       const handler = handlerMap[task.type];
-      if (!handler) return;
+      if (!handler) {
+        skippedTasks.push({ type: task.type, reason: 'Unknown task type.' });
+        return;
+      }
       scheduler.tasks.push({
         id: task.id,
         executeAt: task.executeAt,
@@ -2069,6 +2077,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     });
     scheduler.tasks.sort((a, b) => a.executeAt - b.executeAt || a.id - b.id);
     scheduler.syncPendingTasks();
+    return {
+      restoredCount: scheduler.tasks.length,
+      skippedTasks,
+      nextTaskId: scheduler.nextTaskId
+    };
   }
 
   function refreshAfterLoad() {
@@ -2099,7 +2112,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     updateContextActionPanels();
   }
 
-  function loadSnapshotIntoRuntime(snapshot, sourceLabel = 'session') {
+  function loadSnapshotIntoRuntime(snapshot, sourceLabel = 'session', options = {}) {
     if (!snapshot?.state) return { ok: false, message: 'Save payload is missing state.' };
     const incoming = snapshot.state;
     const selectedCountryName = incoming.selectedPlayerCountryName || null;
@@ -2172,10 +2185,45 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       ? `Loaded session for ${selectedFeature.properties.name} (${gameState.scenario?.name || 'Scenario'}).`
       : 'Loaded session with no active commander selected.';
 
-    restoreScheduledTasks(incoming.pendingTasks || [], snapshot.scheduler?.nextTaskId || incoming.nextCounters?.schedulerTask || 1);
+    const schedulerRestore = restoreScheduledTasks(incoming.pendingTasks || [], snapshot.scheduler?.nextTaskId || incoming.nextCounters?.schedulerTask || 1);
     refreshAfterLoad();
-    setStatus(`Loaded ${sourceLabel} successfully.`, 'success');
-    return { ok: true };
+    if (!options.suppressStatus) {
+      setStatus(`Loaded ${sourceLabel} successfully.`, 'success');
+    }
+    return { ok: true, schedulerRestore };
+  }
+
+  function summarizePersistenceRuntimeState() {
+    return {
+      playerCountry: gameState.selectedPlayerCountry?.properties?.name || null,
+      gameTimeMs: gameState.currentTimeMs,
+      scenario: gameState.scenario?.name || gameState.scenario?.id || null,
+      schedulerTaskCount: scheduler.tasks.length,
+      pendingTaskCount: Array.isArray(gameState.pendingTasks) ? gameState.pendingTasks.length : 0
+    };
+  }
+
+  function runPersistenceSmokeRestore(snapshot, sourceLabel = 'fixture smoke') {
+    if (!window.GeoCommandSaveSystem?.prepareSnapshotForRestore) {
+      return { ok: false, message: 'Save preparation pipeline is unavailable.' };
+    }
+    const prepared = window.GeoCommandSaveSystem.prepareSnapshotForRestore(snapshot);
+    if (!prepared.ok) {
+      return {
+        ok: false,
+        stage: prepared.phase || 'prepare',
+        message: prepared.message,
+        compatibility: prepared.report || null
+      };
+    }
+    const restored = loadSnapshotIntoRuntime(prepared.snapshot, sourceLabel, { suppressStatus: true });
+    return {
+      ok: restored.ok,
+      compatibility: prepared.report,
+      schedulerRestore: restored.schedulerRestore || null,
+      runtime: summarizePersistenceRuntimeState(),
+      message: restored.message || null
+    };
   }
 
   function persistSave(slotId, slotName) {
@@ -2751,5 +2799,10 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     startSimulationLoop();
   }
 
-  return { init };
+  return {
+    init,
+    loadSnapshotIntoRuntime,
+    runPersistenceSmokeRestore,
+    summarizePersistenceRuntimeState
+  };
 };

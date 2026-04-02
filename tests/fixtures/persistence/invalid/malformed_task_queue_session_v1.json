@@ -1,0 +1,17 @@
+{
+  "meta": {
+    "version": 1,
+    "slotId": "fixture-malformed-tasks",
+    "slotName": "Malformed Task Queue Fixture",
+    "country": "Brazil",
+    "scenario": "Queue Corruption"
+  },
+  "scheduler": {
+    "nextTaskId": 7
+  },
+  "state": {
+    "selectedPlayerCountryName": "Brazil",
+    "currentTimeMs": 1799851800000,
+    "pendingTasks": "not-an-array"
+  }
+}

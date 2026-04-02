@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "description": "Regression fixtures for Geo Command save/load compatibility.",
+  "valid": [
+    {
+      "name": "baseline_session_v1",
+      "path": "tests/fixtures/persistence/v1/baseline_session_v1.json",
+      "intent": "Balanced mid-session with stable diplomacy/trade/events and normal scheduler data."
+    },
+    {
+      "name": "high_tension_session_v1",
+      "path": "tests/fixtures/persistence/v1/high_tension_session_v1.json",
+      "intent": "Escalation scenario including one legacy task type to verify runtime task skipping behavior."
+    },
+    {
+      "name": "economic_shock_session_v1",
+      "path": "tests/fixtures/persistence/v1/economic_shock_session_v1.json",
+      "intent": "Economic stress scenario with domestic + migration pressure and sandbox mode metadata."
+    }
+  ],
+  "invalid": [
+    {
+      "name": "missing_meta_session_v1",
+      "path": "tests/fixtures/persistence/invalid/missing_meta_session_v1.json",
+      "intent": "Missing required meta block should fail during migration."
+    },
+    {
+      "name": "unsupported_version_session_v99",
+      "path": "tests/fixtures/persistence/invalid/unsupported_version_session_v99.json",
+      "intent": "Future version fixture should be rejected as unsupported."
+    },
+    {
+      "name": "malformed_task_queue_session_v1",
+      "path": "tests/fixtures/persistence/invalid/malformed_task_queue_session_v1.json",
+      "intent": "Pending task queue wrong type should fail validation."
+    },
+    {
+      "name": "broken_state_shape_session_v1",
+      "path": "tests/fixtures/persistence/invalid/broken_state_shape_session_v1.json",
+      "intent": "Null state should fail normalization."
+    }
+  ]
+}
