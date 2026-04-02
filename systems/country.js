@@ -58,6 +58,13 @@ class CountrySystem {
         leaderMandate: LEADERSHIP_CONFIG.defaultMandate,
         leaderApproval: LEADERSHIP_CONFIG.defaultApproval,
         governmentContinuity: LEADERSHIP_CONFIG.defaultContinuity,
+        leaderName: null,
+        leaderId: null,
+        leaderArchetype: 'pragmatist',
+        leaderTraits: null,
+        leaderSummary: '',
+        leaderFlavor: null,
+        leaderBehaviorBias: null,
         electionCycleLengthMs: null,
         nextElectionAt: null,
         lastLeadershipReviewAt: null,
@@ -172,6 +179,13 @@ class CountrySystem {
     if (typeof country.leaderMandate !== 'number') country.leaderMandate = LEADERSHIP_CONFIG.defaultMandate;
     if (typeof country.leaderApproval !== 'number') country.leaderApproval = LEADERSHIP_CONFIG.defaultApproval;
     if (typeof country.governmentContinuity !== 'number') country.governmentContinuity = LEADERSHIP_CONFIG.defaultContinuity;
+    if (typeof country.leaderName !== 'string' || !country.leaderName.trim()) country.leaderName = null;
+    if (typeof country.leaderId !== 'string' || !country.leaderId) country.leaderId = null;
+    if (typeof country.leaderArchetype !== 'string') country.leaderArchetype = 'pragmatist';
+    if (!country.leaderTraits) country.leaderTraits = null;
+    if (typeof country.leaderSummary !== 'string') country.leaderSummary = '';
+    if (!country.leaderFlavor) country.leaderFlavor = null;
+    if (!country.leaderBehaviorBias) country.leaderBehaviorBias = null;
     if (typeof country.electionCycleLengthMs !== 'number') country.electionCycleLengthMs = null;
     if (country.nextElectionAt == null) country.nextElectionAt = null;
     if (country.lastLeadershipReviewAt == null) country.lastLeadershipReviewAt = null;

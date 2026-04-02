@@ -20,6 +20,7 @@ class AISystem {
     this.stateStructureSystem = systems.stateStructureSystem || null;
     this.negotiationSystem = systems.negotiationSystem;
     this.governmentProfileSystem = systems.governmentProfileSystem || null;
+    this.leadershipSystem = systems.leadershipSystem || null;
     this.started = false;
   }
 
@@ -138,6 +139,7 @@ class AISystem {
 
   evaluateCountryGeopolitics(countryName) {
     const country = this.countrySystem.ensureCountry(countryName);
+    if (this.leadershipSystem) this.leadershipSystem.ensureLeadershipFields(country);
     const relations = this.diplomacySystem.getRelationsForCountry(countryName);
     const pressure = this.diplomacySystem.getEconomicPressureOnCountry(countryName);
     const wars = relations.filter((r) => r.status === 'war');
@@ -218,6 +220,14 @@ class AISystem {
     const recentTurnover = (this.gameState.currentTimeMs - (country.lastTurnoverAt || 0)) <= 120 * DAY_MS;
     if (this.factionSystem) this.factionSystem.ensureCountryFactions(country);
     const faction = country.factionEffects || {};
+    const leaderBias = country.leaderBehaviorBias || {
+      escalationBias: 0,
+      deescalationBias: 0,
+      internalSecurityBias: 0,
+      economicStabilizationBias: 0,
+      negotiationBias: 0,
+      crisisResilienceBias: 0
+    };
 
     const rivalStrengthScore = rivalCountry
       ? (rivalCountry.stability + rivalCountry.industrialCapacity + (rivalCountry.treasury / 120) + (rivalCountry.manpowerPool / 220) - rivalCountry.economicStress)
@@ -267,6 +277,12 @@ class AISystem {
         factionSecurityBias: faction.internalSecurityBias || 0,
         factionHardlineBias: faction.hardlinePostureBias || 0
         ,
+        leaderEscalationBias: leaderBias.escalationBias || 0,
+        leaderDeescalationBias: leaderBias.deescalationBias || 0,
+        leaderSecurityBias: leaderBias.internalSecurityBias || 0,
+        leaderEconomicBias: leaderBias.economicStabilizationBias || 0,
+        leaderNegotiationBias: leaderBias.negotiationBias || 0,
+        leaderCrisisBias: leaderBias.crisisResilienceBias || 0,
         stateStructure,
         regionalAutonomy,
         governanceCapacity,
@@ -286,7 +302,8 @@ class AISystem {
     const controlEmergency = country.stateControl < 45 || country.insurgencyPressure > 62 || severeHotspots;
     const legitimacyRisk = country.legitimacy < 34 || country.publicSupport < 32 || country.domesticNarrativePressure > 72;
     const structureBias = country.stateStructure === 'centralized' ? 0.2 : (country.stateStructure === 'federal' ? -0.18 : 0);
-    const shouldActivate = controlEmergency && !legitimacyRisk && (metrics.factionHardlineBias + structureBias > -0.25);
+    const leaderSecurityPush = metrics.leaderSecurityBias * 0.4;
+    const shouldActivate = controlEmergency && !legitimacyRisk && (metrics.factionHardlineBias + structureBias + leaderSecurityPush > -0.25);
     const shouldDeactivate = country.emergencyPowersActive && (legitimacyRisk || (!controlEmergency && country.stateControl > 55));
     if (shouldActivate && !country.emergencyPowersActive) {
       this.stateStructureSystem.toggleEmergencyPowers(countryName, true);
@@ -326,6 +343,12 @@ class AISystem {
     scores.stabilize_domestic += metrics.factionSecurityBias > 0.4 ? 18 : 0;
     scores.pressure_rival += metrics.factionHardlineBias * 24;
     scores.isolate_rival += metrics.factionHardlineBias * 18;
+    scores.pressure_rival += metrics.leaderEscalationBias * 26;
+    scores.isolate_rival += metrics.leaderEscalationBias * 18;
+    scores.deescalate_conflict += metrics.leaderDeescalationBias * 28;
+    scores.stabilize_domestic += metrics.leaderCrisisBias * 24;
+    scores.secure_resources += metrics.leaderEconomicBias * 20;
+    scores.protect_trade += metrics.leaderNegotiationBias * 18;
     if (metrics.stateStructure === 'centralized') {
       scores.stabilize_domestic += 8;
       scores.pressure_rival += 6;
@@ -489,19 +512,24 @@ class AISystem {
     const domestic = this.governmentProfileSystem ? this.governmentProfileSystem.getDomesticModifiers(country) : { securitySuppressionMult: 1 };
     const weakMandate = country.leaderMandate < 42 || country.leaderApproval < 44 || country.governmentContinuity < 40;
     const faction = country.factionEffects || {};
+    const leader = country.leaderTraits || {};
+    const riskHigh = (leader.riskTolerance || 50) >= 62;
+    const repressionHigh = (leader.repressionPreference || 50) >= 60;
+    const econHigh = (leader.economicCompetence || 50) >= 60;
+    const diplomacyHigh = (leader.diplomaticFlexibility || 50) >= 60;
     const centralizedBias = country.stateStructure === 'centralized';
     const federalBias = country.stateStructure === 'federal';
     if (goal === 'deescalate_conflict' || goal === 'stabilize_domestic') {
       return {
         militarySpendingLevel: country.treasury < 1500 || weakMandate ? 'low' : 'normal',
-        industryInvestmentLevel: country.economicStress > 58 ? 'low' : 'normal',
-        internalSecurityLevel: (country.insurgencyPressure > 45 || country.stateControl < 58 || domestic.securitySuppressionMult > 1.15 || (faction.internalSecurityBias || 0) > 0.45 || centralizedBias) ? 'high' : (federalBias ? 'normal' : 'high')
+        industryInvestmentLevel: country.economicStress > 58 && !econHigh ? 'low' : 'normal',
+        internalSecurityLevel: (country.insurgencyPressure > 45 || country.stateControl < 58 || domestic.securitySuppressionMult > 1.15 || (faction.internalSecurityBias || 0) > 0.45 || repressionHigh || centralizedBias) ? 'high' : (federalBias ? 'normal' : 'high')
       };
     }
     if (goal === 'secure_resources' || goal === 'protect_trade') {
       return {
-        militarySpendingLevel: country.warWeariness > 45 ? 'low' : 'normal',
-        industryInvestmentLevel: 'normal',
+        militarySpendingLevel: country.warWeariness > 45 && !riskHigh ? 'low' : 'normal',
+        industryInvestmentLevel: econHigh ? 'high' : 'normal',
         internalSecurityLevel: 'normal'
       };
     }
@@ -514,15 +542,15 @@ class AISystem {
     }
     if (goal === 'pressure_rival' || goal === 'isolate_rival' || goal === 'defend_chokepoints') {
       return {
-        militarySpendingLevel: weakMandate ? 'normal' : ((foreign.escalationBias > 0 || (faction.warToleranceBias || 0) > 0.4) ? 'high' : 'normal'),
-        industryInvestmentLevel: country.treasury > 2600 ? 'high' : 'normal',
-        internalSecurityLevel: weakMandate || (faction.internalSecurityBias || 0) > 0.3 ? 'high' : 'normal'
+        militarySpendingLevel: weakMandate ? 'normal' : ((foreign.escalationBias > 0 || (faction.warToleranceBias || 0) > 0.4 || riskHigh) ? 'high' : 'normal'),
+        industryInvestmentLevel: country.treasury > 2600 || econHigh ? 'high' : 'normal',
+        internalSecurityLevel: weakMandate || (faction.internalSecurityBias || 0) > 0.3 || repressionHigh ? 'high' : 'normal'
       };
     }
     if (goal === 'expand_influence') {
       return {
-        militarySpendingLevel: 'normal',
-        industryInvestmentLevel: country.treasury > 2200 ? 'high' : 'normal',
+        militarySpendingLevel: riskHigh ? 'high' : 'normal',
+        industryInvestmentLevel: country.treasury > 2200 || econHigh ? 'high' : 'normal',
         internalSecurityLevel: 'normal'
       };
     }
@@ -543,14 +571,14 @@ class AISystem {
       if (activeWar?.counterpart) {
         this.performStrategicAction(state, now, 'deescalate', `ceasefire:${activeWar.counterpart}`, () => {
           if (this.negotiationSystem) {
-            this.negotiationSystem.setCeasefire(countryName, activeWar.counterpart, 25);
+            this.negotiationSystem.setCeasefire(countryName, activeWar.counterpart, country.leaderTraits?.diplomaticFlexibility > 60 ? 35 : 25);
           } else {
             this.diplomacySystem.makePeace(countryName, activeWar.counterpart, `${countryName} de-escalated under domestic strain.`);
           }
         });
       }
       this.performStrategicAction(state, now, 'sanctions_relief', `lift:${strongestRival.counterpart}`, () => {
-        if (this.negotiationSystem) this.negotiationSystem.applySanctionsRelief(countryName, strongestRival.counterpart);
+        if (this.negotiationSystem && (country.leaderTraits?.diplomaticFlexibility || 50) > 40) this.negotiationSystem.applySanctionsRelief(countryName, strongestRival.counterpart);
         else this.diplomacySystem.liftSanctions(countryName, strongestRival.counterpart);
       });
       return;
@@ -677,7 +705,8 @@ class AISystem {
       .map((flow) => (flow.exporterCountryId === country ? flow.importerCountryId : flow.exporterCountryId)));
     const countryState = this.countrySystem.ensureCountry(country);
     const leadershipCaution = countryState.leaderMandate < 42 || countryState.leaderApproval < 44 || countryState.governmentContinuity < 38;
-    const canGoOffensive = (!leadershipCaution && ['expand', 'pressure_rival'].includes(posture)) || warCountries.size > 0;
+    const leaderRisk = (countryState.leaderTraits?.riskTolerance || 50) / 100;
+    const canGoOffensive = ((!leadershipCaution || leaderRisk > 0.62) && ['expand', 'pressure_rival'].includes(posture)) || warCountries.size > 0;
     const cautiousTradeGoals = ['secure_resources', 'protect_trade', 'deescalate_conflict', 'stabilize_domestic'].includes(strategicGoal);
     const targetFilter = (ownerCountry) => {
       if (ownerCountry === country) return false;
