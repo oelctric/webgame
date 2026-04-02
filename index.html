@@ -208,106 +208,133 @@
 
     <div class="card">
       <h2>Domestic State</h2>
-      <p id="domesticFocusCountry">Domestic state for: --</p>
-      <p id="domesticStability">Stability: --</p>
-      <p id="domesticUnrest">Unrest: --</p>
-      <p id="domesticWarWeariness">War weariness: --</p>
-      <p id="domesticEconomicStress">Economic stress: --</p>
-      <p id="domesticLegitimacy">Legitimacy: --</p>
-      <p id="domesticPublicSupport">Public support: --</p>
-      <p id="domesticEliteSupport">Elite support: --</p>
-      <p id="domesticPoliticalLabel">Political pressure: --</p>
-      <p id="domesticLeaderApproval">Leader approval: --</p>
-      <p id="domesticLeaderMandate">Leader mandate: --</p>
-      <p id="domesticGovernmentContinuity">Government continuity: --</p>
-      <p id="domesticElectionDate">Next election: --</p>
-      <p id="domesticLeadershipLabel">Leadership status: --</p>
-      <p id="leaderDisplayName">Leader: --</p>
-      <p id="leaderArchetypeLabel">Archetype: --</p>
-      <p id="leaderTraitRisk">Risk tolerance: --</p>
-      <p id="leaderTraitRepression">Repression preference: --</p>
-      <p id="leaderTraitEconomic">Economic competence: --</p>
-      <p id="leaderTraitDiplomatic">Diplomatic flexibility: --</p>
-      <p id="leaderTraitCrisis">Crisis management: --</p>
-      <p id="leaderFlavorSummary">Leader flavor: --</p>
-      <p id="leaderFlavorBio">Leader bio: --</p>
-      <p id="leaderBehaviorExplanation">Leader explanation: --</p>
-      <p id="leaderBehaviorHint">Leader bias: --</p>
-      <p id="domesticTrend">Domestic trend: --</p>
-      <p id="domesticLeadershipSummary">Leadership cycle: --</p>
-      <p id="domesticFactionSummary">Faction pressure: --</p>
-      <p id="domesticFactionBias">Faction policy bias: --</p>
-      <ul id="domesticFactionsList">
-        <li>No faction data.</li>
-      </ul>
-      <div class="row">
-        <button id="factionInfluenceUpBtn">Security Influence +8</button>
-        <button id="factionInfluenceDownBtn">Security Influence -8</button>
+      <p id="domesticFocusCountry" class="intel-kicker">Domestic state for: --</p>
+      <div class="glance-strip">
+        <p id="domesticStability">Stability: --</p>
+        <p id="domesticUnrest">Unrest: --</p>
+        <p id="domesticLegitimacy">Legitimacy: --</p>
+        <p id="domesticLeaderApproval">Leader approval: --</p>
+        <p id="domesticLeaderMandate">Leader mandate: --</p>
+        <p id="domesticElectionDate">Next election: --</p>
       </div>
-      <div class="row">
-        <button id="factionSatisfactionUpBtn">Public Support +8</button>
-        <button id="factionSatisfactionDownBtn">Public Support -8</button>
+      <div class="card-mini-section">
+        <h3>Stability & Pressure</h3>
+        <p id="domesticWarWeariness">War weariness: --</p>
+        <p id="domesticEconomicStress">Economic stress: --</p>
+        <p id="domesticPublicSupport">Public support: --</p>
+        <p id="domesticEliteSupport">Elite support: --</p>
+        <p id="domesticPoliticalLabel">Political pressure: --</p>
+        <p id="domesticTrend">Domestic trend: --</p>
       </div>
-      <div class="row">
-        <button id="triggerFactionShiftBtn">Trigger Faction Shift</button>
-        <button id="resetFactionStateBtn">Reset Factions</button>
+      <div class="card-mini-section">
+        <h3>Leader Overview</h3>
+        <p id="domesticLeadershipLabel">Leadership status: --</p>
+        <p id="domesticGovernmentContinuity">Government continuity: --</p>
+        <p id="domesticLeadershipSummary">Leadership cycle: --</p>
+        <p id="leaderDisplayName">Leader: --</p>
+        <p id="leaderArchetypeLabel">Archetype: --</p>
       </div>
-      <div class="row">
-        <button id="leaderApprovalUpBtn">Approval +8</button>
-        <button id="leaderApprovalDownBtn">Approval -8</button>
-      </div>
-      <div class="row">
-        <button id="leaderMandateUpBtn">Mandate +8</button>
-        <button id="leaderMandateDownBtn">Mandate -8</button>
-      </div>
-      <div class="row">
-        <button id="triggerElectionCheckBtn">Run Election Check</button>
-        <button id="triggerTurnoverBtn">Force Turnover</button>
-      </div>
-      <div class="field">
-        <label for="leaderRenameInput">Rename leader</label>
-        <input id="leaderRenameInput" type="text" maxlength="36" placeholder="New leader name" />
-      </div>
-      <div class="row">
-        <button id="leaderRenameBtn">Apply Name</button>
-        <button id="leaderRegenerateBtn">Regenerate Leader</button>
-      </div>
-      <div class="row">
-        <button id="leaderRefreshFlavorBtn">Refresh Flavor (Traits)</button>
-        <button id="leaderRerollIdentityBtn">Reroll Name + Flavor</button>
-      </div>
-      <div class="field">
-        <label for="leaderArchetypeSelect">Leader archetype</label>
-        <select id="leaderArchetypeSelect">
-          <option value="hardliner">Hardliner</option>
-          <option value="pragmatist" selected>Pragmatist</option>
-          <option value="reformer">Reformer</option>
-          <option value="strongman">Strongman</option>
-          <option value="technocrat">Technocrat</option>
-        </select>
-      </div>
-      <button id="leaderApplyArchetypeBtn">Apply Archetype</button>
-      <div class="row">
-        <button id="leaderRiskUpBtn">Risk +8</button>
-        <button id="leaderRiskDownBtn">Risk -8</button>
-      </div>
-      <div class="row">
-        <button id="leaderRepressionUpBtn">Repression +8</button>
-        <button id="leaderRepressionDownBtn">Repression -8</button>
-      </div>
-      <div class="row">
-        <button id="leaderEconomicUpBtn">Economic +8</button>
-        <button id="leaderEconomicDownBtn">Economic -8</button>
-      </div>
-      <div class="row">
-        <button id="leaderDiplomaticUpBtn">Diplomatic +8</button>
-        <button id="leaderDiplomaticDownBtn">Diplomatic -8</button>
-      </div>
-      <div class="field">
-        <label for="electionOffsetDaysInput">Election in (days)</label>
-        <input id="electionOffsetDaysInput" type="number" min="1" value="60" />
-      </div>
-      <button id="applyElectionOffsetBtn">Apply Election Timing</button>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Leader Traits</summary>
+        <p id="leaderTraitRisk">Risk tolerance: --</p>
+        <p id="leaderTraitRepression">Repression preference: --</p>
+        <p id="leaderTraitEconomic">Economic competence: --</p>
+        <p id="leaderTraitDiplomatic">Diplomatic flexibility: --</p>
+        <p id="leaderTraitCrisis">Crisis management: --</p>
+      </details>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Faction Pressure</summary>
+        <p id="domesticFactionSummary">Faction pressure: --</p>
+        <p id="domesticFactionBias">Faction policy bias: --</p>
+        <ul id="domesticFactionsList">
+          <li>No faction data.</li>
+        </ul>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Leadership Cycle & Elections</summary>
+        <div class="row">
+          <button id="triggerElectionCheckBtn">Run Election Check</button>
+          <button id="triggerTurnoverBtn">Force Turnover</button>
+        </div>
+        <div class="field">
+          <label for="electionOffsetDaysInput">Election in (days)</label>
+          <input id="electionOffsetDaysInput" type="number" min="1" value="60" />
+        </div>
+        <button id="applyElectionOffsetBtn">Apply Election Timing</button>
+      </details>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Manual Political Controls</summary>
+        <p class="controls-label">Faction adjustments</p>
+        <div class="row">
+          <button id="factionInfluenceUpBtn">Security Influence +8</button>
+          <button id="factionInfluenceDownBtn">Security Influence -8</button>
+        </div>
+        <div class="row">
+          <button id="factionSatisfactionUpBtn">Public Support +8</button>
+          <button id="factionSatisfactionDownBtn">Public Support -8</button>
+        </div>
+        <div class="row">
+          <button id="triggerFactionShiftBtn">Trigger Faction Shift</button>
+          <button id="resetFactionStateBtn">Reset Factions</button>
+        </div>
+        <p class="controls-label">Leadership adjustments</p>
+        <div class="row">
+          <button id="leaderApprovalUpBtn">Approval +8</button>
+          <button id="leaderApprovalDownBtn">Approval -8</button>
+        </div>
+        <div class="row">
+          <button id="leaderMandateUpBtn">Mandate +8</button>
+          <button id="leaderMandateDownBtn">Mandate -8</button>
+        </div>
+        <p class="controls-label">Leader identity & archetype</p>
+        <div class="field">
+          <label for="leaderRenameInput">Rename leader</label>
+          <input id="leaderRenameInput" type="text" maxlength="36" placeholder="New leader name" />
+        </div>
+        <div class="row">
+          <button id="leaderRenameBtn">Apply Name</button>
+          <button id="leaderRegenerateBtn">Regenerate Leader</button>
+        </div>
+        <div class="row">
+          <button id="leaderRefreshFlavorBtn">Refresh Flavor (Traits)</button>
+          <button id="leaderRerollIdentityBtn">Reroll Name + Flavor</button>
+        </div>
+        <div class="field">
+          <label for="leaderArchetypeSelect">Leader archetype</label>
+          <select id="leaderArchetypeSelect">
+            <option value="hardliner">Hardliner</option>
+            <option value="pragmatist" selected>Pragmatist</option>
+            <option value="reformer">Reformer</option>
+            <option value="strongman">Strongman</option>
+            <option value="technocrat">Technocrat</option>
+          </select>
+        </div>
+        <button id="leaderApplyArchetypeBtn">Apply Archetype</button>
+        <p class="controls-label">Trait tuning</p>
+        <div class="row">
+          <button id="leaderRiskUpBtn">Risk +8</button>
+          <button id="leaderRiskDownBtn">Risk -8</button>
+        </div>
+        <div class="row">
+          <button id="leaderRepressionUpBtn">Repression +8</button>
+          <button id="leaderRepressionDownBtn">Repression -8</button>
+        </div>
+        <div class="row">
+          <button id="leaderEconomicUpBtn">Economic +8</button>
+          <button id="leaderEconomicDownBtn">Economic -8</button>
+        </div>
+        <div class="row">
+          <button id="leaderDiplomaticUpBtn">Diplomatic +8</button>
+          <button id="leaderDiplomaticDownBtn">Diplomatic -8</button>
+        </div>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Leader Narrative Dossier</summary>
+        <p id="leaderFlavorSummary">Leader flavor: --</p>
+        <p id="leaderFlavorBio">Leader bio: --</p>
+        <p id="leaderBehaviorExplanation">Leader explanation: --</p>
+        <p id="leaderBehaviorHint">Leader bias: --</p>
+      </details>
     </div>
     <div class="card">
       <h2>State Structure</h2>
@@ -343,115 +370,137 @@
 
     <div class="card">
       <h2>Information & Narrative</h2>
-      <p id="infoFocusCountry">Information state for: --</p>
-      <p id="infoNarrativePressure">Domestic narrative pressure: --</p>
-      <p id="infoReputation">International reputation: --</p>
-      <p id="infoControl">Information control: --</p>
-      <p id="infoLegitimacy">Legitimacy impact: --</p>
-      <p id="infoInfluenceSummary">Influence ops: --</p>
-      <p id="infoLabel">Narrative status: --</p>
-      <p id="reputationLabel">Reputation status: --</p>
-      <div class="field">
-        <label for="influenceTypeSelect">Operation Type</label>
-        <select id="influenceTypeSelect">
-          <option value="domestic_propaganda">Domestic Propaganda</option>
-          <option value="foreign_disinformation">Foreign Disinformation</option>
-          <option value="reputation_campaign">Reputation Campaign</option>
-          <option value="destabilization_campaign">Destabilization Campaign</option>
-        </select>
+      <p id="infoFocusCountry" class="intel-kicker">Information state for: --</p>
+      <div class="glance-strip">
+        <p id="infoNarrativePressure">Domestic narrative pressure: --</p>
+        <p id="infoReputation">International reputation: --</p>
+        <p id="infoControl">Information control: --</p>
+        <p id="infoLegitimacy">Legitimacy impact: --</p>
       </div>
-      <div class="field">
-        <label for="influenceTargetCountry">Target Country</label>
-        <select id="influenceTargetCountry"></select>
+      <div class="card-mini-section">
+        <h3>Narrative Status</h3>
+        <p id="infoInfluenceSummary">Influence ops: --</p>
+        <p id="infoLabel">Narrative status: --</p>
+        <p id="reputationLabel">Reputation status: --</p>
       </div>
-      <div class="row">
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Operation Planner</summary>
         <div class="field">
-          <label for="influenceIntensityInput">Strength</label>
-          <input id="influenceIntensityInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+          <label for="influenceTypeSelect">Operation Type</label>
+          <select id="influenceTypeSelect">
+            <option value="domestic_propaganda">Domestic Propaganda</option>
+            <option value="foreign_disinformation">Foreign Disinformation</option>
+            <option value="reputation_campaign">Reputation Campaign</option>
+            <option value="destabilization_campaign">Destabilization Campaign</option>
+          </select>
         </div>
         <div class="field">
-          <label for="influenceDurationInput">Duration (days)</label>
-          <input id="influenceDurationInput" type="number" min="7" max="120" step="1" value="28" />
+          <label for="influenceTargetCountry">Target Country</label>
+          <select id="influenceTargetCountry"></select>
         </div>
-      </div>
-      <div class="row">
-        <button id="startInfluenceOperationBtn">Start Operation</button>
-        <button id="cancelInfluenceOperationBtn">Cancel Selected</button>
-      </div>
-      <div class="field">
-        <label for="activeInfluenceOperationSelect">Active Operation</label>
-        <select id="activeInfluenceOperationSelect"></select>
-      </div>
-      <ul id="activeInfluenceList" class="compact-list">
-        <li>No active influence operations.</li>
-      </ul>
-      <div class="row">
-        <button id="raiseNarrativePressureBtn">Narrative +8</button>
-        <button id="lowerNarrativePressureBtn">Narrative -8</button>
-      </div>
-      <div class="row">
-        <button id="raiseReputationBtn">Reputation +8</button>
-        <button id="lowerReputationBtn">Reputation -8</button>
-      </div>
-      <div class="row">
-        <button id="raiseInfoControlBtn">Control +6</button>
-        <button id="lowerInfoControlBtn">Control -6</button>
-      </div>
-      <div class="row">
-        <button id="triggerInfoSuccessBtn">Propaganda Success</button>
-        <button id="triggerInfoScandalBtn">Info Scandal</button>
-      </div>
+        <div class="row">
+          <div class="field">
+            <label for="influenceIntensityInput">Strength</label>
+            <input id="influenceIntensityInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+          </div>
+          <div class="field">
+            <label for="influenceDurationInput">Duration (days)</label>
+            <input id="influenceDurationInput" type="number" min="7" max="120" step="1" value="28" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="startInfluenceOperationBtn">Start Operation</button>
+          <button id="cancelInfluenceOperationBtn">Cancel Selected</button>
+        </div>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Active Operations</summary>
+        <div class="field">
+          <label for="activeInfluenceOperationSelect">Active Operation</label>
+          <select id="activeInfluenceOperationSelect"></select>
+        </div>
+        <ul id="activeInfluenceList" class="compact-list">
+          <li>No active influence operations.</li>
+        </ul>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Manual Narrative Controls</summary>
+        <div class="row">
+          <button id="raiseNarrativePressureBtn">Narrative +8</button>
+          <button id="lowerNarrativePressureBtn">Narrative -8</button>
+        </div>
+        <div class="row">
+          <button id="raiseReputationBtn">Reputation +8</button>
+          <button id="lowerReputationBtn">Reputation -8</button>
+        </div>
+        <div class="row">
+          <button id="raiseInfoControlBtn">Control +6</button>
+          <button id="lowerInfoControlBtn">Control -6</button>
+        </div>
+        <div class="row">
+          <button id="triggerInfoSuccessBtn">Propaganda Success</button>
+          <button id="triggerInfoScandalBtn">Info Scandal</button>
+        </div>
+      </details>
     </div>
     <div class="card">
       <h2>Proxy Conflict</h2>
-      <p id="proxyFocusCountry">Proxy operations for: --</p>
-      <p id="proxySummary">Proxy summary: --</p>
-      <div class="field">
-        <label for="proxyTypeSelect">Support Type</label>
-        <select id="proxyTypeSelect">
-          <option value="insurgent_support">Insurgent Support</option>
-          <option value="separatist_support">Separatist Support</option>
-          <option value="faction_support">Faction Support</option>
-          <option value="hotspot_destabilization">Hotspot Destabilization</option>
-        </select>
+      <p id="proxyFocusCountry" class="intel-kicker">Proxy operations for: --</p>
+      <div class="glance-strip">
+        <p id="proxySummary">Proxy summary: --</p>
       </div>
-      <div class="field">
-        <label for="proxyTargetCountrySelect">Target Country</label>
-        <select id="proxyTargetCountrySelect"></select>
-      </div>
-      <div class="field">
-        <label for="proxyTargetHotspotSelect">Target Hotspot (optional)</label>
-        <select id="proxyTargetHotspotSelect"></select>
-      </div>
-      <div class="row">
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Operation Planner</summary>
         <div class="field">
-          <label for="proxyStrengthInput">Strength</label>
-          <input id="proxyStrengthInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+          <label for="proxyTypeSelect">Support Type</label>
+          <select id="proxyTypeSelect">
+            <option value="insurgent_support">Insurgent Support</option>
+            <option value="separatist_support">Separatist Support</option>
+            <option value="faction_support">Faction Support</option>
+            <option value="hotspot_destabilization">Hotspot Destabilization</option>
+          </select>
         </div>
         <div class="field">
-          <label for="proxyRiskInput">Attribution Risk</label>
-          <input id="proxyRiskInput" type="number" min="0.05" max="0.9" step="0.01" value="0.28" />
+          <label for="proxyTargetCountrySelect">Target Country</label>
+          <select id="proxyTargetCountrySelect"></select>
         </div>
         <div class="field">
-          <label for="proxyDurationInput">Duration (days)</label>
-          <input id="proxyDurationInput" type="number" min="7" max="180" step="1" value="30" />
+          <label for="proxyTargetHotspotSelect">Target Hotspot (optional)</label>
+          <select id="proxyTargetHotspotSelect"></select>
         </div>
-      </div>
-      <div class="row">
-        <button id="startProxyOperationBtn">Start Proxy Op</button>
-        <button id="cancelProxyOperationBtn">Cancel Selected</button>
-        <button id="forceExposeProxyOperationBtn">Force Expose</button>
-      </div>
-      <div class="field">
-        <label for="activeProxyOperationSelect">Active Proxy Operation</label>
-        <select id="activeProxyOperationSelect"></select>
-      </div>
-      <ul id="activeProxyList" class="compact-list">
-        <li>No active proxy operations.</li>
-      </ul>
-      <ul id="proxyIncidentList" class="compact-list">
-        <li>No proxy incidents.</li>
-      </ul>
+        <div class="row">
+          <div class="field">
+            <label for="proxyStrengthInput">Strength</label>
+            <input id="proxyStrengthInput" type="number" min="0.5" max="2.5" step="0.1" value="1.0" />
+          </div>
+          <div class="field">
+            <label for="proxyRiskInput">Attribution Risk</label>
+            <input id="proxyRiskInput" type="number" min="0.05" max="0.9" step="0.01" value="0.28" />
+          </div>
+          <div class="field">
+            <label for="proxyDurationInput">Duration (days)</label>
+            <input id="proxyDurationInput" type="number" min="7" max="180" step="1" value="30" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="startProxyOperationBtn">Start Proxy Op</button>
+          <button id="cancelProxyOperationBtn">Cancel Selected</button>
+          <button id="forceExposeProxyOperationBtn">Force Expose</button>
+        </div>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Active Proxy Theatre</summary>
+        <div class="field">
+          <label for="activeProxyOperationSelect">Active Proxy Operation</label>
+          <select id="activeProxyOperationSelect"></select>
+        </div>
+        <ul id="activeProxyList" class="compact-list">
+          <li>No active proxy operations.</li>
+        </ul>
+        <ul id="proxyIncidentList" class="compact-list">
+          <li>No proxy incidents.</li>
+        </ul>
+      </details>
     </div>
     <div class="card">
       <h2>Internal Resistance</h2>
@@ -561,31 +610,42 @@
 
     <div class="card">
       <h2>Crisis & Events</h2>
-      <p id="eventSummary">Events: --</p>
-      <div class="field">
-        <label for="eventTypeSelect">Event Type</label>
-        <select id="eventTypeSelect">
-          <option value="oil_supply_shock">Oil Supply Shock</option>
-          <option value="industrial_strike">Industrial Strike</option>
-          <option value="financial_panic">Financial Panic</option>
-          <option value="protest_wave">Protest Wave</option>
-          <option value="border_incident">Border Incident</option>
-          <option value="chokepoint_disruption">Chokepoint Disruption</option>
-        </select>
+      <div class="glance-strip">
+        <p id="eventSummary">Events: --</p>
       </div>
-      <div class="field">
-        <label for="eventTargetCountry">Target Country</label>
-        <select id="eventTargetCountry"></select>
-      </div>
-      <div class="field">
-        <label for="eventSecondaryCountry">Secondary Country (for border incident)</label>
-        <select id="eventSecondaryCountry"></select>
-      </div>
-      <button id="triggerEventBtn">Trigger Event</button>
-      <p><strong>Active on selected:</strong></p>
-      <ul id="activeEventsList"></ul>
-      <p><strong>Recent events:</strong></p>
-      <ul id="eventLogList"></ul>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Trigger New Crisis</summary>
+        <div class="field">
+          <label for="eventTypeSelect">Event Type</label>
+          <select id="eventTypeSelect">
+            <option value="oil_supply_shock">Oil Supply Shock</option>
+            <option value="industrial_strike">Industrial Strike</option>
+            <option value="financial_panic">Financial Panic</option>
+            <option value="protest_wave">Protest Wave</option>
+            <option value="border_incident">Border Incident</option>
+            <option value="chokepoint_disruption">Chokepoint Disruption</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="eventTargetCountry">Target Country</label>
+          <select id="eventTargetCountry"></select>
+        </div>
+        <div class="field">
+          <label for="eventSecondaryCountry">Secondary Country (for border incident)</label>
+          <select id="eventSecondaryCountry"></select>
+        </div>
+        <button id="triggerEventBtn">Trigger Event</button>
+      </details>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Active Event Picture</summary>
+        <p><strong>Active on selected:</strong></p>
+        <ul id="activeEventsList"></ul>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Event Log</summary>
+        <p><strong>Recent events:</strong></p>
+        <ul id="eventLogList"></ul>
+      </details>
     </div>
 
     <div class="card">
@@ -616,37 +676,48 @@
 
     <div class="card">
       <h2>Trade Network</h2>
-      <p id="tradeSummary">Trade: --</p>
-      <p id="tradeBalanceSummary">Balance: --</p>
-      <div class="row">
-        <button id="toggleAutoTradeBtn">Auto Trade: On</button>
-        <button id="recomputeTradeBtn">Recompute Trade</button>
+      <div class="glance-strip">
+        <p id="tradeSummary">Trade: --</p>
+        <p id="tradeBalanceSummary">Balance: --</p>
       </div>
-      <div class="field">
-        <label for="tradeExporterSelect">Exporter</label>
-        <select id="tradeExporterSelect"></select>
+      <div class="card-mini-section">
+        <h3>Network Controls</h3>
+        <div class="row">
+          <button id="toggleAutoTradeBtn">Auto Trade: On</button>
+          <button id="recomputeTradeBtn">Recompute Trade</button>
+        </div>
       </div>
-      <div class="field">
-        <label for="tradeImporterSelect">Importer</label>
-        <select id="tradeImporterSelect"></select>
-      </div>
-      <div class="field">
-        <label for="tradeResourceSelect">Resource</label>
-        <select id="tradeResourceSelect">
-          <option value="oil">Oil</option>
-          <option value="industry_support">Industry Support</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="tradeAmountInput">Flow Amount</label>
-        <input id="tradeAmountInput" type="number" min="1" value="20" />
-      </div>
-      <div class="row">
-        <button id="forceTradeBtn">Force Trade Flow</button>
-        <button id="blockTradePairBtn">Block Pair Trade</button>
-      </div>
-      <p><strong>Active flows (selected):</strong></p>
-      <ul id="tradeFlowsList"></ul>
+      <details class="card-collapsible card-mini-section" open>
+        <summary>Manual Route Orders</summary>
+        <div class="field">
+          <label for="tradeExporterSelect">Exporter</label>
+          <select id="tradeExporterSelect"></select>
+        </div>
+        <div class="field">
+          <label for="tradeImporterSelect">Importer</label>
+          <select id="tradeImporterSelect"></select>
+        </div>
+        <div class="field">
+          <label for="tradeResourceSelect">Resource</label>
+          <select id="tradeResourceSelect">
+            <option value="oil">Oil</option>
+            <option value="industry_support">Industry Support</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="tradeAmountInput">Flow Amount</label>
+          <input id="tradeAmountInput" type="number" min="1" value="20" />
+        </div>
+        <div class="row">
+          <button id="forceTradeBtn">Force Trade Flow</button>
+          <button id="blockTradePairBtn">Block Pair Trade</button>
+        </div>
+      </details>
+      <details class="card-collapsible card-mini-section">
+        <summary>Flow Monitor</summary>
+        <p><strong>Active flows (selected):</strong></p>
+        <ul id="tradeFlowsList"></ul>
+      </details>
     </div>
 
     <div class="card">
