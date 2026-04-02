@@ -222,7 +222,71 @@
     #bottomDrawer.collapsed #bottomDrawerContent { display: none; }
     .drawer-pane { display: none; }
     .drawer-pane.active { display: block; }
-    .drawer-pane .pane-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.7rem; max-height: min(24vh, 265px); overflow-y: auto; padding-right: 0.2rem; }
+    .drawer-pane .pane-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: min(24vh, 275px);
+      overflow-y: auto;
+      padding-right: 0.35rem;
+    }
+    .drawer-subsection {
+      border: 1px solid rgba(67, 98, 146, 0.58);
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(18, 29, 48, 0.92), rgba(12, 20, 34, 0.95));
+      padding: 0.5rem 0.6rem 0.55rem;
+    }
+    .drawer-subsection-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.7rem;
+      background: transparent;
+      border: 0;
+      padding: 0.1rem 0;
+      text-align: left;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .drawer-subsection-heading-wrap { display: flex; flex-direction: column; gap: 0.12rem; }
+    .drawer-subsection-heading-wrap strong { font-size: 0.88rem; letter-spacing: 0.03em; }
+    .drawer-subsection-heading-wrap span { font-size: 0.74rem; color: #92a8ce; }
+    .drawer-subsection-toggle {
+      color: #9fbeef;
+      font-size: 0.95rem;
+      transition: transform 160ms ease;
+      transform-origin: 50% 50%;
+    }
+    .drawer-subsection-header[aria-expanded="false"] .drawer-subsection-toggle { transform: rotate(-90deg); }
+    .drawer-subsection-summary {
+      margin: 0.32rem 0 0;
+      color: #d7e5ff;
+      font-size: 0.76rem;
+      line-height: 1.35;
+      padding: 0.3rem 0.42rem;
+      border-radius: 7px;
+      background: rgba(13, 24, 41, 0.86);
+      border: 1px solid rgba(74, 104, 154, 0.35);
+    }
+    .drawer-subsection-body { margin-top: 0.55rem; }
+    .drawer-subsection-body.collapsed { display: none; }
+    .drawer-subsection-helper {
+      margin: 0 0 0.55rem;
+      font-size: 0.75rem;
+      color: #9eb1d3;
+      line-height: 1.35;
+      padding-left: 0.1rem;
+    }
+    .subsection-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(265px, 1fr));
+      gap: 0.65rem;
+    }
+    .subsection-card-grid > .card {
+      background: rgba(9, 16, 28, 0.82);
+      border-color: rgba(56, 85, 128, 0.65);
+    }
 
     .overlay {
       position: absolute;
