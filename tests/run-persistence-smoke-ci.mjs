@@ -20,7 +20,7 @@ try {
 
   console.log('Fixture expectation report:');
   for (const row of results.results) {
-    console.log(`- ${row.fixture}: expected=${row.expected} actual=${row.actual} migration=${row.phases.migration.ok} validation=${row.phases.validation.ok} runtime=${row.phases.runtime.ok} skipped=${row.phases.runtime.skippedTaskCount} error=${row.error || row.phases.validation.message || row.phases.runtime.message || ''}`);
+    console.log(`- ${row.fixture}: expected=${row.expected} actual=${row.actual} migration=${row.phases.migration.ok} normalize=${row.phases.normalization.ok} validation=${row.phases.validation.ok} runtime=${row.phases.runtime.ok} schedulerSkipped=${row.phases.scheduler.skippedTaskCount} uiRefresh=${row.phases.uiRefresh.ok} error=${row.error || row.restoreMessage || row.phases.validation.message || row.phases.runtime.message || ''}`);
   }
 
   if (results.mismatches > 0) {

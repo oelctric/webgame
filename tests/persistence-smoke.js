@@ -6,14 +6,7 @@
     './fixtures/persistence/invalid/corrupt_missing_state_v1.json'
   ];
 
-  const KNOWN_RUNTIME_TASKS = new Set([
-    'BASE_ACTIVATE', 'UNIT_MOVE_COMPLETE', 'UNIT_PRODUCTION_COMPLETE', 'COMBAT_TICK', 'CAPTURE_COMPLETE',
-    'RESOURCE_TICK', 'FACTION_TICK', 'CHOKEPOINT_TICK', 'EVENT_TICK', 'LOCAL_INSTABILITY_TICK',
-    'INFLUENCE_TICK', 'INTERNAL_RESISTANCE_TICK', 'DIPLOMACY_TICK', 'STATE_STRUCTURE_TICK', 'ECONOMY_TICK',
-    'NEGOTIATION_TICK', 'DOMESTIC_TICK', 'POLITICAL_TICK', 'TRADE_TICK', 'LEADERSHIP_TICK', 'COUNTRY_TICK',
-    'INFORMATION_TICK', 'POLICY_TICK', 'AI_TICK', 'AI_STRATEGIC_TICK', 'MIGRATION_TICK', 'BLOC_TICK',
-    'PROXY_CONFLICT_TICK'
-  ]);
+  let runtimeWindowPromise = null;
 
   async function fetchJson(path) {
     const response = await fetch(path, { cache: 'no-store' });
@@ -22,57 +15,116 @@
   }
 
   function classifyResult(phases) {
-    if (!phases.validation.ok || !phases.runtime.ok) return 'fail';
-    if (phases.runtime.skippedTaskCount > 0 || phases.runtime.warnings.length > 0) return 'partial_pass';
+    if (!phases.migration.ok || !phases.normalization.ok || !phases.validation.ok || !phases.runtime.ok) {
+      return 'fail';
+    }
+    const skippedNormalize = phases.normalization.skippedTaskCount || 0;
+    const skippedRuntime = phases.scheduler.skippedTaskCount || 0;
+    if (skippedNormalize > 0 || skippedRuntime > 0 || phases.runtime.warnings.length > 0) {
+      return 'partial_pass';
+    }
     return 'pass';
   }
 
-  function runMigration(snapshot) {
-    return { ok: true, migratedVersion: Number(snapshot?.meta?.version || 1), message: '' };
+  function getRuntimeWindow() {
+    if (runtimeWindowPromise) return runtimeWindowPromise;
+    runtimeWindowPromise = new Promise((resolve, reject) => {
+      const frame = document.createElement('iframe');
+      frame.src = '../index.html?persistenceSmokeHarness=1';
+      frame.style.position = 'absolute';
+      frame.style.width = '1px';
+      frame.style.height = '1px';
+      frame.style.left = '-9999px';
+      frame.style.top = '-9999px';
+      frame.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(frame);
+
+      let timedOut = false;
+      const timeout = window.setTimeout(() => {
+        timedOut = true;
+        reject(new Error('Timed out waiting for production runtime iframe.'));
+      }, 45000);
+
+      frame.addEventListener('load', () => {
+        const poll = () => {
+          if (timedOut) return;
+          const runtime = frame.contentWindow?.GeoCommandRuntimeInstance;
+          if (runtime?.restoreSnapshot) {
+            window.clearTimeout(timeout);
+            resolve(frame.contentWindow);
+            return;
+          }
+          window.setTimeout(poll, 100);
+        };
+        poll();
+      }, { once: true });
+    });
+    return runtimeWindowPromise;
   }
 
-  function runValidation(snapshot) {
-    if (!snapshot?.state) return { ok: false, message: 'Snapshot missing state payload.' };
-    if (!snapshot.state.selectedPlayerCountryName) return { ok: false, message: 'Missing selectedPlayerCountryName.' };
-    return { ok: true, message: '' };
-  }
+  function phaseFromProduction(result) {
+    const compatibility = result.compatibility || {};
+    const migrate = compatibility.migrate || null;
+    const normalize = compatibility.normalize || null;
+    const validate = compatibility.validate || null;
+    const scheduler = result.schedulerRestore || null;
 
-  function runRuntime(snapshot) {
-    const pendingTasks = Array.isArray(snapshot?.state?.pendingTasks) ? snapshot.state.pendingTasks : [];
-    const unknownTasks = pendingTasks.filter((task) => !KNOWN_RUNTIME_TASKS.has(task?.type));
-    const warnings = [];
-    if (!Array.isArray(snapshot?.state?.bases)) warnings.push('bases missing/invalid');
-    if (!Array.isArray(snapshot?.state?.units)) warnings.push('units missing/invalid');
     return {
-      ok: unknownTasks.length === 0,
-      message: unknownTasks.length ? `Unknown runtime task types: ${unknownTasks.map((t) => t.type).join(', ')}` : '',
-      skippedTaskCount: unknownTasks.length,
-      warnings
+      migration: {
+        ok: Boolean(migrate?.ok),
+        message: migrate?.error || '',
+        fromVersion: migrate?.fromVersion || null,
+        toVersion: migrate?.toVersion || null
+      },
+      normalization: {
+        ok: Boolean(normalize?.ok),
+        message: normalize?.error || '',
+        skippedTaskCount: Array.isArray(normalize?.skippedTasks) ? normalize.skippedTasks.length : 0
+      },
+      validation: {
+        ok: Boolean(validate?.ok),
+        message: validate?.error || ''
+      },
+      runtime: {
+        ok: result.ok,
+        message: result.ok ? '' : (result.message || 'Runtime restore failed.'),
+        warnings: []
+      },
+      scheduler: {
+        ok: result.ok,
+        restoredCount: Number(scheduler?.restoredCount || 0),
+        skippedTaskCount: Array.isArray(scheduler?.skippedTasks) ? scheduler.skippedTasks.length : 0
+      },
+      uiRefresh: {
+        ok: Boolean(result.runtime?.uiRefresh?.ok ?? result.ok),
+        message: result.runtime?.uiRefresh?.ok === false ? 'UI refresh did not complete.' : ''
+      }
     };
   }
 
   async function runFixture(path, expectedById) {
+    const runtimeWindow = await getRuntimeWindow();
     const fixture = await fetchJson(path);
     const fixtureId = fixture.id;
     const expected = expectedById[fixtureId];
     if (!expected) throw new Error(`No expected classification declared for fixture: ${fixtureId}`);
 
-    const migration = runMigration(fixture.snapshot);
-    const validation = runValidation(fixture.snapshot);
-    const runtime = validation.ok ? runRuntime(fixture.snapshot) : { ok: false, message: 'Runtime skipped: validation failed.', skippedTaskCount: 0, warnings: [] };
-    const actual = classifyResult({ migration, validation, runtime });
+    const restored = runtimeWindow.GeoCommandRuntimeInstance.restoreSnapshot(fixture.snapshot, {
+      sourceLabel: `smoke fixture ${fixtureId}`,
+      suppressStatus: true
+    });
+    const phases = phaseFromProduction(restored);
+    const actual = classifyResult(phases);
 
     return {
       fixture: fixtureId,
       expected,
       actual,
       matches: expected === actual,
-      phases: {
-        migration,
-        validation,
-        runtime
-      },
-      error: expected === actual ? '' : `Expected ${expected} but got ${actual}`
+      phases,
+      error: expected === actual ? '' : `Expected ${expected} but got ${actual}`,
+      restorePhase: restored.phase || null,
+      restoreMessage: restored.message || ''
     };
   }
 
@@ -90,10 +142,11 @@
         <td>${row.expected}</td>
         <td class="${row.actual}">${row.actual}</td>
         <td>${row.phases.migration.ok ? 'ok' : 'fail'}</td>
+        <td>${row.phases.normalization.ok ? 'ok' : 'fail'}</td>
         <td>${row.phases.validation.ok ? 'ok' : 'fail'}</td>
         <td>${row.phases.runtime.ok ? 'ok' : 'fail'}</td>
-        <td>${row.phases.runtime.skippedTaskCount}</td>
-        <td>${row.error || row.phases.validation.message || row.phases.runtime.message || ''}</td>
+        <td>${row.phases.scheduler.skippedTaskCount}</td>
+        <td>${row.error || row.restoreMessage || row.phases.validation.message || row.phases.runtime.message || ''}</td>
       `;
       body.appendChild(tr);
     }
