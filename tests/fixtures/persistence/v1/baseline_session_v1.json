@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "version": 1,
+    "slotId": "fixture-baseline",
+    "slotName": "Baseline Session",
+    "country": "France",
+    "inGameDate": "2028-03-14T06:00:00.000Z",
+    "scenario": "Modern Baseline",
+    "mode": "standard",
+    "updatedAt": "2026-04-02T00:00:00.000Z",
+    "fixtureIntent": "Balanced mid-session with stable diplomacy and active construction."
+  },
+  "scheduler": {
+    "nextTaskId": 14
+  },
+  "state": {
+    "selectedPlayerCountryName": "France",
+    "selectedCountryForHud": "France",
+    "currentTimeMs": 1836636000000,
+    "simulationSpeed": 1,
+    "treasury": 915,
+    "nextBaseId": 7,
+    "nextUnitId": 18,
+    "bases": [
+      { "id": 2, "ownerCountry": "France", "type": "air", "status": "active" },
+      { "id": 3, "ownerCountry": "France", "type": "naval", "status": "constructing", "buildCompleteAt": 1836642000000 }
+    ],
+    "units": [
+      { "id": 4, "owner": "France", "type": "fighter", "status": "idle" },
+      { "id": 5, "owner": "France", "type": "frigate", "status": "moving" }
+    ],
+    "pendingTasks": [
+      { "id": 9, "executeAt": 1836642000000, "type": "BASE_CONSTRUCTION_COMPLETE", "payload": { "baseId": 3 } },
+      { "id": 10, "executeAt": 1836645600000, "type": "TRADE_TICK", "payload": {} },
+      { "id": 11, "executeAt": 1836649200000, "type": "EVENT_TICK", "payload": {} }
+    ],
+    "diplomacy": {
+      "relationsByPair": { "France|Germany": 22, "France|United Kingdom": 37 },
+      "lastSummary": "Trade talks improved EU partner confidence."
+    },
+    "trade": {
+      "activeRoutes": [{ "id": "fr-de-energy", "from": "France", "to": "Germany", "value": 45 }],
+      "lastSummary": "Energy corridor remains open."
+    },
+    "events": {
+      "active": [{ "id": 1003, "type": "energy_price_spike", "severity": "moderate" }],
+      "lastSummary": "Regional energy volatility remains manageable."
+    },
+    "domestic": {
+      "approvalByCountry": { "France": 58 },
+      "lastSummary": "Public confidence stable after budget package."
+    },
+    "leadership": {
+      "profiles": { "France": { "leaderName": "Elise Martin", "doctrine": "Multilateral Security" } },
+      "lastSummary": "Leadership focus remains on alliance cohesion."
+    },
+    "scenario": {
+      "id": "modern",
+      "name": "Modern Baseline",
+      "mode": "standard"
+    },
+    "nextCounters": {
+      "schedulerTask": 14,
+      "eventId": 1004,
+      "bloc": 3,
+      "hotspot": 5
+    }
+  }
+}

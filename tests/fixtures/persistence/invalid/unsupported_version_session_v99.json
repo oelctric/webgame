@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "version": 99,
+    "slotId": "fixture-unsupported",
+    "slotName": "Unsupported Version Fixture"
+  },
+  "scheduler": {
+    "nextTaskId": 2
+  },
+  "state": {
+    "selectedPlayerCountryName": "France",
+    "currentTimeMs": 1836636000000,
+    "pendingTasks": []
+  }
+}

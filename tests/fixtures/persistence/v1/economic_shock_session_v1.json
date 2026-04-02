@@ -1,0 +1,67 @@
+{
+  "meta": {
+    "version": 1,
+    "slotId": "fixture-economic-shock",
+    "slotName": "Economic Shock Session",
+    "country": "Brazil",
+    "inGameDate": "2027-01-18T09:30:00.000Z",
+    "scenario": "Economic Shock",
+    "mode": "sandbox",
+    "updatedAt": "2026-04-02T00:00:00.000Z",
+    "fixtureIntent": "Economic downturn with migration pressure and recovery tasks queued."
+  },
+  "scheduler": {
+    "nextTaskId": 19
+  },
+  "state": {
+    "selectedPlayerCountryName": "Brazil",
+    "selectedCountryForHud": "Brazil",
+    "currentTimeMs": 1799851800000,
+    "simulationSpeed": 1,
+    "treasury": 130,
+    "nextBaseId": 5,
+    "nextUnitId": 12,
+    "bases": [
+      { "id": 3, "ownerCountry": "Brazil", "type": "land", "status": "active" }
+    ],
+    "units": [
+      { "id": 6, "owner": "Brazil", "type": "infantry", "status": "idle" }
+    ],
+    "pendingTasks": [
+      { "id": 14, "executeAt": 1799855400000, "type": "ECONOMY_TICK", "payload": {} },
+      { "id": 15, "executeAt": 1799859000000, "type": "MIGRATION_TICK", "payload": {} },
+      { "id": 16, "executeAt": 1799862600000, "type": "DOMESTIC_TICK", "payload": {} }
+    ],
+    "diplomacy": {
+      "relationsByPair": { "Brazil|Argentina": 14, "Brazil|United States of America": 6 },
+      "lastSummary": "Emergency credit line negotiations continue."
+    },
+    "trade": {
+      "commodityStress": { "fuel": "high", "food": "moderate" },
+      "lastSummary": "Exports dropped due to shipping insurance spikes."
+    },
+    "events": {
+      "active": [{ "id": 3007, "type": "currency_selloff", "severity": "high" }],
+      "lastSummary": "Currency volatility triggered emergency central bank action."
+    },
+    "domestic": {
+      "approvalByCountry": { "Brazil": 44 },
+      "lastSummary": "Approval recovering after subsidy package."
+    },
+    "leadership": {
+      "profiles": { "Brazil": { "leaderName": "Marina Costa", "doctrine": "Fiscal Stabilization" } },
+      "lastSummary": "Leadership balancing inflation and social stability."
+    },
+    "scenario": {
+      "id": "economic-shock",
+      "name": "Economic Shock",
+      "mode": "sandbox"
+    },
+    "nextCounters": {
+      "schedulerTask": 19,
+      "eventId": 3008,
+      "migrationFlow": 9,
+      "hotspot": 4
+    }
+  }
+}

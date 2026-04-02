@@ -1,0 +1,10 @@
+{
+  "scheduler": {
+    "nextTaskId": 3
+  },
+  "state": {
+    "selectedPlayerCountryName": "France",
+    "currentTimeMs": 1836636000000,
+    "pendingTasks": []
+  }
+}
