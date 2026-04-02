@@ -8,9 +8,15 @@
 </head>
 <body>
   <header class="top-hud">
-    <div class="hud-block">
-      <strong id="hudCurrentCountry">Country: --</strong>
-      <span id="hudAlerts">Alerts: --</span>
+    <div class="hud-block hud-block-primary">
+      <div class="hud-line">
+        <strong id="hudPlayerCountry">Commander: --</strong>
+        <strong id="hudCurrentCountry">Inspecting: --</strong>
+      </div>
+      <div class="hud-line hud-line-secondary">
+        <span id="hudSelectionCue">Selection: none</span>
+        <span id="hudAlerts" class="hud-alert-info">Status: Ready</span>
+      </div>
     </div>
     <div class="hud-block">
       <strong id="gameDateTime">Date: --</strong>
@@ -32,18 +38,19 @@
       <button id="resetViewBtn">Reset View</button>
     </div>
   </header>
+  <div id="hudAlertFeed" class="hud-alert-feed" aria-live="polite"></div>
 
   <div class="sim-layout">
   <aside class="sidebar" id="leftSidebar">
     <div class="card">
-      <h1>Geo Command</h1>
+      <h2>Geo Command</h2>
       <p>Robinson projection world map with real country borders.</p>
       <p id="playerProfile">Player not created yet. Open Play from main menu.</p>
     </div>
 
     <div class="card">
-      <h2>Build Mode</h2>
-      <p><strong id="selectedCountry">No country selected</strong></p>
+      <h2>Command Setup</h2>
+      <p><strong id="selectedCountry">Inspected country: none</strong></p>
       <div class="row" id="baseButtons"></div>
       <p id="status">Open Play from the main menu, pick your country and leader, then place bases.</p>
     </div>
@@ -60,7 +67,7 @@
     </div>
 
     <div class="card">
-      <h2>Country State</h2>
+      <h2>Country Overview</h2>
       <p id="countryHudName">Country: --</p>
       <p id="countryHudTreasury">Treasury: --</p>
       <p id="countryHudPop">Population: --</p>

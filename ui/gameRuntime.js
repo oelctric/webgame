@@ -190,8 +190,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   const gameDateTime = document.getElementById('gameDateTime');
   const simSpeedLabel = document.getElementById('simSpeedLabel');
   const treasuryLabel = document.getElementById('treasuryLabel');
+  const hudPlayerCountry = document.getElementById('hudPlayerCountry');
   const hudCurrentCountry = document.getElementById('hudCurrentCountry');
+  const hudSelectionCue = document.getElementById('hudSelectionCue');
   const hudAlerts = document.getElementById('hudAlerts');
+  const hudAlertFeed = document.getElementById('hudAlertFeed');
   const resetViewBtn = document.getElementById('resetViewBtn');
   const rightPanel = document.getElementById('rightPanel');
   const bottomDrawer = document.getElementById('bottomDrawer');
@@ -530,6 +533,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   let uiControllers;
   let playStep = 1;
   let lastFrameTime = performance.now();
+  const alertHistory = [];
   
   const settingsState = {
     music: Number(localStorage.getItem('musicVolume') ?? 40),
@@ -1179,10 +1183,28 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     return uiControllers.trade.refresh();
   }
   
-  function setStatus(message, isError = false) {
+  function setStatus(message, tone = false) {
+    const level = tone === true ? 'danger' : (typeof tone === 'string' ? tone : 'info');
+    const statusClass = `status-${level === 'danger' ? 'danger' : level === 'warning' ? 'warning' : level === 'success' ? 'success' : 'info'}`;
     statusLabel.textContent = message;
-    statusLabel.style.color = isError ? '#ff9aa9' : '#93a4c8';
-    hudAlerts.textContent = `Alerts: ${message}`;
+    statusLabel.classList.remove('status-success', 'status-warning', 'status-danger', 'status-info');
+    statusLabel.classList.add(statusClass);
+
+    hudAlerts.classList.remove('hud-alert-info', 'hud-alert-success', 'hud-alert-warning', 'hud-alert-danger');
+    hudAlerts.classList.add(`hud-alert-${level === 'danger' ? 'danger' : level}`);
+    hudAlerts.textContent = `${level.toUpperCase()}: ${message}`;
+
+    alertHistory.unshift({ message, level, at: Date.now() });
+    if (alertHistory.length > 6) alertHistory.length = 6;
+    if (hudAlertFeed) {
+      hudAlertFeed.innerHTML = '';
+      alertHistory.slice(0, 3).forEach((entry) => {
+        const el = document.createElement('div');
+        el.className = `hud-alert-item ${entry.level}`;
+        el.textContent = entry.message;
+        hudAlertFeed.appendChild(el);
+      });
+    }
   }
   
   function getMapLonLatFromEvent(event) {
@@ -1201,7 +1223,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
 
     const cards = Array.from(document.querySelectorAll('.sidebar .card'));
     const byTitle = new Map(cards.map((card) => [card.querySelector('h2')?.textContent?.trim(), card]));
-    const leftTitles = ['Geo Command', 'Simulation', 'Build Mode', 'Country State', 'Included Major Cities', 'Legend'];
+    const leftTitles = ['Geo Command', 'Simulation', 'Command Setup', 'Country Overview', 'Included Major Cities', 'Legend'];
     const rightTitles = ['Unit Orders', 'Base Production', 'Units', 'Domestic Policy', 'Government Profile', 'Diplomacy'];
     const tabs = {
       World: ['Blocs & Coalitions', 'Negotiated Resolution'],
@@ -1404,10 +1426,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     gameState.attackMode = false;
     gameState.captureMode = false;
     gameState.selectedAsset = null;
-    selectedCountryLabel.textContent = `Selected: ${countryFeature.properties.name}`;
+    selectedCountryLabel.textContent = `Inspected country: ${countryFeature.properties.name}`;
+    selectedCountryLabel.classList.add('is-selected');
     economySystem.ensureCountry(countryFeature.properties.name);
     const playerCountryState = countrySystem.ensureCountry(countryFeature.properties.name, false);
     playerProfile.textContent = `Player country: ${countryFeature.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)})`;
+    hudPlayerCountry.textContent = `Commander: ${countryFeature.properties.name}`;
     gameState.selectedCountryForHud = countryFeature.properties.name;
     renderCityList(countryFeature.properties.name);
     updateCountryStyles();
@@ -1572,7 +1596,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     refreshTimeHud();
     setStatus(gameState.simulationSpeed === 0
       ? 'Simulation paused.'
-      : `Simulation speed set to ${gameState.simulationSpeed}x.`);
+      : `Simulation speed set to ${gameState.simulationSpeed}x.`, 'success');
   }
   
   function attachTimeControls() {
@@ -1677,6 +1701,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         gameState.selectedAsset = { type: 'base', id: d.id };
         gameState.selectedCountryForHud = d.ownerCountry;
         selectedAssetStatus.textContent = `Selected asset: Base #${d.id} • Owner ${d.ownerCountry} • ${d.controlStatus || 'normal'}`;
+        setStatus(`Base #${d.id} selected. Production controls updated.`, 'info');
         renderBases();
         renderProductionPanel();
         refreshCountryHud();
@@ -1698,6 +1723,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         gameState.selectedAsset = { type: 'city', id: d.id };
         gameState.selectedCountryForHud = d.ownerCountry;
         selectedAssetStatus.textContent = `Selected asset: City ${d.name} • Owner ${d.ownerCountry} • ${d.controlStatus}`;
+        setStatus(`City ${d.name} inspected. Country overview synced.`, 'info');
         refreshCountryHud();
         if (gameState.captureMode && gameState.selectedUnitId) {
           const result = captureSystem.startCapture(gameState.selectedUnitId, 'city', d.id);
@@ -1755,6 +1781,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         gameState.captureMode = false;
         gameState.selectedCountryForHud = d.ownerCountry;
         renderSelectedUnitPanel();
+        setStatus(`Unit #${d.id} selected for tactical orders.`, 'info');
         refreshCountryHud();
         renderUnits();
       }
@@ -1781,6 +1808,15 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     attackModeStatus.textContent = `Attack mode: ${gameState.attackMode ? 'On (click enemy unit/base)' : 'Off'}`;
     captureModeStatus.textContent = `Capture mode: ${gameState.captureMode ? 'On (click enemy city/base)' : 'Off'}`;
     if (!gameState.selectedAsset) selectedAssetStatus.textContent = 'Selected asset: none';
+    const inspected = gameState.selectedCountryForHud || '--';
+    const selectionParts = [];
+    if (gameState.selectedUnitId) selectionParts.push(`Unit #${gameState.selectedUnitId}`);
+    if (gameState.selectedBaseId) selectionParts.push(`Base #${gameState.selectedBaseId}`);
+    if (gameState.selectedAsset?.type === 'city') selectionParts.push('City selected');
+    hudSelectionCue.textContent = `Selection: ${selectionParts.length ? selectionParts.join(' • ') : `Country (${inspected})`}`;
+    mapWrap.classList.toggle('mode-move', gameState.moveMode);
+    mapWrap.classList.toggle('mode-attack', gameState.attackMode);
+    mapWrap.classList.toggle('mode-capture', gameState.captureMode);
     updateContextActionPanels();
   }
   
@@ -2203,7 +2239,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
           return;
         }
         selectedCountryFeature = d;
-        selectedCountryLabel.textContent = `Selected: ${d.properties.name}`;
+        selectedCountryLabel.textContent = `Inspected country: ${d.properties.name}`;
+        selectedCountryLabel.classList.add('is-selected');
         renderCityList(d.properties.name);
         updateCountryStyles();
         placeBaseFromLonLat(getMapLonLatFromEvent(event));
@@ -2290,7 +2327,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     renderProductionPanel();
 
     const completeText = formatDateTime(base.buildCompleteAt);
-    setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
+    setStatus(`${base.type} base started construction. ETA: ${completeText}.`, 'success');
     refreshEconomyHud();
   }
 
@@ -2308,7 +2345,10 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     refreshCountryHud();
     refreshDomainPanels();
     renderSelectedUnitPanel();
-    hudAlerts.textContent = 'Alerts: Ready';
+    hudPlayerCountry.textContent = 'Commander: --';
+    hudCurrentCountry.textContent = 'Inspecting: --';
+    hudSelectionCue.textContent = 'Selection: none';
+    setStatus('Command interface online. Choose New Simulation to begin.', 'info');
   
     try {
       await setupMap();
