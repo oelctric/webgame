@@ -3,7 +3,6 @@ window.createCountryPanelController = function createCountryPanelController({
   baseButtons,
   countrySelect,
   gameState,
-  majorCities,
   baseTypes,
   getSelectedBaseType,
   setSelectedBaseType,
@@ -11,7 +10,7 @@ window.createCountryPanelController = function createCountryPanelController({
 }) {
   function renderCityList(countryName) {
     cityList.innerHTML = '';
-    const sourceCities = gameState.cities.length ? gameState.cities : majorCities.map((c) => ({ name: c.name, ownerCountry: c.country }));
+    const sourceCities = gameState.cities.length ? gameState.cities : [];
     const visibleCities = countryName
       ? sourceCities.filter((city) => (city.ownerCountry || city.country) === countryName)
       : sourceCities;

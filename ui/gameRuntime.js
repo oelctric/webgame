@@ -125,6 +125,17 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       name: 'Modern Baseline',
       mode: 'standard',
       appliedAt: Date.parse(GAME_START_ISO)
+    },
+    world: {
+      regions: [],
+      adminBoundaries: [],
+      infrastructure: [],
+      militarySites: [],
+      strategicRoutes: [],
+      indexById: {},
+      seededAt: null,
+      seedVersion: 'v1',
+      summary: {}
     }
   };
   
@@ -184,6 +195,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     leadershipSystem
   });
   leadershipSystem.aiSystem = aiSystem;
+  const worldSeedSystem = new WorldSeedSystem(gameState);
   
   const svg = d3.select('#map');
   const mapWrap = document.getElementById('mapWrap');
@@ -517,24 +529,6 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     { key: 'antiAir', label: 'Anti-Air', color: 'var(--base-aa)' }
   ];
   
-  const majorCities = [
-    { name: 'New York', country: 'United States of America', lat: 40.7128, lon: -74.0060 },
-    { name: 'Los Angeles', country: 'United States of America', lat: 34.0522, lon: -118.2437 },
-    { name: 'London', country: 'United Kingdom', lat: 51.5072, lon: -0.1276 },
-    { name: 'Paris', country: 'France', lat: 48.8566, lon: 2.3522 },
-    { name: 'Berlin', country: 'Germany', lat: 52.52, lon: 13.405 },
-    { name: 'Moscow', country: 'Russia', lat: 55.7558, lon: 37.6173 },
-    { name: 'Beijing', country: 'China', lat: 39.9042, lon: 116.4074 },
-    { name: 'Tokyo', country: 'Japan', lat: 35.6762, lon: 139.6503 },
-    { name: 'Delhi', country: 'India', lat: 28.6139, lon: 77.209 },
-    { name: 'Mumbai', country: 'India', lat: 19.076, lon: 72.8777 },
-    { name: 'Cairo', country: 'Egypt', lat: 30.0444, lon: 31.2357 },
-    { name: 'Lagos', country: 'Nigeria', lat: 6.5244, lon: 3.3792 },
-    { name: 'São Paulo', country: 'Brazil', lat: -23.5505, lon: -46.6333 },
-    { name: 'Buenos Aires', country: 'Argentina', lat: -34.6037, lon: -58.3816 },
-    { name: 'Sydney', country: 'Australia', lat: -33.8688, lon: 151.2093 },
-    { name: 'Istanbul', country: 'Turkey', lat: 41.0082, lon: 28.9784 }
-  ];
   
   let selectedBaseType = null;
   let selectedCountryFeature = null;
@@ -903,7 +897,6 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     menuPreviewDescription,
     menuPreviewBullets,
     baseTypes,
-    majorCities,
     selectedBaseType,
     selectedCountryFeature,
     countries,
@@ -989,7 +982,6 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     baseButtons,
     countrySelect,
     gameState,
-    majorCities,
     baseTypes,
     getSelectedBaseType: () => selectedBaseType,
     setSelectedBaseType: (nextType) => {
@@ -1416,16 +1408,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function initializeCityState() {
-    if (gameState.cities.length) return;
-    gameState.cities = majorCities.map((city, idx) => ({
-      id: idx + 1,
-      name: city.name,
-      ownerCountry: city.country,
-      lonLat: [city.lon, city.lat],
-      controlStatus: 'normal',
-      captureState: null,
-      status: 'active'
-    }));
+    worldSeedSystem.seedBaseWorld();
   }
   
   function updateCountryStyles() {
@@ -1493,6 +1476,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     refreshChokepointHud();
     refreshBlocHud();
     refreshTradeHud();
+    renderWorldLayers();
   }
   
   function spawnEnemyForces() {
@@ -1756,6 +1740,38 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     });
   }
 
+
+
+  function renderWorldLayers() {
+    const world = gameState.world || {};
+    if (!mapRenderer) return;
+
+    mapRenderer.renderAdminBoundaries(world.adminBoundaries || [], {
+      getClassName: () => 'admin-boundary',
+      getTitle: (d) => `Admin boundary reference: ${d.country}`
+    });
+
+    const routes = (world.strategicRoutes || []).map((route) => ({
+      ...route,
+      path: worldSeedSystem.resolveRoutePath(route)
+    })).filter((route) => Array.isArray(route.path));
+
+    mapRenderer.renderStrategicRoutes(routes, {
+      getClassName: (d) => `strategic-route ${d.type || ''}`.trim(),
+      getTitle: (d) => `${d.type} · congestion ${d.congestion || 'normal'}`
+    });
+
+    mapRenderer.renderInfrastructure(world.infrastructure || [], {
+      getClassName: (d) => `infrastructure-point infra-${d.type}`,
+      getTitle: (d) => `${d.name} (${d.type}) · capacity ${d.capacityTier} · confidence ${d.metadata?.confidenceLevel || 'n/a'}`
+    });
+
+    mapRenderer.renderMilitarySites(world.militarySites || [], {
+      getClassName: (d) => `military-site-point military-${d.siteType} posture-${d.forcePosture || 'baseline'}`.trim(),
+      getTitle: (d) => `${d.name} (${d.siteType}) · posture ${d.forcePosture || 'baseline'} · confidence ${d.confidenceLevel}`
+    });
+  }
+
   function renderUnits() {
     const visibleUnits = gameState.units.filter((unit) => unit.status !== 'destroyed');
     unitCount.textContent = `Total units: ${visibleUnits.length}`;
@@ -1978,6 +1994,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       internalResistance: cloneForSave(gameState.internalResistance),
       localInstability: cloneForSave(gameState.localInstability),
       scenario: cloneForSave(gameState.scenario),
+      world: cloneForSave(gameState.world),
       nextCounters: {
         negotiationAgreement: gameState.negotiation?.nextAgreementId || 0,
         influenceOperation: gameState.influence?.nextOperationId || 1,
@@ -2087,6 +2104,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   function refreshAfterLoad() {
     renderBases();
     renderCities();
+    renderWorldLayers();
     renderUnits();
     renderProductionPanel();
     renderSelectedUnitPanel();
@@ -2161,7 +2179,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       economy: incoming.economy || gameState.economy,
       internalResistance: incoming.internalResistance || gameState.internalResistance,
       localInstability: incoming.localInstability || gameState.localInstability,
-      scenario: incoming.scenario || gameState.scenario
+      scenario: incoming.scenario || gameState.scenario,
+      world: incoming.world || gameState.world
     });
 
     if (incoming.nextCounters) {
@@ -2172,6 +2191,15 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       gameState.localInstability.nextHotspotId = incoming.nextCounters.hotspot || gameState.localInstability.nextHotspotId || 1;
       gameState.blocs.nextBlocId = incoming.nextCounters.bloc || gameState.blocs.nextBlocId || 1;
       eventSystem.nextEventId = incoming.nextCounters.eventId || eventSystem.nextEventId || 1;
+    }
+
+    worldSeedSystem.ensureWorldContainers();
+    if (!gameState.world.indexById || !Object.keys(gameState.world.indexById).length) {
+      gameState.world.indexById = worldSeedSystem.buildNodeIndex({
+        cities: gameState.cities || [],
+        infrastructure: gameState.world.infrastructure || [],
+        militarySites: gameState.world.militarySites || []
+      });
     }
 
     selectedCountryFeature = selectedFeature;
@@ -2483,6 +2511,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
           blocSystem,
           chokepointSystem,
           eventSystem,
+          worldSeedSystem,
           simulationMode: simulationModeSelect.value,
           selectedCountryName: gameState.selectedPlayerCountry.properties.name
         });
@@ -2756,6 +2785,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     countries = initResult.countries;
 
     renderCities();
+    renderWorldLayers();
     renderCityList();
     createBaseButtons();
     populateCountrySelect();

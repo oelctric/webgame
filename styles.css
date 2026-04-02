@@ -152,6 +152,46 @@
     .country.selected { fill: #6ca2ff; stroke: #eef5ff; stroke-width: 0.95; filter: drop-shadow(0 0 5px rgba(122,170,255,0.52)); }
     .country.locked { fill: #3b4e74; cursor: not-allowed; }
     .city { fill: var(--city); stroke: #433616; stroke-width: 0.45; pointer-events: all; cursor: pointer; }
+
+    .admin-boundary {
+      fill: none;
+      stroke: rgba(207, 225, 255, 0.28);
+      stroke-width: 0.7;
+      stroke-dasharray: 3 2;
+      pointer-events: none;
+    }
+
+    .strategic-route {
+      fill: none;
+      stroke: rgba(120, 196, 255, 0.45);
+      stroke-width: 1.2;
+      stroke-linecap: round;
+      pointer-events: none;
+    }
+    .strategic-route.energy_corridor { stroke: rgba(255, 188, 88, 0.58); }
+    .strategic-route.port_access_route { stroke: rgba(125, 224, 206, 0.58); }
+    .strategic-route.rail_logistics_corridor { stroke-dasharray: 4 2; }
+
+    .infrastructure-point {
+      fill: #9de5c0;
+      stroke: #0f1b14;
+      stroke-width: 0.7;
+      cursor: pointer;
+    }
+    .infrastructure-point.infra-airport { fill: #9dd3ff; }
+    .infrastructure-point.infra-port { fill: #75e7dd; }
+    .infrastructure-point.infra-refinery,
+    .infrastructure-point.infra-energy_facility,
+    .infrastructure-point.infra-power_hub { fill: #ffbe73; }
+    .infrastructure-point.infra-industrial_hub { fill: #d7b5ff; }
+
+    .military-site-point {
+      fill: #ff9ca2;
+      stroke: #2c0f12;
+      stroke-width: 0.85;
+      cursor: pointer;
+    }
+    .military-site-point.posture-heightened { filter: drop-shadow(0 0 4px rgba(255, 96, 96, 0.55)); }
     .city.being_captured { fill: #ff8d4a; }
 
     .city.local-hotspot-active { fill: #ff9f59; stroke: #5e2600; stroke-width: 0.75; }

@@ -31,6 +31,7 @@ window.applyGeoScenarioPreset = function applyGeoScenarioPreset({
   blocSystem,
   chokepointSystem,
   eventSystem,
+  worldSeedSystem = null,
   simulationMode = 'standard',
   selectedCountryName = null
 }) {
@@ -142,6 +143,10 @@ window.applyGeoScenarioPreset = function applyGeoScenarioPreset({
     mode: simulationMode,
     appliedAt: gameState.currentTimeMs
   };
+
+  if (worldSeedSystem && typeof worldSeedSystem.applyScenarioWorldModifiers === 'function') {
+    worldSeedSystem.applyScenarioWorldModifiers({ presetId: preset.id, simulationMode });
+  }
 
   return preset;
 };
