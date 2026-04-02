@@ -2190,7 +2190,21 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     if (!options.suppressStatus) {
       setStatus(`Loaded ${sourceLabel} successfully.`, 'success');
     }
-    return { ok: true, schedulerRestore };
+    return {
+      ok: true,
+      schedulerRestore,
+      runtime: {
+        selectedCountryRebound: Boolean(selectedFeature),
+        restoredCountryName: selectedFeature?.properties?.name || selectedCountryName || null,
+        clock: {
+          currentTimeMs: gameClock.currentTimeMs,
+          simulationSpeed: gameState.simulationSpeed
+        },
+        uiRefresh: {
+          ok: true
+        }
+      }
+    };
   }
 
   function summarizePersistenceRuntimeState() {
@@ -2203,27 +2217,60 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     };
   }
 
-  function runPersistenceSmokeRestore(snapshot, sourceLabel = 'fixture smoke') {
+  function restoreSnapshot(snapshot, options = {}) {
+    const {
+      sourceLabel = 'session',
+      suppressStatus = false,
+      skipPrepare = false,
+      preparedReport = null
+    } = options;
     if (!window.GeoCommandSaveSystem?.prepareSnapshotForRestore) {
-      return { ok: false, message: 'Save preparation pipeline is unavailable.' };
+      return { ok: false, phase: 'prepare', message: 'Save preparation pipeline is unavailable.' };
     }
-    const prepared = window.GeoCommandSaveSystem.prepareSnapshotForRestore(snapshot);
-    if (!prepared.ok) {
+
+    let preparedSnapshot = snapshot;
+    let compatibility = preparedReport;
+
+    if (!skipPrepare) {
+      const prepared = window.GeoCommandSaveSystem.prepareSnapshotForRestore(snapshot);
+      if (!prepared.ok) {
+        return {
+          ok: false,
+          phase: prepared.phase || 'prepare',
+          message: prepared.message,
+          compatibility: prepared.report || null
+        };
+      }
+      preparedSnapshot = prepared.snapshot;
+      compatibility = prepared.report || null;
+    }
+
+    const restored = loadSnapshotIntoRuntime(preparedSnapshot, sourceLabel, { suppressStatus });
+    if (!restored.ok) {
       return {
         ok: false,
-        stage: prepared.phase || 'prepare',
-        message: prepared.message,
-        compatibility: prepared.report || null
+        phase: 'runtime',
+        message: restored.message || 'Runtime restore failed.',
+        compatibility,
+        schedulerRestore: restored.schedulerRestore || null,
+        runtime: restored.runtime || null
       };
     }
-    const restored = loadSnapshotIntoRuntime(prepared.snapshot, sourceLabel, { suppressStatus: true });
+
     return {
-      ok: restored.ok,
-      compatibility: prepared.report,
+      ok: true,
+      compatibility,
       schedulerRestore: restored.schedulerRestore || null,
-      runtime: summarizePersistenceRuntimeState(),
+      runtime: {
+        ...summarizePersistenceRuntimeState(),
+        ...(restored.runtime || {})
+      },
       message: restored.message || null
     };
+  }
+
+  function runPersistenceSmokeRestore(snapshot, sourceLabel = 'fixture smoke') {
+    return restoreSnapshot(snapshot, { sourceLabel, suppressStatus: true });
   }
 
   function persistSave(slotId, slotName) {
@@ -2240,7 +2287,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     if (!window.GeoCommandSaveSystem) return { ok: false, message: 'Save subsystem unavailable.' };
     const loaded = window.GeoCommandSaveSystem.loadSnapshot(slotId);
     if (!loaded.ok) return loaded;
-    return loadSnapshotIntoRuntime(loaded.snapshot, sourceLabel);
+    return restoreSnapshot(loaded.snapshot, {
+      sourceLabel,
+      suppressStatus: false,
+      skipPrepare: true,
+      preparedReport: loaded.report || null
+    });
   }
 
   function maybeAutosave(reason = 'autosave') {
@@ -2312,7 +2364,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         setStatus('No latest save found. Use Quick Save or manual slots first.', true);
         return;
       }
-      const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session');
+      const result = restoreSnapshot(latest.snapshot, {
+        sourceLabel: 'latest session',
+        suppressStatus: false,
+        skipPrepare: true,
+        preparedReport: latest.report || null
+      });
       if (!result.ok) setStatus(result.message, true);
     });
 
@@ -2354,7 +2411,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
           setStatus('No saved session found. Start a new simulation or create a save first.', true);
           return;
         }
-        const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session');
+        const result = restoreSnapshot(latest.snapshot, {
+          sourceLabel: 'latest session',
+          suppressStatus: false,
+          skipPrepare: true,
+          preparedReport: latest.report || null
+        });
         if (!result.ok) {
           setStatus(result.message, true);
           return;
@@ -2801,6 +2863,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
 
   return {
     init,
+    restoreSnapshot,
     loadSnapshotIntoRuntime,
     runPersistenceSmokeRestore,
     summarizePersistenceRuntimeState
