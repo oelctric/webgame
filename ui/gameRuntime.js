@@ -522,14 +522,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   let selectedBaseType = null;
   let selectedCountryFeature = null;
   let countries = [];
-  let countriesLayer;
-  let basesLayer;
-  let citiesLayer;
-  let unitsLayer;
   let projection;
-  let mapRoot;
-  let mapZoomBehavior;
-  let suppressMapClick = false;
+  let mapRenderer;
+  let menuController;
+  let layoutPanelController;
+  let countryPanelController;
   let playStep = 1;
   let lastFrameTime = performance.now();
   
@@ -537,6 +534,31 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     music: Number(localStorage.getItem('musicVolume') ?? 40),
     sfx: Number(localStorage.getItem('sfxVolume') ?? 60)
   };
+
+
+  layoutPanelController = window.createLayoutPanelController({
+    rightPanel,
+    bottomDrawer,
+    bottomDrawerTabs,
+    bottomDrawerContent,
+    toggleDrawerBtn,
+    hudCurrentCountry,
+    gameState
+  });
+
+  countryPanelController = window.createCountryPanelController({
+    cityList,
+    baseButtons,
+    countrySelect,
+    gameState,
+    majorCities,
+    baseTypes,
+    getSelectedBaseType: () => selectedBaseType,
+    setSelectedBaseType: (nextType) => {
+      selectedBaseType = nextType;
+    },
+    setStatus
+  });
   
   function formatDateTime(timestamp) {
     return new Date(timestamp).toLocaleString(undefined, {
@@ -1413,19 +1435,19 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function getMapLonLatFromEvent(event) {
-    const [x, y] = d3.pointer(event, svg.node());
-    const transform = d3.zoomTransform(svg.node());
-    const [worldX, worldY] = transform.invert([x, y]);
-    return projection.invert([worldX, worldY]);
+    return mapRenderer ? mapRenderer.getLonLatFromEvent(event) : null;
   }
   
   function shouldIgnoreMapClick() {
-    if (!suppressMapClick) return false;
-    suppressMapClick = false;
-    return true;
+    return mapRenderer ? mapRenderer.shouldIgnoreMapClick() : false;
   }
   
   function organizePanels() {
+    if (layoutPanelController) {
+      layoutPanelController.organizePanels();
+      return;
+    }
+
     const cards = Array.from(document.querySelectorAll('.sidebar .card'));
     const byTitle = new Map(cards.map((card) => [card.querySelector('h2')?.textContent?.trim(), card]));
     const leftTitles = ['Geo Command', 'Simulation', 'Build Mode', 'Country State', 'Included Major Cities', 'Legend'];
@@ -1485,6 +1507,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function attachDrawerControls() {
+    if (layoutPanelController) {
+      layoutPanelController.attachDrawerControls();
+      return;
+    }
+
     if (!toggleDrawerBtn) return;
     setDrawerCollapsed(true);
     toggleDrawerBtn.addEventListener('click', () => {
@@ -1494,6 +1521,11 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function updateContextActionPanels() {
+    if (layoutPanelController) {
+      layoutPanelController.updateContextActionPanels();
+      return;
+    }
+
     const unitOrdersCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Unit Orders');
     const productionCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Base Production');
     const diplomacyCard = Array.from(rightPanel.querySelectorAll('.card')).find((card) => card.querySelector('h2')?.textContent.trim() === 'Diplomacy');
@@ -1507,10 +1539,18 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function setOverlay(name) {
+    if (menuController) {
+      menuController.setOverlay(name);
+      return;
+    }
     Object.entries(overlays).forEach(([key, el]) => el.classList.toggle('hidden', key !== name));
   }
   
   function hideOverlays() {
+    if (menuController) {
+      menuController.hideOverlays();
+      return;
+    }
     Object.values(overlays).forEach((el) => el.classList.add('hidden'));
   }
   
@@ -1565,19 +1605,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     }
   };
   
-  function setMainMenuPreview(key) {
-    const preview = menuPreviewData[key] || menuPreviewData.newSimulation;
-    menuPreviewLabel.textContent = preview.label;
-    menuPreviewTitle.textContent = preview.title;
-    menuPreviewDescription.textContent = preview.description;
-    menuPreviewBullets.innerHTML = '';
-    preview.bullets.forEach((line) => {
-      const li = document.createElement('li');
-      li.textContent = line;
-      menuPreviewBullets.appendChild(li);
-    });
-  }
-  
+
   function updatePlayFlowUI() {
     playStepIndicator.textContent = String(playStep);
     const stepViews = [
@@ -1594,23 +1622,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function renderCityList(countryName) {
-    cityList.innerHTML = '';
-    const sourceCities = gameState.cities.length ? gameState.cities : majorCities.map((c) => ({ name: c.name, ownerCountry: c.country }));
-    const visibleCities = countryName
-      ? sourceCities.filter((city) => (city.ownerCountry || city.country) === countryName)
-      : sourceCities;
-    if (!visibleCities.length) {
-      const li = document.createElement('li');
-      li.textContent = 'No major cities configured for this country yet.';
-      cityList.appendChild(li);
-      return;
-    }
-  
-    visibleCities.forEach((city) => {
-      const li = document.createElement('li');
-      li.textContent = `${city.name} (${city.ownerCountry || city.country})`;
-      cityList.appendChild(li);
-    });
+    if (!countryPanelController) return;
+    countryPanelController.renderCityList(countryName);
   }
   
   function initializeCityState() {
@@ -1627,11 +1640,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function updateCountryStyles() {
-    if (!countriesLayer) return;
-    countriesLayer
-      .selectAll('path')
-      .classed('selected', (d) => selectedCountryFeature && d.id === selectedCountryFeature.id)
-      .classed('locked', (d) => gameState.selectedPlayerCountry && d.id !== gameState.selectedPlayerCountry.id);
+    if (!mapRenderer) return;
+    mapRenderer.refreshSelection();
   }
   
   function setPlayerCountry(countryFeature) {
@@ -1772,44 +1782,13 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function createBaseButtons() {
-    baseButtons.innerHTML = '';
-    const noneBtn = document.createElement('button');
-    noneBtn.textContent = 'No Build';
-    noneBtn.classList.toggle('active', selectedBaseType === null);
-    noneBtn.addEventListener('click', () => {
-      selectedBaseType = null;
-      baseButtons.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === noneBtn));
-      setStatus('Build mode off. You can inspect/select without placing bases.');
-    });
-    baseButtons.appendChild(noneBtn);
-  
-    baseTypes.forEach((type) => {
-      const btn = document.createElement('button');
-      btn.textContent = type.label;
-      btn.dataset.type = type.key;
-      btn.classList.toggle('active', type.key === selectedBaseType);
-      btn.addEventListener('click', () => {
-        selectedBaseType = type.key;
-        baseButtons.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === btn));
-        if (gameState.selectedPlayerCountry) {
-          setStatus(`Build mode: ${type.label}. Click inside ${gameState.selectedPlayerCountry.properties.name}.`);
-        }
-      });
-      baseButtons.appendChild(btn);
-    });
+    if (!countryPanelController) return;
+    countryPanelController.createBaseButtons(() => gameState.selectedPlayerCountry?.properties?.name || null);
   }
   
   function populateCountrySelect() {
-    countrySelect.innerHTML = '<option value="">Choose a country</option>';
-    countries
-      .map((c) => c.properties.name)
-      .sort((a, b) => a.localeCompare(b))
-      .forEach((name) => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        countrySelect.appendChild(option);
-      });
+    if (!countryPanelController) return;
+    countryPanelController.populateCountrySelect(countries);
   }
   
   function applySettingsUI() {
@@ -1912,32 +1891,13 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   function renderBases() {
-    if (!basesLayer || !projection) return;
-  
     const visibleBases = gameState.bases.filter((base) => base.combatStatus !== 'destroyed');
-    const points = basesLayer.selectAll('g.base-point').data(visibleBases, (d) => d.id);
-    const enter = points.enter().append('g').attr('class', 'base-point');
-  
-    enter
-      .append('rect')
-      .attr('class', 'base')
-      .attr('width', 8)
-      .attr('height', 8)
-      .attr('x', -4)
-      .attr('y', -4)
-      .attr('rx', 1.5);
-  
-    enter.append('title');
-  
-    points
-      .merge(enter)
-      .attr('transform', (d) => {
-        const [x, y] = projection(d.lonLat);
-        return `translate(${x}, ${y})`;
-      })
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        if (shouldIgnoreMapClick()) return;
+    if (!mapRenderer) return;
+    mapRenderer.renderBases(visibleBases, {
+      getColor: (d) => baseTypes.find((b) => b.key === d.type).color,
+      getClassName: (d) => `base ${d.status} ${d.combatStatus} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`,
+      getTitle: (d) => `${d.type} base (${d.status}) HP ${d.health}/${d.maxHealth} - ${d.ownerCountry}`,
+      onClick: (event, d) => {
         if (gameState.attackMode && gameState.selectedUnitId) {
           const result = combatSystem.startAttack(gameState.selectedUnitId, 'base', d.id);
           if (!result.ok) {
@@ -1969,38 +1929,21 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         renderBases();
         renderProductionPanel();
         refreshCountryHud();
-      })
-      .select('rect')
-      .attr('fill', (d) => baseTypes.find((b) => b.key === d.type).color)
-      .attr('class', (d) => `base ${d.status} ${d.combatStatus} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedBaseId === d.id ? 'selected-base' : ''}`);
-  
-    points
-      .merge(enter)
-      .select('title')
-      .text((d) => `${d.type} base (${d.status}) HP ${d.health}/${d.maxHealth} - ${d.ownerCountry}`);
-  
-    points.exit().remove();
+      }
+    });
   }
-  
+
   function renderCities() {
-    if (!citiesLayer || !projection) return;
     const visibleCities = gameState.cities.filter((city) => city.status !== 'destroyed');
-    const points = citiesLayer.selectAll('circle.city-point').data(visibleCities, (d) => d.id);
-    const enter = points.enter().append('circle').attr('class', 'city city-point').attr('r', 3);
-    enter.append('title');
-  
-    points
-      .merge(enter)
-      .attr('class', (d) => {
+    if (!mapRenderer) return;
+    mapRenderer.renderCities(visibleCities, {
+      getClassName: (d) => {
         const severity = Number(d.hotspotSeverity || 0);
         const hotspotClass = severity >= 70 ? 'local-hotspot-critical' : (severity >= 45 ? 'local-hotspot-active' : '');
         return `city city-point ${d.controlStatus} ${hotspotClass}`.trim();
-      })
-      .attr('cx', (d) => projection(d.lonLat)[0])
-      .attr('cy', (d) => projection(d.lonLat)[1])
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        if (shouldIgnoreMapClick()) return;
+      },
+      getTitle: (d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${Math.round(ECONOMY_CONFIG.cityIncomePerDay * (1 - (d.localEconomicPenalty || 0)))}/day - Local unrest ${(d.localUnrest || 0).toFixed(0)} - Local control ${(d.localStateControl || 0).toFixed(0)}`,
+      onClick: (event, d) => {
         gameState.selectedAsset = { type: 'city', id: d.id };
         gameState.selectedCountryForHud = d.ownerCountry;
         selectedAssetStatus.textContent = `Selected asset: City ${d.name} • Owner ${d.ownerCountry} • ${d.controlStatus}`;
@@ -2016,18 +1959,15 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
           renderSelectedUnitPanel();
           renderCities();
         }
-      })
-      .select('title')
-      .text((d) => `${d.name} (${d.ownerCountry}) - ${d.controlStatus} - Income ${Math.round(ECONOMY_CONFIG.cityIncomePerDay * (1 - (d.localEconomicPenalty || 0)))}/day - Local unrest ${(d.localUnrest || 0).toFixed(0)} - Local control ${(d.localStateControl || 0).toFixed(0)}`);
-  
-    points.exit().remove();
+      }
+    });
   }
-  
+
   function renderUnits() {
     const visibleUnits = gameState.units.filter((unit) => unit.status !== 'destroyed');
     unitCount.textContent = `Total units: ${visibleUnits.length}`;
     unitList.innerHTML = '';
-  
+
     if (!visibleUnits.length) {
       const li = document.createElement('li');
       li.textContent = 'No units yet.';
@@ -2039,19 +1979,13 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         unitList.appendChild(li);
       });
     }
-  
-    if (!unitsLayer || !projection) return;
-    const markers = unitsLayer.selectAll('circle.unit-point').data(visibleUnits, (d) => d.id);
-    const enter = markers.enter().append('circle').attr('class', 'unit-marker unit-point').attr('r', 2.3);
-    enter.append('title');
-    markers
-      .merge(enter)
-      .attr('class', (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`)
-      .attr('cx', (d) => projection(movementSystem.getDisplayLonLat(d))[0])
-      .attr('cy', (d) => projection(movementSystem.getDisplayLonLat(d))[1])
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        if (shouldIgnoreMapClick()) return;
+
+    if (!mapRenderer) return;
+    mapRenderer.renderUnits(visibleUnits, {
+      getClassName: (d) => `unit-marker unit-point ${d.combatStatus || ''} ${gameState.aiCountries.includes(d.ownerCountry) ? 'enemy-owner' : ''} ${gameState.selectedUnitId === d.id ? 'selected' : ''}`,
+      getLonLat: (d) => movementSystem.getDisplayLonLat(d),
+      getTitle: (d) => `${UNIT_DEFINITIONS[d.type].label} (${d.domain}) - ${d.status}`,
+      onClick: (event, d) => {
         if (gameState.attackMode && gameState.selectedUnitId && gameState.selectedUnitId !== d.id) {
           const result = combatSystem.startAttack(gameState.selectedUnitId, 'unit', d.id);
           if (!result.ok) {
@@ -2072,12 +2006,10 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         renderSelectedUnitPanel();
         refreshCountryHud();
         renderUnits();
-      })
-      .select('title')
-      .text((d) => `${UNIT_DEFINITIONS[d.type].label} (${d.domain}) - ${d.status}`);
-    markers.exit().remove();
+      }
+    });
   }
-  
+
   function renderSelectedUnitPanel() {
     const unit = gameState.units.find((entry) => entry.id === gameState.selectedUnitId);
     if (!unit) {
@@ -2187,120 +2119,115 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     prodCurrent.textContent = `Current: ${UNIT_DEFINITIONS[currentUnit.type].label} (${remainingDays} days left)`;
   }
   
-  function attachMenuHandlers() {
-    const menuButtons = Array.from(document.querySelectorAll('.menu-nav-btn'));
-    menuButtons.forEach((btn) => {
-      const previewKey = btn.dataset.preview;
-      btn.addEventListener('mouseenter', () => {
-        menuButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === btn));
-        if (previewKey) setMainMenuPreview(previewKey);
-      });
-      btn.addEventListener('focus', () => {
-        menuButtons.forEach((candidate) => candidate.classList.toggle('active', candidate === btn));
-        if (previewKey) setMainMenuPreview(previewKey);
-      });
-    });
-    setMainMenuPreview('newSimulation');
-  
-    document.getElementById('newSimulationBtn').addEventListener('click', () => {
-      playStep = 1;
-      updatePlayFlowUI();
-      countryWarning.textContent = '';
-      leaderNameInput.value = '';
-      scenarioTypeSelect.value = 'modern';
-      simulationModeSelect.value = simulationModeSelect.value || 'standard';
-      launchSummary.textContent = 'Review your setup before deployment.';
-      setOverlay('playFlow');
-    });
-  
-    document.getElementById('continueBtn').addEventListener('click', () => {
-      if (!gameState.selectedPlayerCountry) {
-        setStatus('No active session found. Start a new simulation first.', true);
-        return;
-      }
-      hideOverlays();
-      setStatus(`Resuming command of ${gameState.selectedPlayerCountry.properties.name}.`);
-    });
-    document.getElementById('loadScenarioBtn').addEventListener('click', () => setOverlay('loadPanel'));
-    document.getElementById('sandboxBtn').addEventListener('click', () => setOverlay('sandboxPanel'));
-    document.getElementById('settingsBtn').addEventListener('click', () => setOverlay('settingsPanel'));
-    document.getElementById('creditsBtn').addEventListener('click', () => setOverlay('creditsPanel'));
-    document.getElementById('tutorialBtn').addEventListener('click', () => {
-      setStatus('Tutorial content is planned for a future update. Start with New Simulation.');
-    });
-    document.getElementById('exitBtn').addEventListener('click', () => {
-      setStatus('Web build cannot quit directly. Close this browser tab to exit.');
-    });
-  
-    document.getElementById('settingsBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
-    document.getElementById('loadBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
-    document.getElementById('sandboxBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
-    document.getElementById('creditsBackBtn').addEventListener('click', () => setOverlay('mainMenu'));
-    document.getElementById('loadContinueBtn').addEventListener('click', () => document.getElementById('continueBtn').click());
-    document.getElementById('sandboxQuickStartBtn').addEventListener('click', () => {
-      simulationModeSelect.value = 'sandbox';
-      document.getElementById('newSimulationBtn').click();
-    });
-  
-    document.getElementById('playBackBtn').addEventListener('click', () => {
-      if (playStep === 1) {
-        setOverlay('mainMenu');
-        return;
-      }
-      playStep -= 1;
-      updatePlayFlowUI();
-    });
-  
-    document.getElementById('playNextBtn').addEventListener('click', () => {
-      if (playStep === 1) {
-        const chosen = countrySelect.value;
-        if (!chosen) {
-          countryWarning.textContent = 'Please choose a country to continue.';
-          return;
-        }
-        const chosenFeature = countries.find((c) => c.properties.name === chosen);
-        if (!chosenFeature) {
-          countryWarning.textContent = 'Country data unavailable. Choose another country.';
-          return;
-        }
-        countryWarning.textContent = '';
-        setPlayerCountry(chosenFeature);
-        playStep = 2;
-        updatePlayFlowUI();
-        return;
-      }
-  
-      if (playStep === 2) {
-        const leaderName = leaderNameInput.value.trim();
-        if (!leaderName) {
-          alert('Please enter a leader name.');
-          return;
-        }
-        playStep = 3;
-        updatePlayFlowUI();
-        return;
-      }
-  
-      if (playStep === 3) {
-        const scenarioLabel = scenarioTypeSelect.options[scenarioTypeSelect.selectedIndex]?.textContent || 'Modern Baseline';
-        const modeLabel = simulationModeSelect.options[simulationModeSelect.selectedIndex]?.textContent || 'Standard Simulation';
-        launchSummary.textContent = `Country: ${gameState.selectedPlayerCountry.properties.name} · Leader: ${leaderNameInput.value.trim()} · Scenario: ${scenarioLabel} · Mode: ${modeLabel}`;
-        playStep = 4;
-        updatePlayFlowUI();
-        return;
-      }
-  
-      const leaderName = leaderNameInput.value.trim();
-      const playerCountryState = countrySystem.ensureCountry(gameState.selectedPlayerCountry.properties.name);
-      leadershipSystem.ensureLeadershipFields(playerCountryState);
-      leadershipSystem.renameLeader(playerCountryState.name, leaderName);
-      const modeLabel = simulationModeSelect.value === 'sandbox' ? 'Sandbox' : 'Standard';
-      playerProfile.textContent = `Leader ${playerCountryState.leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)} · ${playerCountryState.leaderSummary}) · Mode: ${modeLabel}`;
-      setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode. Place bases and advance time to complete construction.`);
-      hideOverlays();
+  function setMenuPreview(key, source = menuPreviewData) {
+    const preview = source[key] || source.newSimulation;
+    menuPreviewLabel.textContent = preview.label;
+    menuPreviewTitle.textContent = preview.title;
+    menuPreviewDescription.textContent = preview.description;
+    menuPreviewBullets.innerHTML = '';
+    preview.bullets.forEach((line) => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      menuPreviewBullets.appendChild(li);
     });
   }
-  
+
+  function attachMenuHandlers() {
+    menuController = window.createMenuController({
+      overlays,
+      menuButtons: Array.from(document.querySelectorAll('.menu-nav-btn')),
+      menuPreviewData,
+      setPreview: setMenuPreview,
+      onNewSimulation: () => {
+        playStep = 1;
+        updatePlayFlowUI();
+        countryWarning.textContent = '';
+        leaderNameInput.value = '';
+        scenarioTypeSelect.value = 'modern';
+        simulationModeSelect.value = simulationModeSelect.value || 'standard';
+        launchSummary.textContent = 'Review your setup before deployment.';
+      },
+      onContinue: ({ hideOverlays: hide }) => {
+        if (!gameState.selectedPlayerCountry) {
+          setStatus('No active session found. Start a new simulation first.', true);
+          return;
+        }
+        hide();
+        setStatus(`Resuming command of ${gameState.selectedPlayerCountry.properties.name}.`);
+      },
+      onPlayBack: ({ setOverlay: setMenuOverlay }) => {
+        if (playStep === 1) {
+          setMenuOverlay('mainMenu');
+          return;
+        }
+        playStep -= 1;
+        updatePlayFlowUI();
+      },
+      onPlayNext: ({ hideOverlays: hide }) => {
+        if (playStep === 1) {
+          const chosen = countrySelect.value;
+          if (!chosen) {
+            countryWarning.textContent = 'Please choose a country to continue.';
+            return;
+          }
+          const chosenFeature = countries.find((c) => c.properties.name === chosen);
+          if (!chosenFeature) {
+            countryWarning.textContent = 'Country data unavailable. Choose another country.';
+            return;
+          }
+          countryWarning.textContent = '';
+          setPlayerCountry(chosenFeature);
+          playStep = 2;
+          updatePlayFlowUI();
+          return;
+        }
+
+        if (playStep === 2) {
+          const leaderName = leaderNameInput.value.trim();
+          if (!leaderName) {
+            alert('Please enter a leader name.');
+            return;
+          }
+          playStep = 3;
+          updatePlayFlowUI();
+          return;
+        }
+
+        if (playStep === 3) {
+          const scenarioLabel = scenarioTypeSelect.options[scenarioTypeSelect.selectedIndex]?.textContent || 'Modern Baseline';
+          const modeLabel = simulationModeSelect.options[simulationModeSelect.selectedIndex]?.textContent || 'Standard Simulation';
+          launchSummary.textContent = `Country: ${gameState.selectedPlayerCountry.properties.name} · Leader: ${leaderNameInput.value.trim()} · Scenario: ${scenarioLabel} · Mode: ${modeLabel}`;
+          playStep = 4;
+          updatePlayFlowUI();
+          return;
+        }
+
+        const leaderName = leaderNameInput.value.trim();
+        const playerCountryState = countrySystem.ensureCountry(gameState.selectedPlayerCountry.properties.name);
+        leadershipSystem.ensureLeadershipFields(playerCountryState);
+        leadershipSystem.renameLeader(playerCountryState.name, leaderName);
+        const modeLabel = simulationModeSelect.value === 'sandbox' ? 'Sandbox' : 'Standard';
+        playerProfile.textContent = `Leader ${playerCountryState.leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)} · ${playerCountryState.leaderSummary}) · Mode: ${modeLabel}`;
+        setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode. Place bases and advance time to complete construction.`);
+        hide();
+      },
+      onTutorial: () => setStatus('Tutorial content is planned for a future update. Start with New Simulation.'),
+      onExit: () => setStatus('Web build cannot quit directly. Close this browser tab to exit.'),
+      onSandboxQuickStart: () => {
+        simulationModeSelect.value = 'sandbox';
+        document.getElementById('newSimulationBtn').click();
+      },
+      resetPlayFlow: () => {
+        playStep = 1;
+        updatePlayFlowUI();
+      }
+    });
+
+    menuController.wireMenuPreview();
+    menuController.bindPlayFlow(window.createGeoMenuRefs());
+  }
+
+
   function attachUnitControls() {
     moveUnitBtn.addEventListener('click', () => {
       if (!gameState.selectedUnitId) {
@@ -3423,105 +3350,22 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   }
   
   async function setupMap() {
-    const width = mapWrap.clientWidth;
-    const height = mapWrap.clientHeight;
-    svg.attr('viewBox', `0 0 ${width} ${height}`);
-  
-    const projectionFactory = d3.geoRobinson ? d3.geoRobinson : d3.geoNaturalEarth1;
-    projection = projectionFactory().fitExtent([[15, 15], [width - 15, height - 15]], { type: 'Sphere' });
-    const path = d3.geoPath(projection);
-  
-    mapRoot = svg.append('g').attr('id', 'mapRoot');
-    countriesLayer = mapRoot.append('g').attr('id', 'countriesLayer');
-    citiesLayer = mapRoot.append('g').attr('id', 'citiesLayer');
-    basesLayer = mapRoot.append('g').attr('id', 'basesLayer');
-    unitsLayer = mapRoot.append('g').attr('id', 'unitsLayer');
-  
-    countries = await loadCountriesData();
     initializeCityState();
-  
-    function placeBaseFromEvent(event) {
-      if (shouldIgnoreMapClick()) return;
-      const lonLat = getMapLonLatFromEvent(event);
-      if (!lonLat) return;
-  
-      if (gameState.moveMode && gameState.selectedUnitId) {
-        const result = movementSystem.issueMoveOrder(gameState.selectedUnitId, lonLat);
-        if (!result.ok) {
-          setStatus(result.message, true);
-        } else {
-          const unitDef = UNIT_DEFINITIONS[result.unit.type];
-          setStatus(`${unitDef.label} moving. ETA: ${formatDateTime(result.unit.movement.arrivalAt)}.`);
-        }
-        gameState.moveMode = false;
-        renderSelectedUnitPanel();
-        renderUnits();
-        return;
-      }
-  
-      if (gameState.attackMode && gameState.selectedUnitId) {
-        setStatus('Click an enemy unit or enemy base marker to attack.', true);
-        return;
-      }
-  
-      if (gameState.captureMode && gameState.selectedUnitId) {
-        setStatus('Click an enemy city or enemy base marker to capture.', true);
-        return;
-      }
-  
-      if (!gameState.selectedPlayerCountry) {
-        setStatus('Start from Play in the main menu before placing bases.', true);
-        return;
-      }
-  
-      if (!selectedBaseType) {
-        setStatus('Build mode is off. Choose a base type to place a base.');
-        return;
-      }
-  
-      const clickedCountry = countries.find((country) => pointInsideCountry(country, lonLat));
-      if (!clickedCountry || clickedCountry.id !== gameState.selectedPlayerCountry.id) {
-        setStatus(`Place bases only inside ${gameState.selectedPlayerCountry.properties.name}.`, true);
-        return;
-      }
-  
-      const playerCountry = gameState.selectedPlayerCountry.properties.name;
-      const baseCost = ECONOMY_CONFIG.baseBuildCost[selectedBaseType] || 0;
-      if (!economySystem.spend(playerCountry, baseCost, `build ${selectedBaseType} base`)) {
-        setStatus(`Insufficient funds for ${selectedBaseType} base (${baseCost}).`, true);
-        refreshEconomyHud();
-        return;
-      }
-  
-      const base = createBase({ type: selectedBaseType, lonLat });
-      gameState.selectedBaseId = base.id;
-      renderBases();
-      renderProductionPanel();
-  
-      const completeText = formatDateTime(base.buildCompleteAt);
-      setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
-      refreshEconomyHud();
-    }
-  
-    countriesLayer
-      .selectAll('path')
-      .data(countries)
-      .enter()
-      .append('path')
-      .attr('class', 'country')
-      .attr('d', path)
-      .on('mousemove', function (event, d) {
-        tooltip.style.opacity = 1;
-        tooltip.style.left = `${event.clientX - mapWrap.getBoundingClientRect().left}px`;
-        tooltip.style.top = `${event.clientY - mapWrap.getBoundingClientRect().top}px`;
-        tooltip.textContent = d.properties.name;
-      })
-      .on('mouseleave', () => {
-        tooltip.style.opacity = 0;
-      })
-      .on('click', function (event, d) {
-        event.stopPropagation();
-        if (shouldIgnoreMapClick()) return;
+    mapRenderer = window.createMapRenderer({
+      svg,
+      mapWrap,
+      tooltip,
+      resetViewBtn,
+      loadCountries: loadCountriesData,
+      onProjectionReady: (nextProjection) => {
+        projection = nextProjection;
+      },
+      getCountryClass: (d) => {
+        const selected = selectedCountryFeature && d.id === selectedCountryFeature.id ? 'selected' : '';
+        const locked = gameState.selectedPlayerCountry && d.id !== gameState.selectedPlayerCountry.id ? 'locked' : '';
+        return `${selected} ${locked}`.trim();
+      },
+      onCountrySelected: (d, event) => {
         if (!gameState.selectedPlayerCountry) {
           setStatus('Use Play in the main menu to choose your country first.', true);
           return;
@@ -3534,41 +3378,20 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         selectedCountryLabel.textContent = `Selected: ${d.properties.name}`;
         renderCityList(d.properties.name);
         updateCountryStyles();
-  
-        // When already in-game and clicking inside your country, place a base.
-        placeBaseFromEvent(event);
-      });
-  
+        placeBaseFromLonLat(getMapLonLatFromEvent(event));
+      },
+      onMapClick: (event, ctx) => {
+        placeBaseFromLonLat(ctx.getLonLatFromEvent(event));
+      },
+      onMapDragStateChange: (isDragging) => {
+        mapWrap.classList.toggle('panning', isDragging);
+      }
+    });
+
+    const initResult = await mapRenderer.init();
+    countries = initResult.countries;
+
     renderCities();
-  
-    svg.on('click', function (event) {
-      placeBaseFromEvent(event);
-    });
-  
-    mapZoomBehavior = d3.zoom()
-      .scaleExtent([1, 8])
-      .translateExtent([[-width * 0.6, -height * 0.6], [width * 1.6, height * 1.6]])
-      .on('start', () => {
-        mapWrap.classList.add('panning');
-      })
-      .on('zoom', (event) => {
-        if (!mapRoot) return;
-        mapRoot.attr('transform', event.transform);
-        const source = event.sourceEvent;
-        if (source && (source.type === 'mousemove' || source.type === 'pointermove') && (Math.abs(source.movementX) > 2 || Math.abs(source.movementY) > 2)) {
-          suppressMapClick = true;
-        }
-      })
-      .on('end', () => {
-        mapWrap.classList.remove('panning');
-        setTimeout(() => { suppressMapClick = false; }, 0);
-      });
-  
-    svg.call(mapZoomBehavior).on('dblclick.zoom', null);
-    resetViewBtn.addEventListener('click', () => {
-      svg.transition().duration(250).call(mapZoomBehavior.transform, d3.zoomIdentity);
-    });
-  
     renderCityList();
     createBaseButtons();
     populateCountrySelect();
@@ -3576,12 +3399,74 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     renderUnits();
     renderSelectedUnitPanel();
     setOverlay('mainMenu');
-  
+
     if (!d3.geoRobinson) {
       setStatus('Robinson projection plugin unavailable; using Natural Earth fallback.', true);
     }
   }
-  
+
+  function placeBaseFromLonLat(lonLat) {
+    if (!lonLat) return;
+
+    if (gameState.moveMode && gameState.selectedUnitId) {
+      const result = movementSystem.issueMoveOrder(gameState.selectedUnitId, lonLat);
+      if (!result.ok) {
+        setStatus(result.message, true);
+      } else {
+        const unitDef = UNIT_DEFINITIONS[result.unit.type];
+        setStatus(`${unitDef.label} moving. ETA: ${formatDateTime(result.unit.movement.arrivalAt)}.`);
+      }
+      gameState.moveMode = false;
+      renderSelectedUnitPanel();
+      renderUnits();
+      return;
+    }
+
+    if (gameState.attackMode && gameState.selectedUnitId) {
+      setStatus('Click an enemy unit or enemy base marker to attack.', true);
+      return;
+    }
+
+    if (gameState.captureMode && gameState.selectedUnitId) {
+      setStatus('Click an enemy city or enemy base marker to capture.', true);
+      return;
+    }
+
+    if (!gameState.selectedPlayerCountry) {
+      setStatus('Start from Play in the main menu before placing bases.', true);
+      return;
+    }
+
+    if (!selectedBaseType) {
+      setStatus('Build mode is off. Choose a base type to place a base.');
+      return;
+    }
+
+    const clickedCountry = countries.find((country) => pointInsideCountry(country, lonLat));
+    if (!clickedCountry || clickedCountry.id !== gameState.selectedPlayerCountry.id) {
+      setStatus(`Place bases only inside ${gameState.selectedPlayerCountry.properties.name}.`, true);
+      return;
+    }
+
+    const playerCountry = gameState.selectedPlayerCountry.properties.name;
+    const baseCost = ECONOMY_CONFIG.baseBuildCost[selectedBaseType] || 0;
+    if (!economySystem.spend(playerCountry, baseCost, `build ${selectedBaseType} base`)) {
+      setStatus(`Insufficient funds for ${selectedBaseType} base (${baseCost}).`, true);
+      refreshEconomyHud();
+      return;
+    }
+
+    const base = createBase({ type: selectedBaseType, lonLat });
+    gameState.selectedBaseId = base.id;
+    renderBases();
+    renderProductionPanel();
+
+    const completeText = formatDateTime(base.buildCompleteAt);
+    setStatus(`${base.type} base started construction. ETA: ${completeText}.`);
+    refreshEconomyHud();
+  }
+
+
   async function init() {
     organizePanels();
     attachDrawerControls();

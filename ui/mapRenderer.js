@@ -7,9 +7,8 @@ window.createMapRenderer = function createMapRenderer({
   onCountrySelected,
   onMapClick,
   getCountryClass,
-  cities = [],
-  bases = [],
-  units = []
+  onMapDragStateChange,
+  onProjectionReady
 }) {
   let projection;
   let path;
@@ -20,6 +19,7 @@ window.createMapRenderer = function createMapRenderer({
   let unitsLayer;
   let zoomBehavior;
   let countriesData = [];
+  let suppressClick = false;
 
   function initLayers(width, height) {
     svg.attr('viewBox', `0 0 ${width} ${height}`);
@@ -36,12 +36,34 @@ window.createMapRenderer = function createMapRenderer({
     zoomBehavior = d3.zoom()
       .scaleExtent([1, 8])
       .translateExtent([[-width * 0.6, -height * 0.6], [width * 1.6, height * 1.6]])
-      .on('zoom', (event) => mapRoot && mapRoot.attr('transform', event.transform));
+      .on('start', () => {
+        if (typeof onMapDragStateChange === 'function') onMapDragStateChange(true);
+      })
+      .on('zoom', (event) => {
+        if (mapRoot) mapRoot.attr('transform', event.transform);
+        const source = event.sourceEvent;
+        if (source && (source.type === 'mousemove' || source.type === 'pointermove') && (Math.abs(source.movementX) > 2 || Math.abs(source.movementY) > 2)) {
+          suppressClick = true;
+        }
+      })
+      .on('end', () => {
+        if (typeof onMapDragStateChange === 'function') onMapDragStateChange(false);
+        setTimeout(() => { suppressClick = false; }, 0);
+      });
 
     svg.call(zoomBehavior).on('dblclick.zoom', null);
     if (resetViewBtn) {
       resetViewBtn.addEventListener('click', resetView);
     }
+    if (typeof onProjectionReady === 'function') {
+      onProjectionReady(projection);
+    }
+  }
+
+  function shouldIgnoreMapClick() {
+    if (!suppressClick) return false;
+    suppressClick = false;
+    return true;
   }
 
   function resetView() {
@@ -51,6 +73,13 @@ window.createMapRenderer = function createMapRenderer({
   function mapPoint(lon, lat) {
     if (!projection) return null;
     return projection([lon, lat]);
+  }
+
+  function getLonLatFromEvent(event) {
+    const [x, y] = d3.pointer(event, svg.node());
+    const transform = d3.zoomTransform(svg.node());
+    const [worldX, worldY] = transform.invert([x, y]);
+    return projection.invert([worldX, worldY]);
   }
 
   function renderCountries() {
@@ -78,53 +107,104 @@ window.createMapRenderer = function createMapRenderer({
       })
       .on('click', (event, country) => {
         event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
         if (typeof onCountrySelected === 'function') onCountrySelected(country, event);
       });
 
     selection.exit().remove();
   }
 
-  function renderCities(nextCities = cities) {
+  function renderCities(cities = [], { getClassName, getTitle, onClick } = {}) {
     if (!citiesLayer) return;
     const selection = citiesLayer
-      .selectAll('circle.city')
-      .data(nextCities, (d) => d.id || `${d.country}:${d.name}`);
+      .selectAll('circle.city-point')
+      .data(cities, (d) => d.id || `${d.ownerCountry || d.country}:${d.name}`);
 
-    selection.enter().append('circle').attr('class', 'city')
+    selection.enter().append('circle').attr('class', 'city city-point').attr('r', 3)
       .merge(selection)
-      .attr('cx', (d) => mapPoint(d.lon, d.lat)?.[0] ?? -999)
-      .attr('cy', (d) => mapPoint(d.lon, d.lat)?.[1] ?? -999)
-      .attr('r', 2.6);
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'city city-point'))
+      .attr('cx', (d) => mapPoint(d.lonLat?.[0] ?? d.lon, d.lonLat?.[1] ?? d.lat)?.[0] ?? -999)
+      .attr('cy', (d) => mapPoint(d.lonLat?.[0] ?? d.lon, d.lonLat?.[1] ?? d.lat)?.[1] ?? -999)
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
+        if (typeof onClick === 'function') onClick(event, d);
+      });
 
+    selection.selectAll('title').data((d) => [d]).join('title').text((d) => (typeof getTitle === 'function' ? getTitle(d) : d.name || 'City'));
     selection.exit().remove();
   }
 
-  function renderBases(nextBases = bases) {
+  function renderBases(bases = [], { getClassName, getColor, getTitle, onClick } = {}) {
     if (!basesLayer) return;
     const selection = basesLayer
-      .selectAll('circle.base')
-      .data(nextBases, (d) => d.id);
+      .selectAll('g.base-point')
+      .data(bases, (d) => d.id);
 
-    selection.enter().append('circle').attr('class', 'base')
-      .merge(selection)
-      .attr('cx', (d) => mapPoint(d.lonLat[0], d.lonLat[1])?.[0] ?? -999)
-      .attr('cy', (d) => mapPoint(d.lonLat[0], d.lonLat[1])?.[1] ?? -999)
-      .attr('r', 5);
+    const enter = selection.enter().append('g').attr('class', 'base-point');
+    enter
+      .append('rect')
+      .attr('class', 'base')
+      .attr('width', 8)
+      .attr('height', 8)
+      .attr('x', -4)
+      .attr('y', -4)
+      .attr('rx', 1.5);
+    enter.append('title');
+
+    selection
+      .merge(enter)
+      .attr('transform', (d) => {
+        const p = mapPoint(d.lonLat[0], d.lonLat[1]);
+        return `translate(${p?.[0] ?? -999}, ${p?.[1] ?? -999})`;
+      })
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
+        if (typeof onClick === 'function') onClick(event, d);
+      })
+      .select('rect')
+      .attr('fill', (d) => (typeof getColor === 'function' ? getColor(d) : 'var(--base-ground)'))
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'base'));
+
+    selection
+      .merge(enter)
+      .select('title')
+      .text((d) => (typeof getTitle === 'function' ? getTitle(d) : `Base ${d.id}`));
 
     selection.exit().remove();
   }
 
-  function renderUnits(nextUnits = units) {
+  function renderUnits(units = [], { getClassName, getTitle, getLonLat, onClick } = {}) {
     if (!unitsLayer) return;
     const selection = unitsLayer
-      .selectAll('circle.unit')
-      .data(nextUnits, (d) => d.id);
+      .selectAll('circle.unit-point')
+      .data(units, (d) => d.id);
 
-    selection.enter().append('circle').attr('class', 'unit')
-      .merge(selection)
-      .attr('cx', (d) => mapPoint(d.lonLat[0], d.lonLat[1])?.[0] ?? -999)
-      .attr('cy', (d) => mapPoint(d.lonLat[0], d.lonLat[1])?.[1] ?? -999)
-      .attr('r', 4);
+    const enter = selection.enter().append('circle').attr('class', 'unit-marker unit-point').attr('r', 2.3);
+    enter.append('title');
+
+    selection
+      .merge(enter)
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'unit-marker unit-point'))
+      .attr('cx', (d) => {
+        const point = typeof getLonLat === 'function' ? getLonLat(d) : d.lonLat;
+        return mapPoint(point[0], point[1])?.[0] ?? -999;
+      })
+      .attr('cy', (d) => {
+        const point = typeof getLonLat === 'function' ? getLonLat(d) : d.lonLat;
+        return mapPoint(point[0], point[1])?.[1] ?? -999;
+      })
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
+        if (typeof onClick === 'function') onClick(event, d);
+      });
+
+    selection
+      .merge(enter)
+      .select('title')
+      .text((d) => (typeof getTitle === 'function' ? getTitle(d) : `Unit ${d.id}`));
 
     selection.exit().remove();
   }
@@ -139,10 +219,12 @@ window.createMapRenderer = function createMapRenderer({
     initLayers(width, height);
     countriesData = await loadCountries();
     renderCountries();
-    renderCities();
-    renderBases();
-    renderUnits();
-    svg.on('click', (event) => typeof onMapClick === 'function' && onMapClick(event, { projection, countries: countriesData }));
+    svg.on('click', (event) => {
+      if (shouldIgnoreMapClick()) return;
+      if (typeof onMapClick === 'function') {
+        onMapClick(event, { projection, countries: countriesData, getLonLatFromEvent });
+      }
+    });
     return { projection, countries: countriesData };
   }
 
@@ -153,6 +235,8 @@ window.createMapRenderer = function createMapRenderer({
     renderBases,
     renderUnits,
     resetView,
-    refreshSelection
+    refreshSelection,
+    getLonLatFromEvent,
+    shouldIgnoreMapClick
   };
 };
