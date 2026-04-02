@@ -119,6 +119,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       lastTickAt: null,
       lastSummary: 'No economy tick yet.',
       started: false
+    },
+    scenario: {
+      id: 'modern',
+      name: 'Modern Baseline',
+      mode: 'standard',
+      appliedAt: Date.parse(GAME_START_ISO)
     }
   };
   
@@ -202,6 +208,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   const bottomDrawerContent = document.getElementById('bottomDrawerContent');
   const toggleDrawerBtn = document.getElementById('toggleDrawerBtn');
   const economySummary = document.getElementById('economySummary');
+  const quickSaveBtn = document.getElementById('quickSaveBtn');
+  const quickLoadBtn = document.getElementById('quickLoadBtn');
   const aiCountriesLabel = document.getElementById('aiCountriesLabel');
   const countryHudName = document.getElementById('countryHudName');
   const countryHudTreasury = document.getElementById('countryHudTreasury');
@@ -495,6 +503,12 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   const menuPreviewTitle = document.getElementById('menuPreviewTitle');
   const menuPreviewDescription = document.getElementById('menuPreviewDescription');
   const menuPreviewBullets = document.getElementById('menuPreviewBullets');
+  const latestSaveMeta = document.getElementById('latestSaveMeta');
+  const manualSaveSlotSelect = document.getElementById('manualSaveSlotSelect');
+  const manualSaveBtn = document.getElementById('manualSaveBtn');
+  const manualLoadBtn = document.getElementById('manualLoadBtn');
+  const manualSaveList = document.getElementById('manualSaveList');
+  const scenarioPresetList = document.getElementById('scenarioPresetList');
   
   const baseTypes = [
     { key: 'ground', label: 'Ground', color: 'var(--base-ground)' },
@@ -533,6 +547,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
   let uiControllers;
   let playStep = 1;
   let lastFrameTime = performance.now();
+  let lastAutosaveDay = null;
+  const AUTOSAVE_INTERVAL_DAYS = 3;
   const alertHistory = [];
   
   const settingsState = {
@@ -1338,13 +1354,13 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       label: 'Simulation Setup',
       title: 'New Simulation',
       description: 'Launch a structured setup flow: country, leader profile, start conditions, and simulation mode.',
-      bullets: ['Four-step launch sequence.', 'Designed for expansion with future scenario logic.']
+      bullets: ['Four-step launch sequence.', 'Scenario presets now apply real starting-state changes.']
     },
     loadScenario: {
       label: 'Archive & Scenario Deck',
       title: 'Load / Scenario Browser',
-      description: 'Browse recent sessions and scenario templates with clear placeholders for save integration.',
-      bullets: ['Continue last session entrypoint.', 'Scenario cards prepared for future content packs.']
+      description: 'Continue the latest autosave, manage manual slots, and review scenario presets.',
+      bullets: ['Continue now loads persisted latest session.', 'Manual save slots include country/date metadata.']
     },
     sandbox: {
       label: 'Sandbox Command Deck',
@@ -1906,6 +1922,356 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     prodCurrent.textContent = `Current: ${UNIT_DEFINITIONS[currentUnit.type].label} (${remainingDays} days left)`;
   }
   
+
+
+  function formatSaveMeta(metadata) {
+    if (!metadata) return 'Empty';
+    const stamp = metadata.updatedAt ? new Date(metadata.updatedAt).toLocaleString() : 'Unknown time';
+    return `${metadata.slotName || metadata.slotId} · ${metadata.country || 'Unknown'} · ${metadata.inGameDate || '--'} · ${metadata.scenario || 'Unknown'} (${metadata.mode || 'standard'}) · ${stamp}`;
+  }
+
+  function cloneForSave(value) {
+    return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function buildSerializableState() {
+    return {
+      selectedPlayerCountryName: gameState.selectedPlayerCountry?.properties?.name || null,
+      selectedCountryForHud: gameState.selectedCountryForHud || null,
+      selectedBaseId: gameState.selectedBaseId,
+      selectedUnitId: gameState.selectedUnitId,
+      selectedAsset: cloneForSave(gameState.selectedAsset),
+      selectedHotspotId: gameState.localInstability?.selectedHotspotId || null,
+      currentTimeMs: gameState.currentTimeMs,
+      simulationSpeed: gameState.simulationSpeed,
+      bases: cloneForSave(gameState.bases),
+      cities: cloneForSave(gameState.cities),
+      units: cloneForSave(gameState.units),
+      pendingTasks: cloneForSave(gameState.pendingTasks),
+      treasury: gameState.treasury,
+      nextBaseId: gameState.nextBaseId,
+      nextUnitId: gameState.nextUnitId,
+      moveMode: false,
+      attackMode: false,
+      captureMode: false,
+      enemySpawned: gameState.enemySpawned,
+      aiCountries: cloneForSave(gameState.aiCountries),
+      aiStateByCountry: cloneForSave(gameState.aiStateByCountry),
+      countries: cloneForSave(gameState.countries),
+      diplomacy: cloneForSave(gameState.diplomacy),
+      negotiation: cloneForSave(gameState.negotiation),
+      policy: cloneForSave(gameState.policy),
+      domestic: cloneForSave(gameState.domestic),
+      political: cloneForSave(gameState.political),
+      factions: cloneForSave(gameState.factions),
+      leadership: cloneForSave(gameState.leadership),
+      information: cloneForSave(gameState.information),
+      influence: cloneForSave(gameState.influence),
+      proxyConflict: cloneForSave(gameState.proxyConflict),
+      migration: cloneForSave(gameState.migration),
+      resources: cloneForSave(gameState.resources),
+      trade: cloneForSave(gameState.trade),
+      chokepoints: cloneForSave(gameState.chokepoints),
+      blocs: cloneForSave(gameState.blocs),
+      events: cloneForSave(gameState.events),
+      economy: cloneForSave(gameState.economy),
+      internalResistance: cloneForSave(gameState.internalResistance),
+      localInstability: cloneForSave(gameState.localInstability),
+      scenario: cloneForSave(gameState.scenario),
+      nextCounters: {
+        negotiationAgreement: gameState.negotiation?.nextAgreementId || 0,
+        influenceOperation: gameState.influence?.nextOperationId || 1,
+        proxyOperation: gameState.proxyConflict?.nextOperationId || 1,
+        migrationFlow: gameState.migration?.nextFlowId || 1,
+        hotspot: gameState.localInstability?.nextHotspotId || 1,
+        bloc: gameState.blocs?.nextBlocId || 1,
+        schedulerTask: scheduler.nextTaskId,
+        eventId: eventSystem.nextEventId
+      }
+    };
+  }
+
+  function createSnapshot(slotId, slotName) {
+    const country = gameState.selectedPlayerCountry?.properties?.name || '--';
+    const scenarioName = gameState.scenario?.name || window.getGeoScenarioPresetById?.(gameState.scenario?.id || 'modern')?.name || 'Modern Baseline';
+    return {
+      meta: {
+        version: 1,
+        slotId,
+        slotName,
+        country,
+        inGameDate: formatDateTime(gameState.currentTimeMs),
+        scenario: scenarioName,
+        mode: gameState.scenario?.mode || (simulationModeSelect.value || 'standard'),
+        updatedAt: new Date().toISOString()
+      },
+      scheduler: {
+        nextTaskId: scheduler.nextTaskId
+      },
+      state: buildSerializableState()
+    };
+  }
+
+  function buildTaskHandlerMap() {
+    return {
+      BASE_CONSTRUCTION_COMPLETE: ({ baseId }) => {
+        const targetBase = gameState.bases.find((entry) => entry.id === baseId);
+        if (!targetBase || targetBase.status === 'active') return;
+        targetBase.status = 'active';
+        setStatus(`${targetBase.type} base is now ACTIVE in ${targetBase.ownerCountry}.`);
+        renderBases();
+        renderProductionPanel();
+      },
+      UNIT_MOVE_COMPLETE: ({ unitId }) => movementSystem.completeMove(unitId),
+      UNIT_PRODUCTION_COMPLETE: ({ baseId, unitId }) => productionSystem.completeProduction(baseId, unitId),
+      COMBAT_TICK: ({ attackerId }) => combatSystem.resolveCombatTick(attackerId),
+      CAPTURE_COMPLETE: (payload) => captureSystem.resolveCapture(payload),
+      RESOURCE_TICK: () => resourceSystem.processTick(),
+      FACTION_TICK: () => factionSystem.processTick(),
+      CHOKEPOINT_TICK: () => chokepointSystem.processTick(),
+      EVENT_TICK: () => eventSystem.processTick(),
+      LOCAL_INSTABILITY_TICK: () => localInstabilitySystem.processTick(),
+      INFLUENCE_TICK: () => influenceSystem.processTick(),
+      INTERNAL_RESISTANCE_TICK: () => internalResistanceSystem.processTick(),
+      DIPLOMACY_TICK: () => diplomacySystem.processTick(),
+      STATE_STRUCTURE_TICK: () => stateStructureSystem.processTick(),
+      ECONOMY_TICK: () => economySystem.processTick(),
+      NEGOTIATION_TICK: () => negotiationSystem.processTick(),
+      DOMESTIC_TICK: () => domesticStateSystem.processTick(),
+      POLITICAL_TICK: () => politicalSystem.processTick(),
+      TRADE_TICK: () => tradeSystem.processTick(),
+      LEADERSHIP_TICK: () => leadershipSystem.processTick(),
+      COUNTRY_TICK: () => countrySystem.processTick(),
+      INFORMATION_TICK: () => informationSystem.processTick(),
+      POLICY_TICK: () => policySystem.processTick(),
+      AI_TICK: () => aiSystem.processTick(),
+      AI_STRATEGIC_TICK: () => aiSystem.processStrategicTick(),
+      MIGRATION_TICK: () => migrationSystem.processTick(),
+      BLOC_TICK: () => blocSystem.processTick(),
+      PROXY_CONFLICT_TICK: () => proxyConflictSystem.processTick()
+    };
+  }
+
+  function restoreScheduledTasks(taskList = [], nextTaskId = 1) {
+    scheduler.tasks = [];
+    scheduler.nextTaskId = Number(nextTaskId) || 1;
+    const handlerMap = buildTaskHandlerMap();
+    taskList.forEach((task) => {
+      const handler = handlerMap[task.type];
+      if (!handler) return;
+      scheduler.tasks.push({
+        id: task.id,
+        executeAt: task.executeAt,
+        type: task.type,
+        payload: task.payload,
+        handler: () => handler(task.payload || {})
+      });
+    });
+    scheduler.tasks.sort((a, b) => a.executeAt - b.executeAt || a.id - b.id);
+    scheduler.syncPendingTasks();
+  }
+
+  function refreshAfterLoad() {
+    renderBases();
+    renderCities();
+    renderUnits();
+    renderProductionPanel();
+    renderSelectedUnitPanel();
+    refreshTimeHud();
+    refreshEconomyHud();
+    refreshCountryHud();
+    refreshDiplomacyHud();
+    refreshNegotiationHud();
+    refreshPolicyHud();
+    refreshGovernmentProfileHud();
+    refreshDomesticHud();
+    refreshStateStructureHud();
+    refreshResistanceHud();
+    refreshLocalHotspotHud();
+    refreshInformationHud();
+    refreshProxyConflictHud();
+    refreshMigrationHud();
+    refreshEventHud();
+    refreshChokepointHud();
+    refreshBlocHud();
+    refreshTradeHud();
+    updateCountryStyles();
+    updateContextActionPanels();
+  }
+
+  function loadSnapshotIntoRuntime(snapshot, sourceLabel = 'session') {
+    if (!snapshot?.state) return { ok: false, message: 'Save payload is missing state.' };
+    const incoming = snapshot.state;
+    const selectedCountryName = incoming.selectedPlayerCountryName || null;
+    const selectedFeature = selectedCountryName ? countries.find((entry) => entry.properties?.name === selectedCountryName) || null : null;
+
+    gameClock.currentTimeMs = incoming.currentTimeMs || Date.parse(GAME_START_ISO);
+    gameClock.setSpeed(incoming.simulationSpeed ?? 1);
+
+    Object.assign(gameState, {
+      selectedPlayerCountry: selectedFeature,
+      selectedCountryForHud: incoming.selectedCountryForHud || selectedCountryName,
+      selectedBaseId: incoming.selectedBaseId || null,
+      selectedUnitId: incoming.selectedUnitId || null,
+      selectedAsset: incoming.selectedAsset || null,
+      currentTimeMs: incoming.currentTimeMs || Date.parse(GAME_START_ISO),
+      simulationSpeed: incoming.simulationSpeed ?? 1,
+      bases: incoming.bases || [],
+      cities: incoming.cities || [],
+      units: incoming.units || [],
+      treasury: incoming.treasury || 0,
+      nextBaseId: incoming.nextBaseId || 1,
+      nextUnitId: incoming.nextUnitId || 1,
+      moveMode: false,
+      attackMode: false,
+      captureMode: false,
+      enemySpawned: Boolean(incoming.enemySpawned),
+      aiCountries: incoming.aiCountries || [],
+      aiStateByCountry: incoming.aiStateByCountry || {},
+      countries: incoming.countries || {},
+      diplomacy: incoming.diplomacy || gameState.diplomacy,
+      negotiation: incoming.negotiation || gameState.negotiation,
+      policy: incoming.policy || gameState.policy,
+      domestic: incoming.domestic || gameState.domestic,
+      political: incoming.political || gameState.political,
+      factions: incoming.factions || gameState.factions,
+      leadership: incoming.leadership || gameState.leadership,
+      information: incoming.information || gameState.information,
+      influence: incoming.influence || gameState.influence,
+      proxyConflict: incoming.proxyConflict || gameState.proxyConflict,
+      migration: incoming.migration || gameState.migration,
+      resources: incoming.resources || gameState.resources,
+      trade: incoming.trade || gameState.trade,
+      chokepoints: incoming.chokepoints || gameState.chokepoints,
+      blocs: incoming.blocs || gameState.blocs,
+      events: incoming.events || gameState.events,
+      economy: incoming.economy || gameState.economy,
+      internalResistance: incoming.internalResistance || gameState.internalResistance,
+      localInstability: incoming.localInstability || gameState.localInstability,
+      scenario: incoming.scenario || gameState.scenario
+    });
+
+    if (incoming.nextCounters) {
+      gameState.negotiation.nextAgreementId = incoming.nextCounters.negotiationAgreement || gameState.negotiation.nextAgreementId || 0;
+      gameState.influence.nextOperationId = incoming.nextCounters.influenceOperation || gameState.influence.nextOperationId || 1;
+      gameState.proxyConflict.nextOperationId = incoming.nextCounters.proxyOperation || gameState.proxyConflict.nextOperationId || 1;
+      gameState.migration.nextFlowId = incoming.nextCounters.migrationFlow || gameState.migration.nextFlowId || 1;
+      gameState.localInstability.nextHotspotId = incoming.nextCounters.hotspot || gameState.localInstability.nextHotspotId || 1;
+      gameState.blocs.nextBlocId = incoming.nextCounters.bloc || gameState.blocs.nextBlocId || 1;
+      eventSystem.nextEventId = incoming.nextCounters.eventId || eventSystem.nextEventId || 1;
+    }
+
+    selectedCountryFeature = selectedFeature;
+    if (selectedFeature) {
+      selectedCountryLabel.textContent = `Inspected country: ${selectedFeature.properties.name}`;
+      selectedCountryLabel.classList.add('is-selected');
+      hudPlayerCountry.textContent = `Commander: ${selectedFeature.properties.name}`;
+    }
+
+    playerProfile.textContent = selectedFeature
+      ? `Loaded session for ${selectedFeature.properties.name} (${gameState.scenario?.name || 'Scenario'}).`
+      : 'Loaded session with no active commander selected.';
+
+    restoreScheduledTasks(incoming.pendingTasks || [], snapshot.scheduler?.nextTaskId || incoming.nextCounters?.schedulerTask || 1);
+    refreshAfterLoad();
+    setStatus(`Loaded ${sourceLabel} successfully.`, 'success');
+    return { ok: true };
+  }
+
+  function persistSave(slotId, slotName) {
+    if (!window.GeoCommandSaveSystem) return { ok: false, message: 'Save subsystem unavailable.' };
+    if (!gameState.selectedPlayerCountry) return { ok: false, message: 'Start a simulation before saving.' };
+    const snapshot = createSnapshot(slotId, slotName);
+    const saved = window.GeoCommandSaveSystem.saveSnapshot({ slotId, slotName, snapshot });
+    if (!saved.ok) return saved;
+    refreshLoadPanelUI();
+    return saved;
+  }
+
+  function loadSaveSlot(slotId, sourceLabel = 'save slot') {
+    if (!window.GeoCommandSaveSystem) return { ok: false, message: 'Save subsystem unavailable.' };
+    const loaded = window.GeoCommandSaveSystem.loadSnapshot(slotId);
+    if (!loaded.ok) return loaded;
+    return loadSnapshotIntoRuntime(loaded.snapshot, sourceLabel);
+  }
+
+  function maybeAutosave(reason = 'autosave') {
+    if (!gameState.selectedPlayerCountry) return;
+    const dayIndex = Math.floor((gameState.currentTimeMs - Date.parse(GAME_START_ISO)) / DAY_MS);
+    if (lastAutosaveDay != null && dayIndex - lastAutosaveDay < AUTOSAVE_INTERVAL_DAYS && reason !== 'launch' && reason !== 'unload') {
+      return;
+    }
+    const result = persistSave(window.GeoCommandSaveSystem.LATEST_SLOT, 'Latest Session');
+    if (result.ok) {
+      lastAutosaveDay = dayIndex;
+    }
+  }
+
+  function refreshLoadPanelUI() {
+    if (!window.GeoCommandSaveSystem) return;
+    const manifest = window.GeoCommandSaveSystem.getManifestView();
+    if (latestSaveMeta) {
+      latestSaveMeta.textContent = manifest.latest ? `Latest save: ${formatSaveMeta(manifest.latest)}` : 'Latest save: none';
+    }
+
+    if (manualSaveList) {
+      manualSaveList.innerHTML = '';
+      manifest.manualSlots.forEach((slotId, index) => {
+        const metadata = manifest.slots.find((entry) => entry.slotId === slotId)?.metadata || null;
+        const item = document.createElement('li');
+        item.textContent = `Manual Slot ${index + 1}: ${formatSaveMeta(metadata)}`;
+        manualSaveList.appendChild(item);
+      });
+    }
+
+    if (scenarioPresetList) {
+      scenarioPresetList.innerHTML = '';
+      (window.GEO_SCENARIO_PRESETS || []).forEach((preset) => {
+        const item = document.createElement('li');
+        item.textContent = `${preset.name}: ${preset.description}`;
+        scenarioPresetList.appendChild(item);
+      });
+    }
+  }
+
+  function attachSaveControls() {
+    manualSaveBtn?.addEventListener('click', () => {
+      const slotId = manualSaveSlotSelect?.value || 'slot1';
+      const slotLabel = `Manual Slot ${slotId.slice(-1)}`;
+      const result = persistSave(slotId, slotLabel);
+      setStatus(result.ok ? `Saved to ${slotLabel}.` : result.message, result.ok ? 'success' : 'danger');
+    });
+
+    manualLoadBtn?.addEventListener('click', () => {
+      const slotId = manualSaveSlotSelect?.value || 'slot1';
+      const slotLabel = `Manual Slot ${slotId.slice(-1)}`;
+      const result = loadSaveSlot(slotId, slotLabel);
+      if (!result.ok) {
+        setStatus(result.message, true);
+        return;
+      }
+      hideOverlays();
+    });
+
+    quickSaveBtn?.addEventListener('click', () => {
+      const result = persistSave(window.GeoCommandSaveSystem.LATEST_SLOT, 'Latest Session');
+      setStatus(result.ok ? 'Quick save complete.' : result.message, result.ok ? 'success' : 'danger');
+    });
+
+    quickLoadBtn?.addEventListener('click', () => {
+      const latest = window.GeoCommandSaveSystem.getLatestSnapshot();
+      if (!latest.ok) {
+        setStatus('No latest save found. Use Quick Save or manual slots first.', true);
+        return;
+      }
+      const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session');
+      if (!result.ok) setStatus(result.message, true);
+    });
+
+    window.addEventListener('beforeunload', () => {
+      maybeAutosave('unload');
+    });
+  }
   function setMenuPreview(key, source = menuPreviewData) {
     const preview = source[key] || source.newSimulation;
     menuPreviewLabel.textContent = preview.label;
@@ -1935,12 +2301,17 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         launchSummary.textContent = 'Review your setup before deployment.';
       },
       onContinue: ({ hideOverlays: hide }) => {
-        if (!gameState.selectedPlayerCountry) {
-          setStatus('No active session found. Start a new simulation first.', true);
+        const latest = window.GeoCommandSaveSystem?.getLatestSnapshot?.();
+        if (!latest?.ok) {
+          setStatus('No saved session found. Start a new simulation or create a save first.', true);
+          return;
+        }
+        const result = loadSnapshotIntoRuntime(latest.snapshot, 'latest session');
+        if (!result.ok) {
+          setStatus(result.message, true);
           return;
         }
         hide();
-        setStatus(`Resuming command of ${gameState.selectedPlayerCountry.properties.name}.`);
       },
       onPlayBack: ({ setOverlay: setMenuOverlay }) => {
         if (playStep === 1) {
@@ -1994,8 +2365,22 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
         leadershipSystem.ensureLeadershipFields(playerCountryState);
         leadershipSystem.renameLeader(playerCountryState.name, leaderName);
         const modeLabel = simulationModeSelect.value === 'sandbox' ? 'Sandbox' : 'Standard';
+        const preset = window.applyGeoScenarioPreset({
+          presetId: scenarioTypeSelect.value,
+          gameState,
+          countrySystem,
+          diplomacySystem,
+          blocSystem,
+          chokepointSystem,
+          eventSystem,
+          simulationMode: simulationModeSelect.value,
+          selectedCountryName: gameState.selectedPlayerCountry.properties.name
+        });
         playerProfile.textContent = `Leader ${playerCountryState.leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)} · ${playerCountryState.leaderSummary}) · Mode: ${modeLabel}`;
-        setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode. Place bases and advance time to complete construction.`);
+        refreshAfterLoad();
+        setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode with ${preset.name}. Place bases and advance time to complete construction.`);
+        persistSave(window.GeoCommandSaveSystem.LATEST_SLOT, 'Latest Session');
+        lastAutosaveDay = Math.floor((gameState.currentTimeMs - Date.parse(GAME_START_ISO)) / DAY_MS);
         hide();
       },
       onTutorial: () => setStatus('Tutorial content is planned for a future update. Start with New Simulation.'),
@@ -2003,6 +2388,9 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       onSandboxQuickStart: () => {
         simulationModeSelect.value = 'sandbox';
         document.getElementById('newSimulationBtn').click();
+      },
+      onOverlayChange: (name) => {
+        if (name === 'loadPanel') refreshLoadPanelUI();
       },
       resetPlayFlow: () => {
         playStep = 1;
@@ -2185,6 +2573,7 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
       gameState.simulationSpeed = gameClock.speed;
   
       scheduler.processDue(gameState.currentTimeMs);
+      maybeAutosave('tick');
       countrySystem.syncOwnership();
       refreshTimeHud();
       refreshEconomyHud();
@@ -2337,6 +2726,8 @@ window.createGeoCommandRuntime = function createGeoCommandRuntime() {
     attachDrawerControls();
     applySettingsUI();
     attachMenuHandlers();
+    attachSaveControls();
+    refreshLoadPanelUI();
     attachTimeControls();
     attachUnitControls();
     bindDomainPanels();
