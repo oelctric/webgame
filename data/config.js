@@ -195,6 +195,20 @@ const LEADERSHIP_CONFIG = {
   }
 };
 
+const LEADER_CONFIG = {
+  traitMin: 0,
+  traitMax: 100,
+  firstNames: ['Alex', 'Samir', 'Elena', 'Maya', 'Noah', 'Nadia', 'Darius', 'Farah', 'Jonas', 'Leila', 'Victor', 'Amira', 'Mateo', 'Sofia', 'Arman', 'Iris'],
+  lastNames: ['Kovak', 'Rahman', 'Petrov', 'Silva', 'Duarte', 'Okoye', 'Tanaka', 'Mendes', 'Haddad', 'Sato', 'Ilyin', 'Nouri', 'Velasquez', 'Karimov', 'Novak', 'Hale'],
+  archetypes: {
+    hardliner: { riskTolerance: 78, repressionPreference: 72, economicCompetence: 46, diplomaticFlexibility: 28, crisisManagement: 58 },
+    pragmatist: { riskTolerance: 52, repressionPreference: 44, economicCompetence: 58, diplomaticFlexibility: 54, crisisManagement: 62 },
+    reformer: { riskTolerance: 38, repressionPreference: 24, economicCompetence: 62, diplomaticFlexibility: 72, crisisManagement: 56 },
+    strongman: { riskTolerance: 68, repressionPreference: 82, economicCompetence: 42, diplomaticFlexibility: 22, crisisManagement: 52 },
+    technocrat: { riskTolerance: 34, repressionPreference: 36, economicCompetence: 82, diplomaticFlexibility: 62, crisisManagement: 74 }
+  }
+};
+
 
 const INFORMATION_CONFIG = {
   tickMs: DAY_MS,

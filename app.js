@@ -173,7 +173,8 @@ const aiSystem = new AISystem(gameState, scheduler, {
   influenceSystem,
   negotiationSystem,
   governmentProfileSystem,
-  stateStructureSystem
+  stateStructureSystem,
+  leadershipSystem
 });
 leadershipSystem.aiSystem = aiSystem;
 
@@ -311,6 +312,32 @@ const leaderMandateUpBtn = document.getElementById('leaderMandateUpBtn');
 const leaderMandateDownBtn = document.getElementById('leaderMandateDownBtn');
 const triggerElectionCheckBtn = document.getElementById('triggerElectionCheckBtn');
 const triggerTurnoverBtn = document.getElementById('triggerTurnoverBtn');
+const leaderDisplayName = document.getElementById('leaderDisplayName');
+const leaderArchetypeLabel = document.getElementById('leaderArchetypeLabel');
+const leaderTraitRisk = document.getElementById('leaderTraitRisk');
+const leaderTraitRepression = document.getElementById('leaderTraitRepression');
+const leaderTraitEconomic = document.getElementById('leaderTraitEconomic');
+const leaderTraitDiplomatic = document.getElementById('leaderTraitDiplomatic');
+const leaderTraitCrisis = document.getElementById('leaderTraitCrisis');
+const leaderFlavorSummary = document.getElementById('leaderFlavorSummary');
+const leaderFlavorBio = document.getElementById('leaderFlavorBio');
+const leaderBehaviorExplanation = document.getElementById('leaderBehaviorExplanation');
+const leaderBehaviorHint = document.getElementById('leaderBehaviorHint');
+const leaderRenameInput = document.getElementById('leaderRenameInput');
+const leaderRenameBtn = document.getElementById('leaderRenameBtn');
+const leaderRegenerateBtn = document.getElementById('leaderRegenerateBtn');
+const leaderRefreshFlavorBtn = document.getElementById('leaderRefreshFlavorBtn');
+const leaderRerollIdentityBtn = document.getElementById('leaderRerollIdentityBtn');
+const leaderArchetypeSelect = document.getElementById('leaderArchetypeSelect');
+const leaderApplyArchetypeBtn = document.getElementById('leaderApplyArchetypeBtn');
+const leaderRiskUpBtn = document.getElementById('leaderRiskUpBtn');
+const leaderRiskDownBtn = document.getElementById('leaderRiskDownBtn');
+const leaderRepressionUpBtn = document.getElementById('leaderRepressionUpBtn');
+const leaderRepressionDownBtn = document.getElementById('leaderRepressionDownBtn');
+const leaderEconomicUpBtn = document.getElementById('leaderEconomicUpBtn');
+const leaderEconomicDownBtn = document.getElementById('leaderEconomicDownBtn');
+const leaderDiplomaticUpBtn = document.getElementById('leaderDiplomaticUpBtn');
+const leaderDiplomaticDownBtn = document.getElementById('leaderDiplomaticDownBtn');
 const electionOffsetDaysInput = document.getElementById('electionOffsetDaysInput');
 const applyElectionOffsetBtn = document.getElementById('applyElectionOffsetBtn');
 const stateStructureFocusCountry = document.getElementById('stateStructureFocusCountry');
@@ -779,6 +806,17 @@ function refreshDomesticHud() {
     domesticElectionDate.textContent = 'Next election: --';
     domesticLeadershipLabel.textContent = 'Leadership status: --';
     domesticLeadershipSummary.textContent = 'Leadership cycle: --';
+    leaderDisplayName.textContent = 'Leader: --';
+    leaderArchetypeLabel.textContent = 'Archetype: --';
+    leaderTraitRisk.textContent = 'Risk tolerance: --';
+    leaderTraitRepression.textContent = 'Repression preference: --';
+    leaderTraitEconomic.textContent = 'Economic competence: --';
+    leaderTraitDiplomatic.textContent = 'Diplomatic flexibility: --';
+    leaderTraitCrisis.textContent = 'Crisis management: --';
+    leaderFlavorSummary.textContent = 'Leader flavor: --';
+    leaderFlavorBio.textContent = 'Leader bio: --';
+    leaderBehaviorExplanation.textContent = 'Leader explanation: --';
+    leaderBehaviorHint.textContent = 'Leader bias: --';
     domesticFactionSummary.textContent = 'Faction pressure: --';
     domesticFactionBias.textContent = 'Faction policy bias: --';
     domesticFactionsList.innerHTML = '<li>No faction data.</li>';
@@ -803,6 +841,19 @@ function refreshDomesticHud() {
     : 'Next election: n/a for current regime';
   domesticLeadershipLabel.textContent = `Leadership status: ${leadershipSystem.getLeadershipLabel(country)}`;
   domesticLeadershipSummary.textContent = `Leadership cycle: ${gameState.leadership.lastSummary}`;
+  leaderDisplayName.textContent = `Leader: ${country.leaderName}`;
+  leaderArchetypeLabel.textContent = `Archetype: ${country.leaderArchetype} (${country.leaderSummary})`;
+  leaderTraitRisk.textContent = `Risk tolerance: ${country.leaderTraits.riskTolerance.toFixed(0)} / 100`;
+  leaderTraitRepression.textContent = `Repression preference: ${country.leaderTraits.repressionPreference.toFixed(0)} / 100`;
+  leaderTraitEconomic.textContent = `Economic competence: ${country.leaderTraits.economicCompetence.toFixed(0)} / 100`;
+  leaderTraitDiplomatic.textContent = `Diplomatic flexibility: ${country.leaderTraits.diplomaticFlexibility.toFixed(0)} / 100`;
+  leaderTraitCrisis.textContent = `Crisis management: ${country.leaderTraits.crisisManagement.toFixed(0)} / 100`;
+  leaderFlavorSummary.textContent = `Leader flavor: ${country.leaderFlavor?.summary || '--'}`;
+  leaderFlavorBio.textContent = `Leader bio: ${country.leaderFlavor?.bio || '--'}`;
+  leaderBehaviorExplanation.textContent = `Leader explanation: ${country.leaderFlavor?.explanation || '--'}`;
+  const bias = country.leaderBehaviorBias || {};
+  leaderBehaviorHint.textContent = `Leader bias: escalation ${((bias.escalationBias || 0) * 100).toFixed(0)} • de-escalation ${((bias.deescalationBias || 0) * 100).toFixed(0)} • security ${((bias.internalSecurityBias || 0) * 100).toFixed(0)} • economic stabilization ${((bias.economicStabilizationBias || 0) * 100).toFixed(0)}`;
+  leaderArchetypeSelect.value = country.leaderArchetype || 'pragmatist';
   factionSystem.ensureCountryFactions(country);
   const factionEffects = country.factionEffects || {};
   domesticFactionSummary.textContent = `Faction pressure: ${factionEffects.interpretation || 'balanced'}`;
@@ -2240,8 +2291,10 @@ function attachMenuHandlers() {
 
     const leaderName = leaderNameInput.value.trim();
     const playerCountryState = countrySystem.ensureCountry(gameState.selectedPlayerCountry.properties.name);
+    leadershipSystem.ensureLeadershipFields(playerCountryState);
+    leadershipSystem.renameLeader(playerCountryState.name, leaderName);
     const modeLabel = simulationModeSelect.value === 'sandbox' ? 'Sandbox' : 'Standard';
-    playerProfile.textContent = `Leader ${leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)}) · Mode: ${modeLabel}`;
+    playerProfile.textContent = `Leader ${playerCountryState.leaderName} of ${gameState.selectedPlayerCountry.properties.name} (${governmentProfileSystem.getProfileSummary(playerCountryState)} · ${playerCountryState.leaderSummary}) · Mode: ${modeLabel}`;
     setStatus(`Commander ${leaderName}, simulation launched in ${modeLabel} mode. Place bases and advance time to complete construction.`);
     hideOverlays();
   });
@@ -2808,8 +2861,15 @@ function attachLeadershipControls() {
     mutator(country, focusCountry);
     refreshDomesticHud();
     refreshCountryHud();
+    refreshPolicyHud();
+    refreshDiplomacyHud();
     setStatus(message);
   };
+
+  const mutateLeaderTrait = (trait, delta, label) => mutateLeadership((country, countryName) => {
+    const current = country.leaderTraits?.[trait] ?? 50;
+    leadershipSystem.setLeaderTrait(countryName, trait, current + delta);
+  }, `${label} adjusted.`);
 
   leaderApprovalUpBtn.addEventListener('click', () => mutateLeadership((country) => {
     country.leaderApproval = Math.min(100, country.leaderApproval + 8);
@@ -2855,6 +2915,83 @@ function attachLeadershipControls() {
     refreshDiplomacyHud();
     refreshPolicyHud();
   });
+
+  leaderRenameBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const nextName = leaderRenameInput.value.trim();
+    if (!nextName) {
+      setStatus('Enter a leader name first.', true);
+      return;
+    }
+    const changed = leadershipSystem.renameLeader(focusCountry, nextName);
+    if (!changed) {
+      setStatus('Unable to rename leader.', true);
+      return;
+    }
+    setStatus(`${focusCountry} leader renamed to ${nextName}.`);
+    refreshDomesticHud();
+  });
+
+  leaderRegenerateBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const result = leadershipSystem.regenerateLeader(focusCountry);
+    setStatus(result?.message || 'Leader regenerated.');
+    refreshDomesticHud();
+    refreshCountryHud();
+  });
+
+  leaderRefreshFlavorBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const result = leadershipSystem.regenerateLeaderFlavor(focusCountry);
+    setStatus(result?.message || 'Leader flavor refreshed.');
+    refreshDomesticHud();
+  });
+
+  leaderRerollIdentityBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const result = leadershipSystem.regenerateLeaderFlavor(focusCountry, { rerollNameOnly: true });
+    setStatus(result?.message || 'Leader identity rerolled.');
+    refreshDomesticHud();
+    refreshCountryHud();
+  });
+
+  leaderApplyArchetypeBtn.addEventListener('click', () => {
+    const focusCountry = getDiplomacyFocusCountry();
+    if (!focusCountry) {
+      setStatus('Select a country first.', true);
+      return;
+    }
+    const archetype = leaderArchetypeSelect.value || 'pragmatist';
+    const result = leadershipSystem.regenerateLeader(focusCountry, { archetype });
+    setStatus(result?.message || `Leader archetype changed to ${archetype}.`);
+    refreshDomesticHud();
+    refreshCountryHud();
+  });
+
+  leaderRiskUpBtn.addEventListener('click', () => mutateLeaderTrait('riskTolerance', 8, 'Leader risk tolerance'));
+  leaderRiskDownBtn.addEventListener('click', () => mutateLeaderTrait('riskTolerance', -8, 'Leader risk tolerance'));
+  leaderRepressionUpBtn.addEventListener('click', () => mutateLeaderTrait('repressionPreference', 8, 'Leader repression preference'));
+  leaderRepressionDownBtn.addEventListener('click', () => mutateLeaderTrait('repressionPreference', -8, 'Leader repression preference'));
+  leaderEconomicUpBtn.addEventListener('click', () => mutateLeaderTrait('economicCompetence', 8, 'Leader economic competence'));
+  leaderEconomicDownBtn.addEventListener('click', () => mutateLeaderTrait('economicCompetence', -8, 'Leader economic competence'));
+  leaderDiplomaticUpBtn.addEventListener('click', () => mutateLeaderTrait('diplomaticFlexibility', 8, 'Leader diplomatic flexibility'));
+  leaderDiplomaticDownBtn.addEventListener('click', () => mutateLeaderTrait('diplomaticFlexibility', -8, 'Leader diplomatic flexibility'));
 
   applyElectionOffsetBtn.addEventListener('click', () => {
     const focusCountry = getDiplomacyFocusCountry();

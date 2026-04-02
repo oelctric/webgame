@@ -215,6 +215,17 @@
       <p id="domesticGovernmentContinuity">Government continuity: --</p>
       <p id="domesticElectionDate">Next election: --</p>
       <p id="domesticLeadershipLabel">Leadership status: --</p>
+      <p id="leaderDisplayName">Leader: --</p>
+      <p id="leaderArchetypeLabel">Archetype: --</p>
+      <p id="leaderTraitRisk">Risk tolerance: --</p>
+      <p id="leaderTraitRepression">Repression preference: --</p>
+      <p id="leaderTraitEconomic">Economic competence: --</p>
+      <p id="leaderTraitDiplomatic">Diplomatic flexibility: --</p>
+      <p id="leaderTraitCrisis">Crisis management: --</p>
+      <p id="leaderFlavorSummary">Leader flavor: --</p>
+      <p id="leaderFlavorBio">Leader bio: --</p>
+      <p id="leaderBehaviorExplanation">Leader explanation: --</p>
+      <p id="leaderBehaviorHint">Leader bias: --</p>
       <p id="domesticTrend">Domestic trend: --</p>
       <p id="domesticLeadershipSummary">Leadership cycle: --</p>
       <p id="domesticFactionSummary">Faction pressure: --</p>
@@ -245,6 +256,45 @@
       <div class="row">
         <button id="triggerElectionCheckBtn">Run Election Check</button>
         <button id="triggerTurnoverBtn">Force Turnover</button>
+      </div>
+      <div class="field">
+        <label for="leaderRenameInput">Rename leader</label>
+        <input id="leaderRenameInput" type="text" maxlength="36" placeholder="New leader name" />
+      </div>
+      <div class="row">
+        <button id="leaderRenameBtn">Apply Name</button>
+        <button id="leaderRegenerateBtn">Regenerate Leader</button>
+      </div>
+      <div class="row">
+        <button id="leaderRefreshFlavorBtn">Refresh Flavor (Traits)</button>
+        <button id="leaderRerollIdentityBtn">Reroll Name + Flavor</button>
+      </div>
+      <div class="field">
+        <label for="leaderArchetypeSelect">Leader archetype</label>
+        <select id="leaderArchetypeSelect">
+          <option value="hardliner">Hardliner</option>
+          <option value="pragmatist" selected>Pragmatist</option>
+          <option value="reformer">Reformer</option>
+          <option value="strongman">Strongman</option>
+          <option value="technocrat">Technocrat</option>
+        </select>
+      </div>
+      <button id="leaderApplyArchetypeBtn">Apply Archetype</button>
+      <div class="row">
+        <button id="leaderRiskUpBtn">Risk +8</button>
+        <button id="leaderRiskDownBtn">Risk -8</button>
+      </div>
+      <div class="row">
+        <button id="leaderRepressionUpBtn">Repression +8</button>
+        <button id="leaderRepressionDownBtn">Repression -8</button>
+      </div>
+      <div class="row">
+        <button id="leaderEconomicUpBtn">Economic +8</button>
+        <button id="leaderEconomicDownBtn">Economic -8</button>
+      </div>
+      <div class="row">
+        <button id="leaderDiplomaticUpBtn">Diplomatic +8</button>
+        <button id="leaderDiplomaticDownBtn">Diplomatic -8</button>
       </div>
       <div class="field">
         <label for="electionOffsetDaysInput">Election in (days)</label>
