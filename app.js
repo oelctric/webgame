@@ -6,5 +6,6 @@
     return;
   }
   const runtime = runtimeFactory();
+  window.GeoCommandRuntimeInstance = runtime;
   runtime.init();
 })();
