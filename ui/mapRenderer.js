@@ -14,7 +14,11 @@ window.createMapRenderer = function createMapRenderer({
   let path;
   let mapRoot;
   let countriesLayer;
+  let adminLayer;
+  let routesLayer;
   let citiesLayer;
+  let infrastructureLayer;
+  let militarySitesLayer;
   let basesLayer;
   let unitsLayer;
   let zoomBehavior;
@@ -29,7 +33,11 @@ window.createMapRenderer = function createMapRenderer({
 
     mapRoot = svg.append('g').attr('id', 'mapRoot');
     countriesLayer = mapRoot.append('g').attr('id', 'countriesLayer');
+    adminLayer = mapRoot.append('g').attr('id', 'adminLayer');
+    routesLayer = mapRoot.append('g').attr('id', 'routesLayer');
     citiesLayer = mapRoot.append('g').attr('id', 'citiesLayer');
+    infrastructureLayer = mapRoot.append('g').attr('id', 'infrastructureLayer');
+    militarySitesLayer = mapRoot.append('g').attr('id', 'militarySitesLayer');
     basesLayer = mapRoot.append('g').attr('id', 'basesLayer');
     unitsLayer = mapRoot.append('g').attr('id', 'unitsLayer');
 
@@ -209,6 +217,96 @@ window.createMapRenderer = function createMapRenderer({
     selection.exit().remove();
   }
 
+
+
+  function renderAdminBoundaries(boundaries = [], { getClassName, getTitle } = {}) {
+    if (!adminLayer) return;
+    const selection = adminLayer.selectAll('path.admin-boundary').data(boundaries, (d) => d.id);
+    selection.enter().append('path').attr('class', 'admin-boundary')
+      .merge(selection)
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'admin-boundary'))
+      .attr('d', (d) => {
+        const coords = Array.isArray(d.path) ? d.path : [];
+        if (coords.length < 2) return null;
+        const line = d3.line()
+          .x((point) => mapPoint(point[0], point[1])?.[0] ?? -999)
+          .y((point) => mapPoint(point[0], point[1])?.[1] ?? -999);
+        return line(coords);
+      });
+
+    selection.selectAll('title').data((d) => [d]).join('title').text((d) => (typeof getTitle === 'function' ? getTitle(d) : d.id));
+    selection.exit().remove();
+  }
+
+  function renderStrategicRoutes(routes = [], { getClassName, getTitle } = {}) {
+    if (!routesLayer) return;
+    const selection = routesLayer.selectAll('path.strategic-route').data(routes, (d) => d.id);
+    selection.enter().append('path').attr('class', 'strategic-route')
+      .merge(selection)
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'strategic-route'))
+      .attr('d', (d) => {
+        const coords = Array.isArray(d.path) ? d.path : [];
+        if (coords.length < 2) return null;
+        const line = d3.line()
+          .x((point) => mapPoint(point[0], point[1])?.[0] ?? -999)
+          .y((point) => mapPoint(point[0], point[1])?.[1] ?? -999);
+        return line(coords);
+      });
+
+    selection.selectAll('title').data((d) => [d]).join('title').text((d) => (typeof getTitle === 'function' ? getTitle(d) : d.id));
+    selection.exit().remove();
+  }
+
+  function renderInfrastructure(nodes = [], { getClassName, getTitle, onClick } = {}) {
+    if (!infrastructureLayer) return;
+    const selection = infrastructureLayer.selectAll('path.infrastructure-point').data(nodes, (d) => d.id);
+    const symbol = d3.symbol().type(d3.symbolDiamond).size(32);
+
+    const enter = selection.enter().append('path').attr('class', 'infrastructure-point');
+    enter.append('title');
+
+    selection.merge(enter)
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'infrastructure-point'))
+      .attr('transform', (d) => {
+        const p = mapPoint(d.lonLat?.[0] ?? d.lon, d.lonLat?.[1] ?? d.lat);
+        return `translate(${p?.[0] ?? -999}, ${p?.[1] ?? -999})`;
+      })
+      .attr('d', symbol)
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
+        if (typeof onClick === 'function') onClick(event, d);
+      });
+
+    selection.merge(enter).select('title').text((d) => (typeof getTitle === 'function' ? getTitle(d) : d.name));
+    selection.exit().remove();
+  }
+
+  function renderMilitarySites(sites = [], { getClassName, getTitle, onClick } = {}) {
+    if (!militarySitesLayer) return;
+    const selection = militarySitesLayer.selectAll('path.military-site-point').data(sites, (d) => d.id);
+    const symbol = d3.symbol().type(d3.symbolTriangle).size(34);
+
+    const enter = selection.enter().append('path').attr('class', 'military-site-point');
+    enter.append('title');
+
+    selection.merge(enter)
+      .attr('class', (d) => (typeof getClassName === 'function' ? getClassName(d) : 'military-site-point'))
+      .attr('transform', (d) => {
+        const p = mapPoint(d.lonLat?.[0] ?? d.lon, d.lonLat?.[1] ?? d.lat);
+        return `translate(${p?.[0] ?? -999}, ${p?.[1] ?? -999})`;
+      })
+      .attr('d', symbol)
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        if (shouldIgnoreMapClick()) return;
+        if (typeof onClick === 'function') onClick(event, d);
+      });
+
+    selection.merge(enter).select('title').text((d) => (typeof getTitle === 'function' ? getTitle(d) : d.name));
+    selection.exit().remove();
+  }
+
   function refreshSelection() {
     renderCountries();
   }
@@ -231,7 +329,11 @@ window.createMapRenderer = function createMapRenderer({
   return {
     init,
     renderCountries,
+    renderAdminBoundaries,
+    renderStrategicRoutes,
     renderCities,
+    renderInfrastructure,
+    renderMilitarySites,
     renderBases,
     renderUnits,
     resetView,
